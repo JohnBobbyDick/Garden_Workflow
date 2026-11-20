@@ -1,0 +1,425 @@
+# TODO — AI Security Workflow (Cyber Garden 2026, «Центр-инвест»)
+
+Рабочий план исполнения `prompt.md`. Источник истины: `Garden Центр-инвест.pdf` > `prompt.md` > `TZ.md`.
+Ссылки вида `§8.1` указывают на разделы `prompt.md`.
+
+**Как пользоваться:** идти строго по фазам. Пункт отмечается `[x]` только после запущенной проверки (тест/curl/браузер) с видимым выводом. Гейт фазы не пройден, значит следующую фазу не начинать. После каждой фазы: запись в `docs/REPORT.md` (журнал фаз) и локальный коммит (без `push`).
+
+---
+
+## Сквозные правила (проверять в каждой фазе)
+
+- [ ] Никаких заглушек: `TODO`, `pass # later`, `NotImplementedError`, моков в продуктовом коде, захардкоженных результатов, фейковых интеграций (§0.2, §2)
+- [ ] Запрещены готовые workflow-платформы (n8n, Node-RED) и готовые сканеры/их правила (Semgrep, Gitleaks, Trivy, detekt-security, Bandit, Dependency-Check, Snyk, truffleHog, grype, osv-scanner) (§2)
+- [ ] LLM только объясняет, ничего не обнаруживает (§2)
+- [ ] Никакой подгонки под учебный репозиторий: нет проверок по имени файла/строке/классу/переменной из набора организаторов (§2, §20). Регулярная проверка: `grep -R "repairdesk\|RepairTicketReader\|WarrantyHeaders" backend/app` должен быть пустым
+- [ ] Тестовые репозитории только для чтения: `fixtures/organizer-training/`, `fixtures/mutants/`, `github.com/TBagirov/training` не меняются; все записи (PR, комментарии, статусы) только на локальных mock GitHub/GitLab (§2)
+- [ ] Сканируются только: репозиторий организаторов, загруженные архивы пользователя, собственные фикстуры (allowlist, §13)
+- [ ] Секреты маскируются везде: логи, API, UI, отчёты, run_events, БД, промпты, уведомления (§2, §13)
+- [ ] Git: локальные коммиты после каждой фазы, без push; в репозиторий не попадают `.env`/ключи, только `.env.example` (§0.4)
+- [ ] Язык: код на английском; UI RU по умолчанию + EN; документация на русском; AI-отчёты на языке интерфейса (§0.6)
+- [ ] Противоречия prompt.md и PDF фиксировать в список для `docs/REPORT.md`
+
+---
+
+## Фаза 0 — Исследование, план, скелет (§19)
+
+### 0.1 Изучение входных данных
+- [ ] Прочитать `Garden Центр-инвест.pdf` целиком, выписать обязательные/дополнительные требования и расхождения с prompt.md
+- [ ] Прочитать `TZ.md` (чеклист разделов 1.1, 1.2.1–1.2.3, 1.3)
+- [ ] `git clone https://github.com/TBagirov/training` во временную директорию → скопировать содержимое без `.git` в `fixtures/organizer-training/`
+- [ ] Прочитать **все** файлы набора: каждый `.kt`, `application.yml`, `schema.sql`, `data.sql`, `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`, `gradle.lockfile`
+- [ ] Прочитать `ground-truth/training-findings.json` + `.md` (15 findings, 6 controls, `alternateLocations`, `difficultyRationale`, `expectedDetection`)
+- [ ] Прочитать `docs/submission-format.md`, `docs/training-result-example.json`
+- [ ] Прочитать `vulnerability-database/vulnerabilities.json`, `schema.json`, `README.md`
+- [ ] Выписать для себя таблицу «находка эталона → какое общее правило её ловит» (без хардкода имён)
+
+### 0.2 План и скелет
+- [ ] `docs/PLAN.md`: модули, порядок, риски (tree-sitter-kotlin на py3.12, PostgreSQL в тестах, Playwright, доступность LLM)
+- [ ] Структура каталогов по §5: `backend/`, `frontend/`, `cli/`, `fixtures/`, `docs/`, `scripts/`
+- [ ] `backend/pyproject.toml` (Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic v2, tree-sitter, tree-sitter-kotlin, httpx, argon2/bcrypt, cryptography, aiosmtpd для тестов, pytest, pytest-asyncio)
+- [ ] `backend/app/main.py` с `GET /api/healthz`
+- [ ] `frontend/`: Vite + React 18 + TS + Tailwind + `@xyflow/react` + Zustand + TanStack Query + i18n; собирается `npm run build`
+- [ ] `Makefile`: заготовки `up`, `down`, `dev-backend`, `dev-frontend`, `test`, `test-eval`, `e2e`, `lint`, `seed`
+- [ ] `.env.example`, `.gitignore` (`.env`, `node_modules`, `__pycache__`, артефакты)
+- [ ] `docs/REPORT.md` с разделом «Журнал фаз»
+
+### Гейт фазы 0
+- [ ] `make test` проходит (пустой/минимальный набор)
+- [ ] `curl /api/healthz` → 200
+- [ ] `frontend` собирается
+- [ ] План сверен с prompt.md
+- [ ] Коммит «phase 0: research, plan, skeleton»
+
+---
+
+## Фаза 1 — Анализаторы (§8, §9, §10, §3.1)
+
+### 1.1 Общее (`analyzers/common/`)
+- [ ] `finding.py`: модель `Finding` со всеми полями §10 (id стабильный хэш category+rule+path+нормализованный контекст; SCA-поля; SECRET-поля `fingerprint`/`masked_value`; diff-поля; `autofix`)
+- [ ] `severity.py`: шкала LOW<MEDIUM<HIGH<CRITICAL, матрицы SCA/SECRET/SAST как таблица данных + функция «почему такой уровень» → `severity_reason` (§9)
+- [ ] `files.py`: обход файлов с исключениями (`build/`, `.git/`, `node_modules/`, бинарники, лимит размера), относительные пути с `/`
+- [ ] `kotlin_ast.py`: обёртка tree-sitter-kotlin + запасной regex-режим
+- [ ] Дедупликация: одна проблема = одна находка, выбирается самый специфичный `class`
+- [ ] Маскирование значений: `fingerprint` (8 hex SHA-256 + длина), маска `ab…(len=24)`, маскированный сниппет
+
+### 1.2 Секреты (`analyzers/secrets/`, §8.1)
+- [ ] Набор расширений файлов + Dockerfile + текстовые; `.md`/`.txt`/`docs/` с подавлением плейсхолдеров
+- [ ] Слой 1, сигнатуры: AWS (AKIA/ASIA + secret рядом), GitHub PAT (`ghp_`, `github_pat_`, `gho_`…), Telegram bot token, Slack `xox[abpr]-`, Stripe `sk_live_`, Google `AIza`, JWT с проверкой base64url-заголовка, PEM private keys, URL с кредами, JDBC с паролем, Basic-auth
+- [ ] Слой 2, контекст имён: пары ключ→значение в yml/properties/json/env/kt/java; заголовки `X-Api-Key`, `Authorization: Bearer`; `setBearerAuth`, `header(...)`, `.password(...)`; именованные аргументы Kotlin; `const val`/`val`; `data class` с дефолтами; полный YAML-путь ключа
+- [ ] Слой 3, Kotlin-AST разрешение констант: локальные/файловые/классовые `val`/`const val`; `a + b`; шаблоны с константами; `StringBuilder.append`; `listOf(..).joinToString`; `String.format`/`.format`; `String(Base64...decode(...))`; `.reversed()`, `.trim()`, `.lowercase()` → `recoverable-token` с диапазоном строк ≤15
+- [ ] Слой 4, fallback: `System.getenv("X") ?: "lit"`, `env.getProperty("x","lit")`, `@Value("\${x:lit}")`, `${VAR:lit}` в YAML/properties, `getOrDefault`, `orElse` → `secret-fallback`
+- [ ] Слой 5, эвристика: энтропия Шеннона по алфавитам + длина + разнообразие классов + секретный контекст; не флагать UUID/хэши коммитов/версии/URL без кредов; пороги настраиваемые
+- [ ] Подавление FP: `${ENV}`, `#{…}`, `{{…}}`, `<…>`, `%…%`, `YOUR_*`, `xxx`, `changeme`/`example`/`dummy`/`sample`, `***`, пустые, `null`; значения из окружения без дефолта не секреты
+- [ ] Тестовые/документационные пути понижают confidence (не игнорируются); порог confidence для официальной выгрузки настраиваемый и задокументирован
+- [ ] Классы: `password`, `api-key`, `configuration-token`, `secret-fallback`, `recoverable-token`, `private-key`, `aws-access-key`, `github-token`, `telegram-token`, `jwt`, `db-credentials`, `generic-secret`
+- [ ] Контроли `YOUR_API_KEY` в README и `${INVENTORY_TOKEN}` без дефолта отброшены общим правилом
+- [ ] Юнит-тесты: каждый слой (позитив + «опасно похожий» негатив), подавления, маскирование
+
+### 1.3 SCA (`analyzers/sca/`, §8.2)
+- [ ] `gradle_parser.py` (tree-sitter, не один regex): `implementation/api/compileOnly/runtimeOnly/testImplementation/kapt/annotationProcessor…`; `add("implementation", "g:a:v")` многострочный и с висячей запятой; `group=, name=, version=`; `platform(...)`/BOM; `libs.xxx`
+- [ ] Версии: литерал, `$var`/`${var}`, `val x = "…"`, `extra["x"]`/`ext`, `providers.gradleProperty("k").get()/.orNull`, `project.property("k")` → `gradle.properties`
+- [ ] Подмодули из `settings.gradle.kts` (`include(...)`); базовый Groovy `build.gradle`
+- [ ] `version_catalog.py`: `gradle/libs.versions.toml` (`[versions]`, `[libraries]`, `module=`/`group+name`, `version.ref`, алиасы)
+- [ ] `lockfile.py`: версия из `gradle.lockfile` побеждает объявленную; без версии (BOM, нет в lockfile) → пропуск с инфо-примечанием
+- [ ] Хранить `declared_version`, `resolved_version`, источник версии, строки объявления и определения переменной (`alternateLocations`)
+- [ ] Транзитивные: только при `include_transitive=true`, `scope=transitive`, не в официальную выгрузку по умолчанию
+- [ ] `versions.py`: numeric-dot-separated, `1.9 == 1.9.0`, `20230618` = один компонент; квалификаторы/динамические/пустые вне области с примечанием; интервалы `lower/lowerInclusive/upper/upperInclusive`
+- [ ] `vulndb.py`: загрузка + валидация по `schema.json` (громкая ошибка), индекс `group:artifact`; копия в `backend/vulndb/vulnerabilities.json`; подключение другого JSON той же схемы
+- [ ] `matcher.py`: одна запись справочника = одна находка; `advisoryId` — CVE из aliases, иначе GHSA; `fixedVersions` → «обновить до ≥ X» (ближайшая в ветке > текущей); `sources`
+- [ ] `cvss.py`: собственный калькулятор базовой оценки CVSS v3.x; сверка с severity справочника
+- [ ] `path` = файл объявления, `line` = строка объявления
+- [ ] Тесты: все формы объявления, version catalog, lockfile, граничные версии, CVSS на эталонных векторах, контроль `commons-lang3:3.20.0` → нет находки
+
+### 1.4 SAST (`analyzers/sast/`, §8.3)
+- [ ] IR поверх tree-sitter: классы, функции, параметры с аннотациями, вызовы, шаблоны строк, присваивания, лямбды
+- [ ] `callgraph.py`: граф вызовов по конструкторным зависимостям (поле `private val x: T` → вызовы `x.m()`), межфайлово
+- [ ] Распознавание Spring-аннотаций (`@RestController`, `@*Mapping`, `@RequestParam`, `@PathVariable`, `@RequestBody`, `@RequestHeader`, `@PreAuthorize`, `@Secured`, `@CrossOrigin`, `@Configuration`, `@Bean`, `@Repository`, `@Service`, `@Query`)
+- [ ] `taint.py`: источники → распространение (присваивания, шаблоны, конкатенация, format, StringBuilder) → стоки
+- [ ] Каждая находка: `class`, `path`, `line`, `endLine` (≤15), маскированный сниппет, `title`, `description`, `severity`, `confidence`, `cwe`, `remediation`, `rule_id`
+- [ ] Правило 1 `sql-injection` (JdbcTemplate.*, Statement, EntityManager, NamedParameterJdbcTemplate, `@Query` со SpEL/конкатенацией, prepareStatement со строкой с подстановкой); параметризованный `?` рядом не срабатывает
+- [ ] Правило 2 `tls-verification` (HostnameVerifier→true, NoopHostnameVerifier, ALLOW_ALL, пустой TrustManager, TrustAllStrategy, setDefaultHostnameVerifier, OkHttp `.hostnameVerifier`); штатный HTTPS-клиент не срабатывает
+- [ ] Правило 3 `credentialed-cors` (`*` в origins/patterns/@CrossOrigin/отражение Origin + allowCredentials true); диапазон охватывает обе настройки; варианты WebMvcConfigurer и CorsConfigurationSource
+- [ ] Правило 4 `route-authorization` (`spring_security.py`): разбор `authorizeHttpRequests`/`antMatchers`/`mvcMatchers`; чувствительность по семантике пути + по содержимому обработчика + теневое правило; публичный каталог без ПДн не находка; строка = строка `permitAll`; `csrf.disable()` + cookie-сессия отдельным предупреждением; изменяющие методы без защиты — низкая уверенность
+- [ ] Правило 5 `object-authorization` (IDOR/BOLA): контроллер → сервис → репозиторий; нет Authentication/Principal/SecurityContextHolder/сравнения владельца/`@PreAuthorize #id`; запрос только по ID; основное место — доступ к данным, вызов контроллера в `alternate_locations`; одна находка на проблему
+- [ ] Правило 6 `hardcoded-credentials` (InMemoryUserDetailsManager, `.password("{noop}…")`)
+- [ ] Правило 7 `unsafe-deserialization`
+- [ ] Правило 8 `path-traversal`
+- [ ] Правило 9 `weak-crypto`
+- [ ] Правило 10 `missing-input-validation`
+- [ ] Правило 11 `insecure-endpoint` (включая конфиги actuator/h2/debug/stacktrace)
+- [ ] Правила 6–11 не дают FP на `training-project/`; иначе доработать или понизить confidence и исключить из официальной выгрузки
+- [ ] Метаданные правил: `autofix: llm|deterministic|none`
+- [ ] Тесты: позитив + негатив на каждое правило, межфайловый IDOR, цепочки `requestMatchers`, шаблоны строк
+
+### 1.5 Экспорт и отчёты (`export/`, §3.1, §10)
+- [ ] `submission_json.py`: маппинг `Finding → запись` строго по `docs/submission-format.md` (category верхним регистром, относительный path без `..`, class, line, endLine ≤ line+14, SCA group/artifact/version/advisoryId); фильтр по confidence; без транзитивных; без diff/autofix-полей
+- [ ] Собственный валидатор формата организаторов; невалидный экспорт = ошибка; `training-result-example.json` проходит, невалидные случаи отклоняются (тест)
+- [ ] `markdown.py`, `html.py`: сводка, таблица по категориям, детали (файл:строки, координаты+версия+CVE/GHSA для SCA), severity, рекомендация, AI-раздел; секреты скрыты
+
+### 1.6 Eval-харнесс и мутанты (§17.2–17.3)
+- [ ] `backend/tests/eval/`: запуск трёх анализаторов на `training-project/`, сверка с ground truth (категория+путь+class+строка в диапазоне с учётом `alternateLocations`; SCA координаты+версия+advisory); падает на пропуске, контроле или необъяснённой лишней находке; печать таблицы recall/precision
+- [ ] `fixtures/mutants/` — минимум 3 мутанта: переименованные пакеты/классы/переменные/файлы, сдвинутые строки, другие приёмы (StringBuilder/joinToString/format; `?: "…"`/getProperty; ext/catalog/gradleProperty; другой порядок requestMatchers/antMatchers; IDOR через сервис; CORS через CorsConfigurationSource; TLS через TrustManager; SQL через String.format) + новые безопасные контроли
+- [ ] Для каждого мутанта файл ожидаемых находок; харнесс на мутантах с теми же требованиями
+- [ ] `make test-eval`
+
+### 1.7 Документация
+- [ ] `docs/ANALYZERS.md`: каждое правило (что ищет, почему, как снижаются FP), шкала критичности, порог confidence
+
+### Гейт фазы 1
+- [ ] Eval на учебном наборе: **15/15**, 0 контролей, 0 необъяснённых лишних
+- [ ] Все мутанты проходят
+- [ ] grep по запрещённым именам в `backend/app` пуст
+- [ ] Валидатор `submission.json` зелёный
+- [ ] Журнал в REPORT.md, коммит «phase 1: analyzers»
+
+---
+
+## Фаза 2 — Движок, ноды, БД, воркер (§6, §7, §14)
+
+### 2.1 БД и модели
+- [ ] SQLAlchemy-модели (§5): user, workspace, project, workflow, run, run_event, finding, ai_report, template, review, credential, api_token, ci_*, autofix, repo_allowlist (+ schedule, audit)
+- [ ] Alembic-миграции; SQLite для юнит-тестов, отдельный прогон интеграционных на PostgreSQL
+
+### 2.2 Ноды: контракт и реестр
+- [ ] `nodes/base.py`: `NodeSpec`, `Port`, `@register_node`, реестр с автообнаружением пакета `app.nodes`; метаданные type/category/title/description RU+EN, inputs/outputs, `config_schema` с `secret: true`/`credential_ref`, `async execute(ctx, inputs, config)`
+- [ ] `Envelope` {type, data, meta{node_id, produced_at, summary}}; типы портов trigger/repo/findings/report/json/text/bool/any
+- [ ] `GET /api/nodes` — каталог + JSON Schema
+
+### 2.3 Движок (`engine/`)
+- [ ] `graph.py`: формат графа §6.1 (schema_version, nodes, edges с портами)
+- [ ] `validator.py`: ≥1 триггер, нет циклов, нет висящих обязательных входов, обязательные поля, совместимость портов, существование credentials, ветки IF; ошибки списком с `node_id`
+- [ ] `executor.py`: топологический обход, параллельные ветки на asyncio; IF/ELSE skip-распространение; ожидание активных входов; статусы нод/запуска; таймауты нод и запуска; отмена; ошибка ноды не роняет воркер, сообщение маскируется
+- [ ] `events.py`: запись в `run_events` (статусы, усечённые превью входов/выходов после маскирования, логи, длительность)
+- [ ] SSE `GET /api/runs/{id}/events` с `Last-Event-ID`
+- [ ] Снимок графа при старте запуска
+- [ ] `worker.py`: очередь в таблице (`SELECT … FOR UPDATE SKIP LOCKED`), отдельный процесс; в dev — внутри API
+- [ ] `scheduler.py`: cron / «каждый день в HH:MM», timezone (дефолт из workspace), хранение в БД, переживает рестарт, без дублей при нескольких воркерах (уникальный ключ слота)
+- [ ] Безопасный парсер выражений для `if_else` (без `eval`): `findings.count`, `severity.max`, `category`, `new_findings.count`, `verdict`, `score.value`, `score.delta`, сравнения, `and/or`
+- [ ] Безопасный шаблонизатор сообщений (`{{findings.count}}`, `{{severity.critical}}`, `{{new_findings.count}}`, `{{verdict}}`, `{{score.value}}`, `{{score.delta}}`, `{{run.url}}`, `{{ai.summary}}`), секреты не подставляются
+
+### 2.4 Ноды §7 (каждая с тестом и описанием в NODES.md)
+- [ ] `trigger.manual`
+- [ ] `trigger.schedule`
+- [ ] `trigger.webhook` (provider, secret credential, events)
+- [ ] `source.repo` (upload zip/tar, git_url из allowlist, path внутри APP_SCAN_ROOTS, ref, project ref)
+- [ ] `scanner.secrets` (include/exclude, entropy threshold, heuristics)
+- [ ] `scanner.sca` (справочник, include_transitive, include_test_scopes)
+- [ ] `scanner.sast` (правила вкл/выкл, min confidence)
+- [ ] `logic.if_else` (порты true/false)
+- [ ] `logic.compare`
+- [ ] `logic.regex` (match/extract/filter, защита от ReDoS: таймаут/лимит длины)
+- [ ] `logic.severity_filter`
+- [ ] `logic.merge` (несколько findings-входов, дедуп)
+- [ ] `logic.set_value`
+- [ ] `output.report_export` (submission_json/markdown/html → артефакты запуска)
+- [ ] `output.ci_gate` (fail_on по умолчанию CRITICAL; опциональный вход verdict)
+- [ ] `notify.telegram`: сводка + топ находок + score + AI-вывод, `sendDocument` с `report.md`, резка по 4096
+- [ ] `notify.smtp`: HTML-письмо со сводкой и таблицей + вложения `report.html`/`report.md`; TLS/STARTTLS
+- [ ] `notify.webhook`: JSON со сводкой, маскированными находками, ссылками на экспорт; HMAC-подпись; SSRF-защита
+- [ ] (`ai.report`, `ai.autofix`, `scanner.diff`, `analysis.security_score` — в фазах 4 и 6А)
+
+### 2.5 История и API запусков (§14, §15)
+- [ ] Хранение: время/длительность, снимок графа, источник/ref/commit, инициатор, статусы/длительности нод, маскированные логи, находки (с run_id и node_id), артефакты, статус уведомлений, ошибки
+- [ ] API: workflows CRUD, `validate`, `run`, `schedule`; runs list/get/cancel/events/findings/export; `GET /runs/compare?base=&head=` (новые/устранённые/неизменные/изменения severity, сводка по категориям)
+- [ ] Единый формат ошибок `{"error":{"code","message","details"}}`
+
+### 2.6 Тесты
+- [ ] Движок: валидатор, IF/skip, параллельность, таймауты, отмена, порядок событий, передача данных, планировщик (без дублей), восстановление после рестарта
+- [ ] Тест расширяемости: тестовая нода в отдельном файле без правок движка/API/фронта → видна в `/api/nodes`, исполняется
+- [ ] Уведомления на реальных локальных серверах: mock Telegram Bot API (HTTP), `aiosmtpd`, локальный webhook-приёмник с проверкой HMAC
+
+### Гейт фазы 2
+- [ ] Все тесты движка и нод зелёные
+- [ ] End-to-end через API: `manual → source → [secrets, sca, sast] → merge → if_else → notify → export` на учебном проекте
+- [ ] Уведомления пришли на mock-серверы с отчётом внутри
+- [ ] REPORT.md, коммит «phase 2: engine and nodes»
+
+---
+
+## Фаза 3 — Безопасность платформы и многопользовательность (§13)
+
+- [ ] Регистрация/вход, argon2/bcrypt, JWT access (короткий) + refresh с ротацией и отзывом, `logout`, `GET /auth/me`
+- [ ] Rate limit на вход; CORS строго по списку origin
+- [ ] Workspaces, членство, роли `admin`/`developer`/`viewer`, приглашения, смена роли/удаление
+- [ ] Проверка принадлежности объекта в **каждом** эндпоинте; IDOR-тесты кросс-workspace
+- [ ] `core/crypto.py`: AES-256-GCM/Fernet, `APP_MASTER_KEY` (генерация в dev с предупреждением), версионирование ключа
+- [ ] Credentials API: значения только на запись, ответ `••••` + 2–4 последних символа
+- [ ] `core/masking.py`: центральный Masker (значения из credentials, конфига запуска, найденные сканером + паттерны) → логи, run_events, ошибки, ответы API, промпты, сниппеты, отчёты, уведомления
+- [ ] `core/ssrf.py`: только http/https, резолв DNS и проверка IP (loopback, private, link-local, 169.254.169.254, IPv6), защита от DNS-rebinding, лимит редиректов, таймауты, лимит размера ответа; явный allowlist хостов для Ollama/тестов
+- [ ] `core/repo_guard.py`: allowlist (по умолчанию только `https://github.com/TBagirov/training`), `path` только в `APP_SCAN_ROOTS`, безопасная распаковка (zip-slip, симлинки, zip-бомбы, лимиты), git только https (`GIT_ALLOW_PROTOCOL=https`, `GIT_TERMINAL_PROMPT=0`, `core.hooksPath=/dev/null`, аргументы списком, sha regex, ветки не с `-`), `--depth 1`, удаление рабочей копии
+- [ ] Флаг `allow_write` в allowlist (только admin, аудит); для репозитория организаторов и фикстур запрещён кодом
+- [ ] Анализаторы никогда не исполняют проверяемый код
+- [ ] Журнал аудита (вход, credentials, публикация шаблона, allowlist, API-токены); `GET /workspaces/{id}/audit`
+- [ ] Безопасные заголовки, лимиты тела, Pydantic-валидация
+- [ ] `GET/PUT /settings/allowlist`
+- [ ] Тесты: внедрённый секрет не находится grep-ом в логах/БД/ответах; в БД нет открытых значений; SSRF (loopback/private/metadata/redirect/rebinding); repo-guard (чужой URL, `file://`, zip-slip, `..`); ReDoS; `allow_write` для организаторов → отказ
+
+### Гейт фазы 3
+- [ ] Тесты безопасности зелёные
+- [ ] Вручную: секрет не виден нигде; посторонний repo-URL отклонён
+- [ ] REPORT.md, коммит «phase 3: platform security, multi-tenancy»
+
+---
+
+## Фаза 4 — LLM (§11)
+
+- [ ] `ai/providers/`: интерфейс `LLMProvider.chat(messages, response_schema, temperature, max_tokens, timeout)`; `openai_compat.py` (base_url, key, model, заголовки, `response_format` JSON или инструкция+разбор); `ollama.py` (`/api/chat`, `format: json`)
+- [ ] Таймауты, ретраи с backoff на 429/5xx, разбиение находок на пачки, ошибка провайдера → явная ошибка ноды
+- [ ] Настройки на workspace + override в ноде; ключи в зашифрованном хранилище; `GET/PUT /settings/ai`, `POST /settings/ai/test`, список моделей; по умолчанию ничего не включено, подсказки о бесплатных вариантах
+- [ ] `ai/schemas.py`: схема отчёта (summary, priority_order, findings[...] с explanation/impact/remediation_steps/safe_version/fix, global_recommendations)
+- [ ] `ai/prompts.py`: RU/EN, запрет выдумывать id/файлы/строки, примеры формата, только маски
+- [ ] `ai/validator.py`: (1) JSON-схема + одна попытка авто-исправления; (2) finding_id существует, без дублей, неизвестные отбрасываются; (3) `fix.path`/строки, `fix.before` буквально совпадает с файлом; (4) CVE/GHSA только из (справочник ∩ находки), иначе удалить + флаг `hallucinated_ids`; (5) `safe_version` по `fixedVersions`; (6) результаты валидации и метрики сохраняются
+- [ ] `ai/report_service.py` + нода `ai.report` (provider override, язык, `generate_fix_diff`, `fallback_to_deterministic` по умолчанию вкл., пометка `ai_generated: false`)
+- [ ] Хранение AI-отчётов с метаданными модели (провайдер, модель, токены); `GET /runs/{id}/ai-report`
+- [ ] Тесты: контрактные на локальном OpenAI-compatible HTTP-сервере (формат, JSON-режим, ретраи, таймаут, 429, невалидный JSON → авто-исправление); валидатор ловит подсаженные выдуманные CVE, несуществующий файл/строку, неверный `before`, неизвестный id; fallback
+- [ ] Проверить, доступна ли реальная LLM (Ollama локально / бесплатный API); если да — живой прогон; если нет — честная запись
+
+### Гейт фазы 4
+- [ ] Контрактные тесты зелёные
+- [ ] Живой прогон или честная запись о недоступности
+- [ ] Смена провайдера только через настройки
+- [ ] REPORT.md, коммит «phase 4: llm integration»
+
+---
+
+## Фаза 5 — Frontend (§16)
+
+### 5.1 Основа
+- [ ] Дизайн-система: токены цветов dark (по умолчанию)/light, типографика, состояния hover/focus/disabled/error
+- [ ] i18n RU/EN (все строки), даты/числа по локали; переключатели языка и темы
+- [ ] API-клиент (TanStack Query), auth-флоу с refresh, Zustand-сторы
+- [ ] Пустые состояния, скелетоны, тосты, понятные ошибки с действиями, адаптив до планшета, клавиатурная навигация, WCAG AA контраст, aria
+
+### 5.2 Страницы
+- [ ] Вход/регистрация
+- [ ] Dashboard: карточки (проекты, workflow, запуски, уязвимости по severity), график находок по запускам, последние запуски, быстрые действия (score/тренд/топ-3/AI-план — в 6А)
+- [ ] Проекты
+- [ ] Список workflow
+- [ ] Редактор (см. 5.3)
+- [ ] Живой запуск
+- [ ] История запусков с фильтрами (workflow, статус, период, инициатор) + сравнение двух запусков
+- [ ] Детали запуска: граф с итоговыми статусами, таблица находок с фильтрами/сортировкой, AI-отчёт с diff-фиксами и копированием, индикатор доверия валидатора, логи, артефакты/экспорт
+- [ ] Настройки: AI-провайдер с тестом, credentials, allowlist, участники/роли, расписания, язык/тема
+- [ ] (Библиотека шаблонов, Интеграция CI/CD — в фазе 6)
+
+### 5.3 Редактор (обязательно всё)
+- [ ] Палитра нод по категориям с поиском, drag-and-drop
+- [ ] Соединение портов с подсветкой допустимых целей и валидацией (типы, циклы, дубли) с сообщением
+- [ ] Zoom/pan, миникарта, сетка/привязка, авто-раскладка
+- [ ] Боковая панель: форма из JSON Schema (строки, числа, enum, boolean, массивы, селектор credentials, cron-конструктор с человекочитаемым описанием, редактор IF-выражений с подсказками), валидация на лету
+- [ ] Контекстное меню (дублировать, удалить, отключить, копировать/вставить), горячие клавиши, множественное выделение, Undo/Redo, копирование фрагмента
+- [ ] Автосохранение черновика + явное сохранение, индикатор несохранённого, импорт/экспорт JSON
+- [ ] Кнопки «Запустить», «Проверить граф» (подсветка ошибок), «AI-ассистент»
+- [ ] Режим запуска: статусы в реальном времени по SSE (цвета/иконки/спиннер), анимация данных по рёбрам, счётчики, панель логов/входов/выходов, итоговое время
+
+### 5.4 Тесты
+- [ ] vitest: валидация соединений, undo/redo, генерация форм из схемы, i18n
+- [ ] Playwright e2e: регистрация → workflow перетаскиванием → настройка → запуск на учебном проекте → живые статусы → находки/AI-отчёт → сравнение запусков (→ шаблоны после фазы 6)
+- [ ] Скриншоты dark/light × RU/EN в `docs/screens/`
+
+### Гейт фазы 5
+- [ ] vitest + Playwright зелёные
+- [ ] Скриншоты сохранены
+- [ ] Ручной прогон в браузере
+- [ ] REPORT.md, коммит «phase 5: frontend»
+
+---
+
+## Фаза 6 — Задачи со звёздочкой (§12)
+
+### 6.1 Библиотека шаблонов (§12.1)
+- [ ] Публикация: название, описание, категория (Secrets/SAST/SCA/Full Security Audit/CI/CD/Notifications/Custom), теги, версия, автор; вычистка секретов/credential-ссылок/URL репозиториев/chat_id → параметры шаблона (имя, тип, описание, дефолт)
+- [ ] Каталог: карточки, поиск (название/описание/теги), фильтры (категория, рейтинг, автор, избранное, мои), сортировка (новые, популярные, рейтинг)
+- [ ] Просмотр: описание, автор, использования, средний рейтинг, read-only React Flow-превью, список нод и параметров, отзывы
+- [ ] «Использовать»: мастер подстановки параметров, независимая копия, `usage_count++`, `forked_from`, полная редактируемость
+- [ ] Рейтинг 1–5 (одна оценка, можно менять), отзывы (CRUD своих), избранное
+- [ ] Модерация: снять с публикации / обновить версию; скрытие админом
+- [ ] Seed (автор «System»): «Проверка секретов», «SCA зависимостей», «SAST Kotlin/Spring», «Полный аудит + AI + Telegram», «CI gate: упасть на Critical», «Ежедневная проверка + e-mail», «Проверка по webhook + Webhook-уведомление»; `make seed`
+- [ ] API §15 templates; UI страницы каталога, карточки, публикации, избранного
+- [ ] Тесты: публикация → вычистка → поиск/фильтры → использование → правка копии → рейтинг/избранное/отзывы
+
+### 6.2 CI/CD (§12.2)
+- [ ] API-токены (хэш, показ один раз, отзыв, ограничение по workflow); `GET/POST/DELETE /api-tokens`
+- [ ] `POST /api/v1/ci/runs` (multipart-архив или git_url из allowlist + метаданные), `GET /api/v1/ci/runs/{id}` (статус, gate, severity-сводка, ссылки), `GET /api/v1/ci/runs/{id}/report`; long-poll
+- [ ] `cli/aisw_ci.py` (только stdlib, один файл): пакует, загружает, опрашивает, печатает сводку, пишет `report.md`/`submission.json`, exit 0/1/2
+- [ ] `ci/yaml_generator.py` + `GET /ci/yaml?provider=…&workflow_id=…`: GitHub Actions (push+PR, `fetch-depth: 0`, `secrets.AISW_TOKEN`, `AISW_URL`, `$GITHUB_STEP_SUMMARY`, артефакты, комментарий PR, падение при Critical, инструкция branch protection); GitLab CI (stage, rules push/MR, `GIT_DEPTH: 0`, переменные, артефакты, `allow_failure: false`, комментарий MR, «Pipelines must succeed»)
+- [ ] Вебхуки `POST /api/v1/webhooks/github|gitlab`: подписи (`X-Hub-Signature-256`, `X-Gitlab-Token`), push/PR/MR (opened/synchronize/reopened), сопоставление с `trigger.webhook`, клон из allowlist, идемпотентность по delivery id, лимит тела
+- [ ] Возврат статуса: GitHub Commit Statuses/Checks, GitLab Commit Status (`pending → success/failed` + ссылка)
+- [ ] UI «Интеграция»: генератор YAML с копированием, токены, статус webhook
+- [ ] Тесты: mock GitHub/GitLab (настоящие HTTP-серверы), проверка заголовков/тел/подписей; неверная подпись → 401/403; YAML парсится и содержит триггеры/шаги/gate; CLI реально вызывает тестовый API
+
+### 6.3 AI-генерация и чат-правка workflow (§12.3)
+- [ ] `ai/workflow_gen.py`: каталог нод из реестра + правила графа в промпт; ответ по JSON-схеме графа
+- [ ] Валидация `engine/validator.py` + цикл исправления до 3 попыток; при провале показать ошибки, ничего не применять
+- [ ] Секретные поля — только ссылки на credentials/параметры; незаполняемые параметры подсвечены «требуют заполнения»
+- [ ] Отрисовка в редакторе с авто-раскладкой, можно сразу запустить/править
+- [ ] `ai/chat.py` + `POST /ai/workflows/{id}/chat` (+GET истории): операции `add_node/update_node/remove_node/connect/disconnect/set_schedule` → применение к копии → валидация → превью-diff → «Применить/Отклонить» → undo/redo; история хранится с workflow
+- [ ] Эталонные примеры как тест-кейсы: PDF «каждый день в 14:00 … секреты … на почту» → `schedule(0 14 * * *) → source.repo → scanner.secrets → report_export → notify.smtp`; TZ.md «… секреты и зависимости … Critical или High → Telegram» → schedule + secrets + sca + merge + if_else(severity.max ≥ HIGH) + notify.telegram на true
+- [ ] Тесты на локальном OpenAI-compatible сервере (валидный граф, ошибочный → исправление → отказ, чат-операции применить/откатить); живая проверка при наличии LLM
+
+### Гейт фазы 6
+- [ ] Тесты звёздочек зелёные
+- [ ] Демонстрация каждой звёздочки на запущенном стеке
+- [ ] Playwright дополнен сценарием публикации/использования шаблона
+- [ ] REPORT.md, коммит «phase 6: templates, CI/CD, AI workflow generation»
+
+---
+
+## Фаза 6А — Фичи команды (§12А), порядок: diff → score → autofix
+
+### 6А.1 Diff-aware scan (§12А.1)
+- [ ] `analyzers/diff/git.py`: контекст из вебхуков (GitHub PR base/head, push before/after, `000…0` → merge-base; GitLab diff_refs/last_commit), ручной запуск (base по умолчанию `main`), CLI `diff_context` (git diff, `git show base:file` для файлов сборки, `git blame --porcelain`); git через repo_guard, только чтение; fetch base/head sha с `--deepen` до merge-base с лимитом
+- [ ] `on_missing_diff`: `fail` (по умолчанию) | `treat_all_as_new`
+- [ ] `hunks.py`: `git diff --unified=0 --find-renames <merge_base>...<head>` (три точки), globs по умолчанию, переименования, `ignore_whitespace` (`-w --ignore-blank-lines`), приведение путей к корню проекта
+- [ ] `classifier.py`: SECRET/SAST new если диапазон задевает new_lines (или любое `alternate_location` для межфайловых)
+- [ ] `sca_diff.py`: SCA-парсер на base и head, ключ `(group, artifact, advisoryId)`, `version_changed`, `fixed_in_diff`
+- [ ] `blame.py`: `introduced_in_commit`, `author` (не в LLM, не в шаблоны)
+- [ ] Вердикт FAIL/PASS по порогу (дефолт CRITICAL), `report_only`
+- [ ] Нода `scanner.diff` (входы repo+findings; выходы new_findings, existing_findings, verdict)
+- [ ] `output.ci_gate` учитывает verdict (только новые)
+- [ ] `GET /api/v1/ci/runs/{id}/verdict` → 200/422; поле verdict в `GET /ci/runs/{id}`; CLI exit 0/1/2
+- [ ] Commit status `failure` «N new critical»; комментарий в PR/MR с маркером `<!-- aisw-report -->`, upsert без спама; в CLI-режиме — `$GITHUB_STEP_SUMMARY` + публикация при наличии токена
+- [ ] `scripts/demo_diff.sh`: временный git-репо из копии training-project, ветка со сгенерированным AWS-ключом (не EXAMPLE, не коммитится в наш репо) → FAIL + комментарий → удаление ключа → PASS + обновлённый комментарий; 15 старых = existing
+- [ ] UI: бейдж PASS/FAIL, переключатель Новые/Существующие/Все с diff_hunk/коммитом/автором
+- [ ] Тесты: парсер hunks (несколько, новые/удалённые/переименованные/бинарные, whitespace-only), три точки vs две, классификация (изменённая строка, нетронутый файл, многострочный диапазон, межфайловый IDOR), SCA-diff (через gradle.properties → new; без изменений → existing; фикс → fixed_in_diff), пороги/report_only, 200/422, exit codes, upsert комментария GitHub/GitLab, инъекции аргументов git отклоняются
+
+### 6А.2 Security Score (§12А.2)
+- [ ] `scoring/formula.py`: penalty = Σ weight×novelty (по confidence ≥ порога), weight 10/5/2/1, novelty 1.5/1.0, S = S0 × max(1, sqrt(LOC/1000)), score = round(100·exp(−penalty/S)); S0=50 по умолчанию; калибровка на учебном наборе и мутантах; параметры в настройках workspace; `score_formula_version`
+- [ ] Детерминированность и независимость от порядка
+- [ ] `trend.py`: score, delta (к предыдущему успешному с той же `scanner_set_signature`), findings_by_severity, verdict, loc, commit; МНК-тренд 7/30 дней, «недостаточно данных» при <3 точек; маркеры смены формулы/набора сканеров
+- [ ] `priority.py`: priority = weight×novelty/fix_effort; fix_effort из LLM (валидируется) или таблицы по class; источник ai/default; ожидаемый +score детерминированно (накопительно для топ-N)
+- [ ] AI-план на спринт: схема `{summary, plan, defer, projected_score}`; валидатор id; пересчёт projected_score, расхождение >1 → замена + `corrected_numbers`; фильтр CVE; fallback без LLM с `ai_generated: false`
+- [ ] Score считается сервисом в конце каждого запуска с находками; нода `analysis.security_score` для графа
+- [ ] API: `GET /projects/{id}/score/history?period=`, `GET /runs/{id}/score`, `POST /runs/{id}/sprint-plan`; `/dashboard` с score/трендом/топ-3
+- [ ] UI: Dashboard (score + дельта + тренд, график с маркерами коммитов, топ-3, карточка AI-плана); вкладка Score в деталях запуска; оговорка «метрика внутреннего тренда»
+- [ ] `docs/TEAM_FEATURES.md`: формула и калибровка
+- [ ] Тесты: ручные примеры, детерминированность, порядок, LOC, novelty, регрессия, ожидаемый +score, валидатор AI-плана (неверный projected_score → исправлен; неизвестный id → отброшен), fallback
+
+### 6А.3 AI AutoFix (§12А.3)
+- [ ] Метаданные `autofix` у каждого правила; покрытие «N из M» считается из метаданных
+- [ ] `autofix/sca_bump.py`: детерминированный bump до ближайшей fixedVersion в месте определения версии (литерал, val, gradle.properties, catalog, extra) + правка lockfile + пометка про `--write-locks`
+- [ ] `autofix/context.py`: правило, сниппет ±10, объемлющая функция/класс (tree-sitter, лимит токенов), связанные функции по графу вызовов; всё маскировано; ответ `{file, start_line, end_line, old_snippet, new_snippet, explanation, requires_config}`
+- [ ] `autofix/validator.py` (чеклист в UI): схема → файл/строки → `old_snippet` совпадает с маскированным файлом (маски сопоставляются по позициям) → `new_snippet` без масок/секретов/новых литералов-секретов → применение к копии → tree-sitter без новых ERROR (без компиляции/Gradle) → самопроверка всеми тремя анализаторами (находка исчезла, новых нет) → validated/rejected; одна повторная попытка
+- [ ] `autofix/pr/github.py`: refs → contents (sha blob) → pulls; `autofix/pr/gitlab.py`: branches → commits → merge_requests; идемпотентность; без auto-merge; только `allow_write=true`; токен `repo_write_token`; описание PR по шаблону, label `security-autofix`; аудит
+- [ ] Для организаторов/архивов — diff в UI + скачивание `.patch`
+- [ ] Восстановление исходников на точном коммите или из зашифрованного архива с TTL `APP_UPLOAD_RETENTION_HOURS` (72)
+- [ ] Таблица `autofixes`; нода `ai.autofix`; API `POST /runs/{id}/findings/{fid}/autofix`, `GET /autofixes/{id}`, `GET /autofixes/{id}/patch`, `POST /autofixes/{id}/pull-request`
+- [ ] UI: кнопка AutoFix, чеклист, diff было/стало, requires_config, «Создать PR» (только при allow_write), «Скачать .patch», покрытие правил
+- [ ] Тесты на mock LLM: корректный → validated; нет old_snippet → reject; не убирает находку → reject; добавляет находку → reject; ломает синтаксис → reject; секрет в new_snippet → reject; SCA-bump для каждой формы версии; PR на mock GitHub/GitLab (последовательность, заголовки, тела, идемпотентность); `allow_write=false` → 403; маски не попадают в тело PR
+
+### Гейт фазы 6А
+- [ ] Тесты 12А зелёные
+- [ ] Eval 15/15 и `submission.json` не изменились
+- [ ] Демо 12А.1–12А.3 выполнены на запущенном стеке с mock GitHub/GitLab
+- [ ] REPORT.md, коммит «phase 6A: diff-aware, security score, autofix»
+
+---
+
+## Фаза 7 — Упаковка и документация (§18)
+
+- [ ] `docker-compose.yml`: postgres, backend, worker, frontend (nginx/vite preview), профиль `ollama`, профиль `mock` (Telegram/SMTP/GitHub/GitLab); healthchecks, тома, Alembic при старте, понятные порты
+- [ ] Makefile: все цели работают
+- [ ] `README.md` (RU): что это; быстрый старт за 5 команд; настройка LLM (Ollama, OpenAI-compatible, бесплатные варианты); уведомления; демо; тесты; структура; как добавить ноду (пример ~20 строк); подключение CI; ограничения
+- [ ] `docs/ARCHITECTURE.md` (Mermaid + поток данных)
+- [ ] `docs/NODES.md` (все ноды, порты, параметры, формат данных)
+- [ ] `docs/ANALYZERS.md` (актуализировать)
+- [ ] `docs/API.md`
+- [ ] `docs/CI_CD.md`
+- [ ] `docs/AI.md` (провайдеры, промпты, схема, валидатор, метрики)
+- [ ] `docs/SECURITY.md` (модель угроз, шифрование, маскирование, SSRF, allowlist)
+- [ ] `docs/TEAM_FEATURES.md` (diff-aware, формула score с калибровкой, AutoFix, покрытие)
+- [ ] `docs/PRESENTATION_NOTES.md`: проблема и пользователь; как закрыта цель; все ноды; алгоритмы; классификация; передача данных; LLM и данные; проверка ответа с реальными примерами и метриками; архитектура и «добавить ноду/сервис/переключить на локальную LLM за минуту»; звёздочки; фичи команды с обоснованием; собственный движок как осознанный выбор; планы; пошаговый сценарий демо
+
+### Гейт фазы 7
+- [ ] Холодный старт: удалить тома/кэш, следовать только README → стек поднимается, демо проходит
+- [ ] REPORT.md, коммит «phase 7: packaging and docs»
+
+---
+
+## Фаза 8 — Финальная верификация (§17.11, §21, §22)
+
+- [ ] Полный `make test` (сохранить сводку и число тестов)
+- [ ] Интеграционные тесты хотя бы один раз на PostgreSQL
+- [ ] `make e2e`
+- [ ] Eval на учебном наборе + всех мутантах (таблица)
+- [ ] Сквозной демо-сценарий §21 на `docker compose up`, вывод/скриншоты в REPORT.md:
+  - [ ] 1. Регистрация → workspace → настройка AI и Telegram/SMTP
+  - [ ] 2. Проект: git_url организаторов или загрузка архива
+  - [ ] 3. Сборка workflow перетаскиванием (manual → source → [secrets, sca, sast] → merge → if_else(≥HIGH) → ai.report → telegram + report_export; false → webhook)
+  - [ ] 4. Запуск: живые статусы, 15 находок, 0 контролей, AI-отчёт с diff-фиксами, индикатор доверия, уведомление доставлено, `submission.json` валиден
+  - [ ] 5. Правка уязвимости → повторный запуск → сравнение «устранено 1»
+  - [ ] 6. Публикация шаблона → поиск → использование → правка копии
+  - [ ] 7. YAML GitHub/GitLab; CLI → exit 1 на Critical; webhook с подписью → статус на mock GitHub
+  - [ ] 8. AI-генерация примера → граф → «добавь e-mail» в чате → запуск
+  - [ ] 9. Diff-aware: PR с AWS-ключом → FAIL + комментарий → ключ убран → PASS; старые existing
+  - [ ] 10. Score: первый прогон → починили 2 → зелёная дельта, обновлённый Priority Fix List и AI-план
+  - [ ] 11. AutoFix: хардкод пароля → чеклист + diff → PR на mock GitHub → прогон ветки `autofix/…`: 0 новых
+- [ ] Финальный grep на запрещённые имена в `backend/app` и на `TODO`/`NotImplementedError` в продуктовом коде
+- [ ] `docs/REPORT.md`:
+  - [ ] (1) журнал фаз с результатами гейтов
+  - [ ] (2) вывод `make test`, таблица eval (учебный + мутанты)
+  - [ ] (3) чеклист по каждому пункту `TZ.md` 1.1, 1.2.1–1.2.3, 1.3 + требования PDF + каждый пункт 12А: статус DONE/PARTIAL/NOT DONE, где реализовано, чем подтверждено
+  - [ ] (4) честный список ограничений и непроверенного (реальная LLM, реальный Telegram и т.п.), противоречия prompt.md vs PDF, собственный движок как решение команды
+  - [ ] (5) планы развития
+- [ ] Финальный коммит «phase 8: final verification report»
