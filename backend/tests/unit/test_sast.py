@@ -450,3 +450,13 @@ class Safe : OncePerRequestFilter() {
 """
     fs = of(scan(tmp_path, {"src/F.kt": src}), "credentialed-cors")
     assert [(f.line, f.end_line) for f in fs] == [(4, 5)]
+
+
+def test_finding_ids_are_stable_across_parses():
+    """Finding.id is used to compare runs; it must not depend on object identity/memory addresses."""
+    from app.analyzers.sast.detector import scan_sast
+    from tests.nodes.conftest import TRAINING
+
+    first = scan_sast(TRAINING)
+    second = scan_sast(TRAINING)  # `first` stays alive, so tree-sitter nodes get new addresses
+    assert sorted(f.id for f in first) == sorted(f.id for f in second)

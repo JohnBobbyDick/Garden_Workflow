@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.analyzers.common.finding import Finding
+from app.export.ai_section import ai_markdown
 from app.export.common import (
     CATEGORY_ORDER,
     CATEGORY_TITLES,
@@ -55,7 +56,8 @@ def _category_rows(category: str, items: list[Finding]) -> tuple[list[str], list
     return header, rows
 
 
-def render_markdown(findings: list[Finding], project_name: str, meta: dict | None = None) -> str:
+def render_markdown(findings: list[Finding], project_name: str, meta: dict | None = None,
+                    ai: dict | None = None) -> str:
     lines: list[str] = [f"# Отчёт анализа безопасности: {one_line(project_name)}", ""]
 
     if meta:
@@ -73,6 +75,9 @@ def render_markdown(findings: list[Finding], project_name: str, meta: dict | Non
     lines.append("")
     lines += _table(["Серьёзность", "Количество"], [[s, by_severity.get(s, 0)] for s in SEVERITY_LEVELS])
     lines.append("")
+
+    if ai:
+        lines += ai_markdown(ai, findings)
 
     ordered = report_order(findings)
     for category in CATEGORY_ORDER:

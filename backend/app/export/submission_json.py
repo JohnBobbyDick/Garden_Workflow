@@ -11,6 +11,10 @@ from app.export.common import MAX_RANGE_LINES, has_text, normalize_path, path_pr
 
 logger = logging.getLogger(__name__)
 
+# Default confidence threshold of the official export (docs/ANALYZERS.md): entropy heuristics (0.45) and findings
+# in test/doc paths (x0.55–0.6) stay visible in the UI as low-confidence but are not exported.
+OFFICIAL_MIN_CONFIDENCE = 0.6
+
 
 def _skip_reason(f: Finding, path: str) -> str | None:
     problem = path_problem(path)

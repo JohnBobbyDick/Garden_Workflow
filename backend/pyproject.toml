@@ -24,6 +24,8 @@ dependencies = [
     "aiosmtplib>=3.0",
     "sse-starlette>=2.1",
     "tzdata>=2024.1",
+    "regex>=2024.5",
+    "email-validator>=2.1",
 ]
 
 [project.optional-dependencies]
@@ -57,3 +59,7 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501", "B008"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]
+known-first-party = ["app", "tests"]

@@ -1,68 +1,91 @@
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Design tokens (RGB triplets so Tailwind can apply opacity). Dark is the default theme. */
+:root,
+[data-theme='dark'] {
+  --bg: 13 16 21;
+  --surface: 21 26 33;
+  --surface-2: 29 35 44;
+  --border: 45 53 65;
+  --fg: 230 233 238;
+  --muted: 156 166 180;
+  --primary: 92 145 255;
+  --primary-fg: 8 14 28;
+  --danger: 244 98 96;
+  --warning: 245 170 66;
+  --success: 52 199 122;
+  --info: 92 170 255;
+  --sev-critical: 214 51 70;
+  --sev-high: 236 96 62;
+  --sev-medium: 238 168 60;
+  --sev-low: 84 150 226;
+  color-scheme: dark;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+[data-theme='light'] {
+  --bg: 245 247 250;
+  --surface: 255 255 255;
+  --surface-2: 238 241 245;
+  --border: 214 220 228;
+  --fg: 20 25 33;
+  --muted: 86 96 110;
+  --primary: 37 99 214;
+  --primary-fg: 255 255 255;
+  --danger: 196 43 43;
+  --warning: 168 98 0;
+  --success: 20 128 74;
+  --info: 30 102 196;
+  --sev-critical: 170 22 44;
+  --sev-high: 196 62 28;
+  --sev-medium: 156 96 0;
+  --sev-low: 34 99 180;
+  color-scheme: light;
 }
 
+html, body, #root { height: 100%; }
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  @apply bg-bg text-fg font-sans antialiased;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+:focus-visible { outline: 2px solid rgb(var(--primary)); outline-offset: 2px; }
+
+@layer components {
+  .card { @apply bg-surface border border-border rounded-xl shadow-card; }
+  .input {
+    @apply w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-fg placeholder:text-muted
+      focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50;
+  }
+  .input-error { @apply border-danger focus:border-danger focus:ring-danger/30; }
+  .label { @apply mb-1 block text-xs font-medium text-muted; }
+  .kbd { @apply rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px]; }
+  .table-base { @apply w-full border-collapse text-sm; }
+  .table-base th { @apply border-b border-border px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted; }
+  .table-base td { @apply border-b border-border/60 px-3 py-2 align-top; }
+  .table-base tbody tr:hover { @apply bg-surface-2/60; }
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* React Flow theming */
+.react-flow { --xy-background-color: rgb(var(--bg)); --xy-node-border-radius: 12px; }
+.react-flow__minimap { background: rgb(var(--surface)); border: 1px solid rgb(var(--border)); border-radius: 8px; }
+.react-flow__controls { box-shadow: none; border: 1px solid rgb(var(--border)); border-radius: 8px; overflow: hidden; }
+.react-flow__controls-button { background: rgb(var(--surface)); border-color: rgb(var(--border)); color: rgb(var(--fg)); fill: rgb(var(--fg)); }
+.react-flow__controls-button:hover { background: rgb(var(--surface-2)); }
+.react-flow__edge-path { stroke: rgb(var(--muted)); stroke-width: 1.6; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: rgb(var(--primary)); stroke-width: 2.2; }
+.react-flow__edge.edge-active .react-flow__edge-path { stroke: rgb(var(--success)); stroke-dasharray: 6 4; animation: dash 0.6s linear infinite; }
+.react-flow__edge.edge-skipped .react-flow__edge-path { stroke-dasharray: 2 4; opacity: 0.45; }
+.react-flow__handle { width: 13px; height: 13px; border: 2px solid rgb(var(--surface)); }
+.react-flow__handle.connectingto { box-shadow: 0 0 0 4px rgb(var(--primary) / 0.35); }
+.react-flow__handle.valid { box-shadow: 0 0 0 4px rgb(var(--success) / 0.45); }
+.react-flow__attribution { display: none; }
+.react-flow__edge-textbg { fill: rgb(var(--surface)); }
+.react-flow__edge-text { fill: rgb(var(--fg)); font-size: 11px; }
+@keyframes dash { to { stroke-dashoffset: -20; } }
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge.edge-active .react-flow__edge-path { animation: none; }
+  * { scroll-behavior: auto !important; }
 }

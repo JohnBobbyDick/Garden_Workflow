@@ -1,0 +1,174 @@
+import hashlib
+import hmac
+import json
+import threading
+import time
+from email import message_from_bytes
+from email.policy import default as default_policy
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import pytest
+from aiosmtpd.controller import Controller
+
+from app.analyzers.runner import analyze_project
+from app.config import get_settings
+from app.core.masking import Masker
+from app.engine.data import findings_envelope
+from tests.nodes.conftest import TRAINING, run_node
+
+BOT_TOKEN = "123456789:AAFakeTokenForLocalMockServer_abcdefgh"
+
+
+class Recorder(BaseHTTPRequestHandler):
+    requests: list = []
+
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(n)
+        type(self).requests.append({"path": self.path, "headers": dict(self.headers), "body": body})
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({"ok": True, "result": {"message_id": len(type(self).requests)}}).encode())
+
+
+@pytest.fixture
+def http_server(monkeypatch):
+    class H(Recorder):
+        requests = []
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    hostport = f"127.0.0.1:{srv.server_address[1]}"
+    monkeypatch.setenv("APP_SSRF_ALLOW_HOSTS", hostport)
+    monkeypatch.setenv("APP_TELEGRAM_API_BASE", f"http://{hostport}")
+    get_settings.cache_clear()
+    yield hostport, H.requests
+    srv.shutdown()
+    get_settings.cache_clear()
+
+
+@pytest.fixture(scope="module")
+def findings():
+    return analyze_project(TRAINING).findings
+
+
+def test_telegram_sends_summary_with_report_and_document(http_server, services, findings):
+    hostport, reqs = http_server
+    services.credentials["tg"] = BOT_TOKEN
+    masker = Masker()
+    out, sink = run_node("notify.telegram", {"in": [findings_envelope(findings, "m")]},
+                         {"bot_token": "tg", "chat_id": "-100123"}, services, masker=masker)
+    paths = [r["path"] for r in reqs]
+    assert f"/bot{BOT_TOKEN}/sendMessage" in paths and f"/bot{BOT_TOKEN}/sendDocument" in paths
+    msg = json.loads(next(r["body"] for r in reqs if r["path"].endswith("sendMessage")))
+    assert msg["chat_id"] == "-100123"
+    assert "15" in msg["text"] and "CRITICAL" in msg["text"]
+    assert "build.gradle.kts" in msg["text"] or ".kt" in msg["text"]  # top findings listed
+    doc = next(r for r in reqs if r["path"].endswith("sendDocument"))
+    assert b"report.md" in doc["body"] and "# Отчёт анализа безопасности".encode() in doc["body"]
+    assert services.notifications[-1]["status"] == "delivered"
+    assert BOT_TOKEN not in repr(sink.events) and BOT_TOKEN not in repr(out["out"].data)
+
+
+def test_telegram_long_message_is_split_by_4096(http_server, services, findings):
+    _, reqs = http_server
+    services.credentials["tg"] = BOT_TOKEN
+    many = findings * 40
+    long_template = "Заголовок\n" + "\n".join(f"строка {i} " + "x" * 80 for i in range(120))
+    run_node("notify.telegram", {"in": [findings_envelope(many, "m")]},
+             {"bot_token": "tg", "chat_id": "1", "template": long_template, "send_document": False}, services)
+    texts = [json.loads(r["body"])["text"] for r in reqs if r["path"].endswith("sendMessage")]
+    assert len(texts) >= 3 and all(len(t) <= 4096 for t in texts)
+
+
+def test_telegram_blocked_by_ssrf_when_api_base_internal(monkeypatch, services, findings):
+    monkeypatch.setenv("APP_TELEGRAM_API_BASE", "http://127.0.0.1:9")
+    monkeypatch.setenv("APP_SSRF_ALLOW_HOSTS", "")
+    get_settings.cache_clear()
+    services.credentials["tg"] = BOT_TOKEN
+    try:
+        with pytest.raises(Exception, match="заблокирован|внутреннюю"):
+            run_node("notify.telegram", {"in": [findings_envelope(findings, "m")]},
+                     {"bot_token": "tg", "chat_id": "1"}, services)
+        assert services.notifications[-1]["status"] == "failed"
+    finally:
+        get_settings.cache_clear()
+
+
+class MailSink:
+    def __init__(self):
+        self.messages = []
+
+    async def handle_DATA(self, server, session, envelope):
+        self.messages.append(envelope)
+        return "250 OK"
+
+
+@pytest.fixture
+def smtp_server(monkeypatch):
+    import socket
+    handler = MailSink()
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    ctl = Controller(handler, hostname="127.0.0.1", port=port, auth_require_tls=False, server_hostname="localhost")
+    ctl.start()
+    monkeypatch.setenv("APP_SSRF_ALLOW_HOSTS", f"127.0.0.1:{port}")
+    get_settings.cache_clear()
+    yield port, handler
+    ctl.stop()
+    get_settings.cache_clear()
+
+
+def test_smtp_sends_html_letter_with_attachments(smtp_server, services, findings):
+    port, handler = smtp_server
+    run_node("notify.smtp", {"in": [findings_envelope(findings, "m")]},
+             {"host": "127.0.0.1", "port": port, "security": "none", "from_addr": "aisw@example.org",
+              "to": ["dev@example.org", "lead@example.org"]}, services)
+    deadline = time.time() + 5
+    while not handler.messages and time.time() < deadline:
+        time.sleep(0.05)
+    env = handler.messages[0]
+    assert set(env.rcpt_tos) == {"dev@example.org", "lead@example.org"}
+    msg = message_from_bytes(env.content, policy=default_policy)
+    names = {p.get_filename() for p in msg.iter_attachments()}
+    assert {"report.html", "report.md"} <= names
+    html = msg.get_body(("html",)).get_content()
+    assert "<table" in html and "CRITICAL" in html and "15" in html
+    assert services.notifications[-1]["channel"] == "smtp"
+
+
+def test_webhook_posts_signed_json_with_masked_findings(http_server, services, findings):
+    hostport, reqs = http_server
+    services.credentials["hm"] = "hmac-shared-secret-1234"
+    services.credentials["hk"] = "header-secret-value-999"
+    run_node("notify.webhook", {"in": [findings_envelope(findings, "m")]},
+             {"url": f"http://{hostport}/hook", "hmac_secret": "hm", "headers": {"X-Team": "core"},
+              "secret_headers": {"X-Api-Key": "hk"}}, services)
+    r = reqs[-1]
+    body = r["body"]
+    sig = r["headers"]["X-AISW-Signature"]
+    ts = r["headers"]["X-AISW-Timestamp"]
+    expected = hmac.new(b"hmac-shared-secret-1234", ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+    assert sig == f"sha256={expected}"
+    assert r["headers"]["X-Team"] == "core" and r["headers"]["X-Api-Key"] == "header-secret-value-999"
+    doc = json.loads(body)
+    assert doc["summary"]["total"] == 15 and len(doc["findings"]) == 15
+    secrets = [f for f in doc["findings"] if f["category"] == "SECRET"]
+    assert secrets and all("value" not in f for f in secrets) and all("…" in (f.get("masked_value") or "…")
+                                                                   for f in secrets)
+    assert "links" in doc
+
+
+def test_webhook_ssrf_blocked(services, findings, monkeypatch):
+    monkeypatch.setenv("APP_SSRF_ALLOW_HOSTS", "")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(Exception, match="заблокирован|внутреннюю"):
+            run_node("notify.webhook", {"in": [findings_envelope(findings, "m")]},
+                     {"url": "http://169.254.169.254/latest/meta-data/"}, services)
+    finally:
+        get_settings.cache_clear()

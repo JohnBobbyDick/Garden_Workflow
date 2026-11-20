@@ -393,7 +393,7 @@ def rule_cors(ctx: Ctx) -> list[Hit]:
                 if name in ("setHeader", "addHeader", "header") and len(value_nodes) >= 2:
                     hname = plain_string_value(value_nodes[0], kf.src) if is_string_literal(value_nodes[0]) else None
                     fn = kf.function_at(n)
-                    g = groups.setdefault(_cors_scope(n, fn), {"origin": [], "cred": []})
+                    g = groups.setdefault(_cors_scope(n, fn), {"origin": [], "cred": [], "fn": fn})
                     val = value_nodes[1]
                     if (hname or "").lower() == "access-control-allow-origin" and (
                             _has_wildcard(ctx, fn, kf, val) or re.search(r"\b(getHeader|header)\(\s*\"Origin\"", val.text.decode())
@@ -407,22 +407,27 @@ def rule_cors(ctx: Ctx) -> list[Hit]:
                 continue
             fn = kf.function_at(n)
             scope = _cors_scope(n, fn)
-            g = groups.setdefault(scope, {"origin": [], "cred": []})
+            g = groups.setdefault(scope, {"origin": [], "cred": [], "fn": fn})
             at = call_line(n) if n.type == "call_expression" else node_line(n)
             if name in ORIGIN_SETTERS:
                 if any(_has_wildcard(ctx, fn, kf, v) for v in value_nodes):
                     g["origin"].append(at)
             elif any(v.text.decode().strip() == "true" for v in value_nodes):
                 g["cred"].append(at)
-        for scope, g in groups.items():
+        ordinals: dict[str, int] = {}
+        for g in groups.values():
             if g["origin"] and g["cred"]:
                 lines = sorted(g["origin"] + g["cred"])
                 start, end = lines[0], lines[-1]
                 if end - start > 14:
                     continue
+                # stable id key: enclosing function + ordinal (tree-sitter node ids are memory addresses)
+                fn = g["fn"]
+                qual = f"{fn.cls.name}.{fn.name}" if fn is not None and fn.cls is not None else                     (fn.name if fn is not None else "file")
+                ordinals[qual] = ordinals.get(qual, 0) + 1
                 hits.append(Hit("credentialed-cors", "SAST-CORS-CREDS", kf, kf.path, start, end, 0.9,
                                 "Разрешён любой Origin (`*`) одновременно с передачей учётных данных",
-                                f"{kf.path}:{scope}"))
+                                f"{kf.path}:{qual}#{ordinals[qual]}"))
         for cls in kf.classes():
             for owner in [cls, *cls.functions]:
                 ann = owner.annotation("CrossOrigin")

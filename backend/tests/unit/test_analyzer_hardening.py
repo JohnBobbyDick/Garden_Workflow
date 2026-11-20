@@ -1,9 +1,8 @@
-import os
-
 from app.analyzers.common.kotlin_ast import KotlinFile
 from app.analyzers.sca.detector import scan_sca
 from app.analyzers.sca.gradle_parser import module_build_files, parse_build_file
 from app.analyzers.sca.vulndb import VulnDB
+from tests.conftest import symlink_or_skip
 
 
 def test_symlinked_gradle_properties_outside_root_is_ignored(tmp_path):
@@ -12,7 +11,7 @@ def test_symlinked_gradle_properties_outside_root_is_ignored(tmp_path):
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "build.gradle.kts").write_text('dependencies {\n    implementation("org.jsoup:jsoup:${providers.gradleProperty("v").get()}")\n}\n')
-    os.symlink(outside, proj / "gradle.properties")
+    symlink_or_skip(outside, proj / "gradle.properties")
     deps = parse_build_file(proj, "build.gradle.kts")
     assert deps[0].declared_version is None
 
@@ -23,7 +22,7 @@ def test_symlinked_lockfile_ignored(tmp_path):
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "build.gradle.kts").write_text('dependencies {\n    implementation("org.jsoup:jsoup")\n}\n')
-    os.symlink(outside, proj / "gradle.lockfile")
+    symlink_or_skip(outside, proj / "gradle.lockfile")
     assert scan_sca(proj, VulnDB.load()).findings == []
 
 

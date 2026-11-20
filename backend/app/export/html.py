@@ -5,6 +5,7 @@ from __future__ import annotations
 from html import escape
 
 from app.analyzers.common.finding import Finding
+from app.export.ai_section import AI_CSS, ai_html
 from app.export.common import (
     CATEGORY_ORDER,
     CATEGORY_TITLES,
@@ -94,7 +95,7 @@ def _category_table(category: str, items: list[Finding]) -> str:
     return _table(header, rows)
 
 
-def render_html(findings: list[Finding], project_name: str, meta: dict | None = None) -> str:
+def render_html(findings: list[Finding], project_name: str, meta: dict | None = None, ai: dict | None = None) -> str:
     title = f"Отчёт анализа безопасности: {one_line(project_name)}"
     parts: list[str] = [f"<h1>{_e(title)}</h1>"]
 
@@ -112,6 +113,8 @@ def render_html(findings: list[Finding], project_name: str, meta: dict | None = 
         parts.append(
             _table(["Серьёзность", "Количество"], [[f"<td>{_sev(s)}</td>", _td(by_severity.get(s, 0))] for s in SEVERITY_LEVELS])
         )
+        if ai:
+            parts.append(ai_html(ai, findings))
         ordered = report_order(findings)
         for category in CATEGORY_ORDER:
             items = [f for f in ordered if f.category == category]
@@ -122,6 +125,6 @@ def render_html(findings: list[Finding], project_name: str, meta: dict | None = 
         "<!DOCTYPE html>\n"
         '<html lang="ru">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>{_e(title)}</title>\n<style>{_CSS}</style>\n</head>\n"
+        f"<title>{_e(title)}</title>\n<style>{_CSS}{AI_CSS if ai else ""}</style>\n</head>\n"
         f"<body>\n<main>\n{''.join(parts)}\n</main>\n</body>\n</html>\n"
     )

@@ -116,7 +116,7 @@
 - [x] `submission_json.py`: маппинг `Finding → запись` строго по `docs/submission-format.md` (category верхним регистром, относительный path без `..`, class, line, endLine ≤ line+14, SCA group/artifact/version/advisoryId); фильтр по confidence; без транзитивных; без diff/autofix-полей
 - [x] Собственный валидатор формата организаторов; невалидный экспорт = ошибка; `training-result-example.json` проходит, невалидные случаи отклоняются (тест)
 - [x] `markdown.py`, `html.py`: сводка, таблица по категориям, детали (файл:строки, координаты+версия+CVE/GHSA для SCA), severity, рекомендация; секреты скрыты
-- [ ] AI-раздел в markdown/html — подключается в фазе LLM (узел AI-объяснения)
+- [x] AI-раздел в markdown/html — подключён в фазе 4 (`export/ai_section.py`)
 
 ### 1.6 Eval-харнесс и мутанты (§17.2–17.3)
 - [x] `backend/tests/eval/`: запуск трёх анализаторов на `training-project/`, сверка с ground truth (категория+путь+class+строка в диапазоне с учётом `alternateLocations`; SCA координаты+версия+advisory); падает на пропуске, контроле или необъяснённой лишней находке; печать таблицы recall/precision
@@ -139,151 +139,151 @@
 ## Фаза 2 — Движок, ноды, БД, воркер (§6, §7, §14)
 
 ### 2.1 БД и модели
-- [ ] SQLAlchemy-модели (§5): user, workspace, project, workflow, run, run_event, finding, ai_report, template, review, credential, api_token, ci_*, autofix, repo_allowlist (+ schedule, audit)
-- [ ] Alembic-миграции; SQLite для юнит-тестов, отдельный прогон интеграционных на PostgreSQL
+- [x] SQLAlchemy-модели (§5): user, workspace, project, workflow, run, run_event, finding, ai_report, template, review, credential, api_token, ci_*, autofix, repo_allowlist (+ schedule, audit)
+- [x] Alembic-миграции; SQLite для юнит-тестов, отдельный прогон интеграционных на PostgreSQL
 
 ### 2.2 Ноды: контракт и реестр
-- [ ] `nodes/base.py`: `NodeSpec`, `Port`, `@register_node`, реестр с автообнаружением пакета `app.nodes`; метаданные type/category/title/description RU+EN, inputs/outputs, `config_schema` с `secret: true`/`credential_ref`, `async execute(ctx, inputs, config)`
-- [ ] `Envelope` {type, data, meta{node_id, produced_at, summary}}; типы портов trigger/repo/findings/report/json/text/bool/any
-- [ ] `GET /api/nodes` — каталог + JSON Schema
+- [x] `nodes/base.py`: `NodeSpec`, `Port`, `@register_node`, реестр с автообнаружением пакета `app.nodes`; метаданные type/category/title/description RU+EN, inputs/outputs, `config_schema` с `secret: true`/`credential_ref`, `async execute(ctx, inputs, config)`
+- [x] `Envelope` {type, data, meta{node_id, produced_at, summary}}; типы портов trigger/repo/findings/report/json/text/bool/any
+- [x] `GET /api/nodes` — каталог + JSON Schema
 
 ### 2.3 Движок (`engine/`)
-- [ ] `graph.py`: формат графа §6.1 (schema_version, nodes, edges с портами)
-- [ ] `validator.py`: ≥1 триггер, нет циклов, нет висящих обязательных входов, обязательные поля, совместимость портов, существование credentials, ветки IF; ошибки списком с `node_id`
-- [ ] `executor.py`: топологический обход, параллельные ветки на asyncio; IF/ELSE skip-распространение; ожидание активных входов; статусы нод/запуска; таймауты нод и запуска; отмена; ошибка ноды не роняет воркер, сообщение маскируется
-- [ ] `events.py`: запись в `run_events` (статусы, усечённые превью входов/выходов после маскирования, логи, длительность)
-- [ ] SSE `GET /api/runs/{id}/events` с `Last-Event-ID`
-- [ ] Снимок графа при старте запуска
-- [ ] `worker.py`: очередь в таблице (`SELECT … FOR UPDATE SKIP LOCKED`), отдельный процесс; в dev — внутри API
-- [ ] `scheduler.py`: cron / «каждый день в HH:MM», timezone (дефолт из workspace), хранение в БД, переживает рестарт, без дублей при нескольких воркерах (уникальный ключ слота)
-- [ ] Безопасный парсер выражений для `if_else` (без `eval`): `findings.count`, `severity.max`, `category`, `new_findings.count`, `verdict`, `score.value`, `score.delta`, сравнения, `and/or`
-- [ ] Безопасный шаблонизатор сообщений (`{{findings.count}}`, `{{severity.critical}}`, `{{new_findings.count}}`, `{{verdict}}`, `{{score.value}}`, `{{score.delta}}`, `{{run.url}}`, `{{ai.summary}}`), секреты не подставляются
+- [x] `graph.py`: формат графа §6.1 (schema_version, nodes, edges с портами)
+- [x] `validator.py`: ≥1 триггер, нет циклов, нет висящих обязательных входов, обязательные поля, совместимость портов, существование credentials, ветки IF; ошибки списком с `node_id`
+- [x] `executor.py`: топологический обход, параллельные ветки на asyncio; IF/ELSE skip-распространение; ожидание активных входов; статусы нод/запуска; таймауты нод и запуска; отмена; ошибка ноды не роняет воркер, сообщение маскируется
+- [x] `events.py`: запись в `run_events` (статусы, усечённые превью входов/выходов после маскирования, логи, длительность)
+- [x] SSE `GET /api/runs/{id}/events` с `Last-Event-ID`
+- [x] Снимок графа при старте запуска
+- [x] `worker.py`: очередь в таблице (`SELECT … FOR UPDATE SKIP LOCKED`), отдельный процесс; в dev — внутри API
+- [x] `scheduler.py`: cron / «каждый день в HH:MM», timezone (дефолт из workspace), хранение в БД, переживает рестарт, без дублей при нескольких воркерах (уникальный ключ слота)
+- [x] Безопасный парсер выражений для `if_else` (без `eval`): `findings.count`, `severity.max`, `category`, `new_findings.count`, `verdict`, `score.value`, `score.delta`, сравнения, `and/or`
+- [x] Безопасный шаблонизатор сообщений (`{{findings.count}}`, `{{severity.critical}}`, `{{new_findings.count}}`, `{{verdict}}`, `{{score.value}}`, `{{score.delta}}`, `{{run.url}}`, `{{ai.summary}}`), секреты не подставляются
 
 ### 2.4 Ноды §7 (каждая с тестом и описанием в NODES.md)
-- [ ] `trigger.manual`
-- [ ] `trigger.schedule`
-- [ ] `trigger.webhook` (provider, secret credential, events)
-- [ ] `source.repo` (upload zip/tar, git_url из allowlist, path внутри APP_SCAN_ROOTS, ref, project ref)
-- [ ] `scanner.secrets` (include/exclude, entropy threshold, heuristics)
-- [ ] `scanner.sca` (справочник, include_transitive, include_test_scopes)
-- [ ] `scanner.sast` (правила вкл/выкл, min confidence)
-- [ ] `logic.if_else` (порты true/false)
-- [ ] `logic.compare`
-- [ ] `logic.regex` (match/extract/filter, защита от ReDoS: таймаут/лимит длины)
-- [ ] `logic.severity_filter`
-- [ ] `logic.merge` (несколько findings-входов, дедуп)
-- [ ] `logic.set_value`
-- [ ] `output.report_export` (submission_json/markdown/html → артефакты запуска)
-- [ ] `output.ci_gate` (fail_on по умолчанию CRITICAL; опциональный вход verdict)
-- [ ] `notify.telegram`: сводка + топ находок + score + AI-вывод, `sendDocument` с `report.md`, резка по 4096
-- [ ] `notify.smtp`: HTML-письмо со сводкой и таблицей + вложения `report.html`/`report.md`; TLS/STARTTLS
-- [ ] `notify.webhook`: JSON со сводкой, маскированными находками, ссылками на экспорт; HMAC-подпись; SSRF-защита
+- [x] `trigger.manual`
+- [x] `trigger.schedule`
+- [x] `trigger.webhook` (provider, secret credential, events)
+- [x] `source.repo` (upload zip/tar, git_url из allowlist, path внутри APP_SCAN_ROOTS, ref, project ref)
+- [x] `scanner.secrets` (include/exclude, entropy threshold, heuristics)
+- [x] `scanner.sca` (справочник, include_transitive, include_test_scopes)
+- [x] `scanner.sast` (правила вкл/выкл, min confidence)
+- [x] `logic.if_else` (порты true/false)
+- [x] `logic.compare`
+- [x] `logic.regex` (match/extract/filter, защита от ReDoS: таймаут/лимит длины)
+- [x] `logic.severity_filter`
+- [x] `logic.merge` (несколько findings-входов, дедуп)
+- [x] `logic.set_value`
+- [x] `output.report_export` (submission_json/markdown/html → артефакты запуска)
+- [x] `output.ci_gate` (fail_on по умолчанию CRITICAL; опциональный вход verdict)
+- [x] `notify.telegram`: сводка + топ находок + score + AI-вывод, `sendDocument` с `report.md`, резка по 4096
+- [x] `notify.smtp`: HTML-письмо со сводкой и таблицей + вложения `report.html`/`report.md`; TLS/STARTTLS
+- [x] `notify.webhook`: JSON со сводкой, маскированными находками, ссылками на экспорт; HMAC-подпись; SSRF-защита
 - [ ] (`ai.report`, `ai.autofix`, `scanner.diff`, `analysis.security_score` — в фазах 4 и 6А)
 
 ### 2.5 История и API запусков (§14, §15)
-- [ ] Хранение: время/длительность, снимок графа, источник/ref/commit, инициатор, статусы/длительности нод, маскированные логи, находки (с run_id и node_id), артефакты, статус уведомлений, ошибки
-- [ ] API: workflows CRUD, `validate`, `run`, `schedule`; runs list/get/cancel/events/findings/export; `GET /runs/compare?base=&head=` (новые/устранённые/неизменные/изменения severity, сводка по категориям)
-- [ ] Единый формат ошибок `{"error":{"code","message","details"}}`
+- [x] Хранение: время/длительность, снимок графа, источник/ref/commit, инициатор, статусы/длительности нод, маскированные логи, находки (с run_id и node_id), артефакты, статус уведомлений, ошибки
+- [x] API: workflows CRUD, `validate`, `run`, `schedule`; runs list/get/cancel/events/findings/export; `GET /runs/compare?base=&head=` (новые/устранённые/неизменные/изменения severity, сводка по категориям)
+- [x] Единый формат ошибок `{"error":{"code","message","details"}}`
 
 ### 2.6 Тесты
-- [ ] Движок: валидатор, IF/skip, параллельность, таймауты, отмена, порядок событий, передача данных, планировщик (без дублей), восстановление после рестарта
-- [ ] Тест расширяемости: тестовая нода в отдельном файле без правок движка/API/фронта → видна в `/api/nodes`, исполняется
-- [ ] Уведомления на реальных локальных серверах: mock Telegram Bot API (HTTP), `aiosmtpd`, локальный webhook-приёмник с проверкой HMAC
+- [x] Движок: валидатор, IF/skip, параллельность, таймауты, отмена, порядок событий, передача данных, планировщик (без дублей), восстановление после рестарта
+- [x] Тест расширяемости: тестовая нода в отдельном файле без правок движка/API/фронта → видна в `/api/nodes`, исполняется
+- [x] Уведомления на реальных локальных серверах: mock Telegram Bot API (HTTP), `aiosmtpd`, локальный webhook-приёмник с проверкой HMAC
 
 ### Гейт фазы 2
-- [ ] Все тесты движка и нод зелёные
-- [ ] End-to-end через API: `manual → source → [secrets, sca, sast] → merge → if_else → notify → export` на учебном проекте
-- [ ] Уведомления пришли на mock-серверы с отчётом внутри
-- [ ] REPORT.md, коммит «phase 2: engine and nodes»
+- [x] Все тесты движка и нод зелёные
+- [x] End-to-end через API: `manual → source → [secrets, sca, sast] → merge → if_else → notify → export` на учебном проекте
+- [x] Уведомления пришли на mock-серверы с отчётом внутри
+- [x] REPORT.md (коммит «phase 2: engine and nodes» делает пользователь — по его указанию без коммитов)
 
 ---
 
 ## Фаза 3 — Безопасность платформы и многопользовательность (§13)
 
-- [ ] Регистрация/вход, argon2/bcrypt, JWT access (короткий) + refresh с ротацией и отзывом, `logout`, `GET /auth/me`
-- [ ] Rate limit на вход; CORS строго по списку origin
-- [ ] Workspaces, членство, роли `admin`/`developer`/`viewer`, приглашения, смена роли/удаление
-- [ ] Проверка принадлежности объекта в **каждом** эндпоинте; IDOR-тесты кросс-workspace
-- [ ] `core/crypto.py`: AES-256-GCM/Fernet, `APP_MASTER_KEY` (генерация в dev с предупреждением), версионирование ключа
-- [ ] Credentials API: значения только на запись, ответ `••••` + 2–4 последних символа
-- [ ] `core/masking.py`: центральный Masker (значения из credentials, конфига запуска, найденные сканером + паттерны) → логи, run_events, ошибки, ответы API, промпты, сниппеты, отчёты, уведомления
-- [ ] `core/ssrf.py`: только http/https, резолв DNS и проверка IP (loopback, private, link-local, 169.254.169.254, IPv6), защита от DNS-rebinding, лимит редиректов, таймауты, лимит размера ответа; явный allowlist хостов для Ollama/тестов
-- [ ] `core/repo_guard.py`: allowlist (по умолчанию только `https://github.com/TBagirov/training`), `path` только в `APP_SCAN_ROOTS`, безопасная распаковка (zip-slip, симлинки, zip-бомбы, лимиты), git только https (`GIT_ALLOW_PROTOCOL=https`, `GIT_TERMINAL_PROMPT=0`, `core.hooksPath=/dev/null`, аргументы списком, sha regex, ветки не с `-`), `--depth 1`, удаление рабочей копии
-- [ ] Флаг `allow_write` в allowlist (только admin, аудит); для репозитория организаторов и фикстур запрещён кодом
-- [ ] Анализаторы никогда не исполняют проверяемый код
-- [ ] Журнал аудита (вход, credentials, публикация шаблона, allowlist, API-токены); `GET /workspaces/{id}/audit`
-- [ ] Безопасные заголовки, лимиты тела, Pydantic-валидация
-- [ ] `GET/PUT /settings/allowlist`
-- [ ] Тесты: внедрённый секрет не находится grep-ом в логах/БД/ответах; в БД нет открытых значений; SSRF (loopback/private/metadata/redirect/rebinding); repo-guard (чужой URL, `file://`, zip-slip, `..`); ReDoS; `allow_write` для организаторов → отказ
+- [x] Регистрация/вход, argon2/bcrypt, JWT access (короткий) + refresh с ротацией и отзывом, `logout`, `GET /auth/me`
+- [x] Rate limit на вход; CORS строго по списку origin
+- [x] Workspaces, членство, роли `admin`/`developer`/`viewer`, приглашения, смена роли/удаление
+- [x] Проверка принадлежности объекта в **каждом** эндпоинте; IDOR-тесты кросс-workspace
+- [x] `core/crypto.py`: AES-256-GCM/Fernet, `APP_MASTER_KEY` (генерация в dev с предупреждением), версионирование ключа
+- [x] Credentials API: значения только на запись, ответ `••••` + 2–4 последних символа
+- [x] `core/masking.py`: центральный Masker (значения из credentials, конфига запуска, найденные сканером + паттерны) → логи, run_events, ошибки, ответы API, промпты, сниппеты, отчёты, уведомления
+- [x] `core/ssrf.py`: только http/https, резолв DNS и проверка IP (loopback, private, link-local, 169.254.169.254, IPv6), защита от DNS-rebinding, лимит редиректов, таймауты, лимит размера ответа; явный allowlist хостов для Ollama/тестов
+- [x] `core/repo_guard.py`: allowlist (по умолчанию только `https://github.com/TBagirov/training`), `path` только в `APP_SCAN_ROOTS`, безопасная распаковка (zip-slip, симлинки, zip-бомбы, лимиты), git только https (`GIT_ALLOW_PROTOCOL=https`, `GIT_TERMINAL_PROMPT=0`, `core.hooksPath=/dev/null`, аргументы списком, sha regex, ветки не с `-`), `--depth 1`, удаление рабочей копии
+- [x] Флаг `allow_write` в allowlist (только admin, аудит); для репозитория организаторов и фикстур запрещён кодом
+- [x] Анализаторы никогда не исполняют проверяемый код
+- [x] Журнал аудита (вход, credentials, публикация шаблона, allowlist, API-токены); `GET /workspaces/{id}/audit`
+- [x] Безопасные заголовки, лимиты тела, Pydantic-валидация
+- [x] `GET/PUT /settings/allowlist`
+- [x] Тесты: внедрённый секрет не находится grep-ом в логах/БД/ответах; в БД нет открытых значений; SSRF (loopback/private/metadata/redirect/rebinding); repo-guard (чужой URL, `file://`, zip-slip, `..`); ReDoS; `allow_write` для организаторов → отказ
 
 ### Гейт фазы 3
-- [ ] Тесты безопасности зелёные
-- [ ] Вручную: секрет не виден нигде; посторонний repo-URL отклонён
-- [ ] REPORT.md, коммит «phase 3: platform security, multi-tenancy»
+- [x] Тесты безопасности зелёные
+- [x] Вручную: секрет не виден нигде; посторонний repo-URL отклонён
+- [x] REPORT.md (коммит делает пользователь)
 
 ---
 
 ## Фаза 4 — LLM (§11)
 
-- [ ] `ai/providers/`: интерфейс `LLMProvider.chat(messages, response_schema, temperature, max_tokens, timeout)`; `openai_compat.py` (base_url, key, model, заголовки, `response_format` JSON или инструкция+разбор); `ollama.py` (`/api/chat`, `format: json`)
-- [ ] Таймауты, ретраи с backoff на 429/5xx, разбиение находок на пачки, ошибка провайдера → явная ошибка ноды
-- [ ] Настройки на workspace + override в ноде; ключи в зашифрованном хранилище; `GET/PUT /settings/ai`, `POST /settings/ai/test`, список моделей; по умолчанию ничего не включено, подсказки о бесплатных вариантах
-- [ ] `ai/schemas.py`: схема отчёта (summary, priority_order, findings[...] с explanation/impact/remediation_steps/safe_version/fix, global_recommendations)
-- [ ] `ai/prompts.py`: RU/EN, запрет выдумывать id/файлы/строки, примеры формата, только маски
-- [ ] `ai/validator.py`: (1) JSON-схема + одна попытка авто-исправления; (2) finding_id существует, без дублей, неизвестные отбрасываются; (3) `fix.path`/строки, `fix.before` буквально совпадает с файлом; (4) CVE/GHSA только из (справочник ∩ находки), иначе удалить + флаг `hallucinated_ids`; (5) `safe_version` по `fixedVersions`; (6) результаты валидации и метрики сохраняются
-- [ ] `ai/report_service.py` + нода `ai.report` (provider override, язык, `generate_fix_diff`, `fallback_to_deterministic` по умолчанию вкл., пометка `ai_generated: false`)
-- [ ] Хранение AI-отчётов с метаданными модели (провайдер, модель, токены); `GET /runs/{id}/ai-report`
-- [ ] Тесты: контрактные на локальном OpenAI-compatible HTTP-сервере (формат, JSON-режим, ретраи, таймаут, 429, невалидный JSON → авто-исправление); валидатор ловит подсаженные выдуманные CVE, несуществующий файл/строку, неверный `before`, неизвестный id; fallback
-- [ ] Проверить, доступна ли реальная LLM (Ollama локально / бесплатный API); если да — живой прогон; если нет — честная запись
+- [x] `ai/providers/`: интерфейс `LLMProvider.chat(messages, response_schema, temperature, max_tokens, timeout)`; `openai_compat.py` (base_url, key, model, заголовки, `response_format` JSON или инструкция+разбор); `ollama.py` (`/api/chat`, `format: json`)
+- [x] Таймауты, ретраи с backoff на 429/5xx, разбиение находок на пачки, ошибка провайдера → явная ошибка ноды
+- [x] Настройки на workspace + override в ноде; ключи в зашифрованном хранилище; `GET/PUT /settings/ai`, `POST /settings/ai/test`, список моделей; по умолчанию ничего не включено, подсказки о бесплатных вариантах
+- [x] `ai/schemas.py`: схема отчёта (summary, priority_order, findings[...] с explanation/impact/remediation_steps/safe_version/fix, global_recommendations)
+- [x] `ai/prompts.py`: RU/EN, запрет выдумывать id/файлы/строки, примеры формата, только маски
+- [x] `ai/validator.py`: (1) JSON-схема + одна попытка авто-исправления; (2) finding_id существует, без дублей, неизвестные отбрасываются; (3) `fix.path`/строки, `fix.before` буквально совпадает с файлом; (4) CVE/GHSA только из (справочник ∩ находки), иначе удалить + флаг `hallucinated_ids`; (5) `safe_version` по `fixedVersions`; (6) результаты валидации и метрики сохраняются
+- [x] `ai/report_service.py` + нода `ai.report` (provider override, язык, `generate_fix_diff`, `fallback_to_deterministic` по умолчанию вкл., пометка `ai_generated: false`)
+- [x] Хранение AI-отчётов с метаданными модели (провайдер, модель, токены); `GET /runs/{id}/ai-report`
+- [x] Тесты: контрактные на локальном OpenAI-compatible HTTP-сервере (формат, JSON-режим, ретраи, таймаут, 429, невалидный JSON → авто-исправление); валидатор ловит подсаженные выдуманные CVE, несуществующий файл/строку, неверный `before`, неизвестный id; fallback
+- [x] Проверить, доступна ли реальная LLM: НЕ доступна (Ollama/LM Studio не установлены, ключей нет) — честная запись в REPORT; живой прогон не выполнен
 
 ### Гейт фазы 4
-- [ ] Контрактные тесты зелёные
-- [ ] Живой прогон или честная запись о недоступности
-- [ ] Смена провайдера только через настройки
-- [ ] REPORT.md, коммит «phase 4: llm integration»
+- [x] Контрактные тесты зелёные
+- [x] Честная запись о недоступности (живого прогона нет)
+- [x] Смена провайдера только через настройки
+- [x] REPORT.md (коммит делает пользователь)
 
 ---
 
 ## Фаза 5 — Frontend (§16)
 
 ### 5.1 Основа
-- [ ] Дизайн-система: токены цветов dark (по умолчанию)/light, типографика, состояния hover/focus/disabled/error
-- [ ] i18n RU/EN (все строки), даты/числа по локали; переключатели языка и темы
-- [ ] API-клиент (TanStack Query), auth-флоу с refresh, Zustand-сторы
-- [ ] Пустые состояния, скелетоны, тосты, понятные ошибки с действиями, адаптив до планшета, клавиатурная навигация, WCAG AA контраст, aria
+- [x] Дизайн-система: токены цветов dark (по умолчанию)/light, типографика, состояния hover/focus/disabled/error
+- [x] i18n RU/EN (все строки), даты/числа по локали; переключатели языка и темы
+- [x] API-клиент (TanStack Query), auth-флоу с refresh, Zustand-сторы
+- [x] Пустые состояния, скелетоны, тосты, понятные ошибки с действиями, адаптив до планшета, клавиатурная навигация, WCAG AA контраст, aria
 
 ### 5.2 Страницы
-- [ ] Вход/регистрация
-- [ ] Dashboard: карточки (проекты, workflow, запуски, уязвимости по severity), график находок по запускам, последние запуски, быстрые действия (score/тренд/топ-3/AI-план — в 6А)
-- [ ] Проекты
-- [ ] Список workflow
-- [ ] Редактор (см. 5.3)
-- [ ] Живой запуск
-- [ ] История запусков с фильтрами (workflow, статус, период, инициатор) + сравнение двух запусков
-- [ ] Детали запуска: граф с итоговыми статусами, таблица находок с фильтрами/сортировкой, AI-отчёт с diff-фиксами и копированием, индикатор доверия валидатора, логи, артефакты/экспорт
-- [ ] Настройки: AI-провайдер с тестом, credentials, allowlist, участники/роли, расписания, язык/тема
+- [x] Вход/регистрация
+- [x] Dashboard: карточки (проекты, workflow, запуски, уязвимости по severity), график находок по запускам, последние запуски, быстрые действия (score/тренд/топ-3/AI-план — в 6А)
+- [x] Проекты
+- [x] Список workflow
+- [x] Редактор (см. 5.3)
+- [x] Живой запуск
+- [x] История запусков с фильтрами (workflow, статус, период, инициатор) + сравнение двух запусков
+- [x] Детали запуска: граф с итоговыми статусами, таблица находок с фильтрами/сортировкой, AI-отчёт с diff-фиксами и копированием, индикатор доверия валидатора, логи, артефакты/экспорт
+- [x] Настройки: AI-провайдер с тестом, credentials, allowlist, участники/роли, расписания, язык/тема
 - [ ] (Библиотека шаблонов, Интеграция CI/CD — в фазе 6)
 
 ### 5.3 Редактор (обязательно всё)
-- [ ] Палитра нод по категориям с поиском, drag-and-drop
-- [ ] Соединение портов с подсветкой допустимых целей и валидацией (типы, циклы, дубли) с сообщением
-- [ ] Zoom/pan, миникарта, сетка/привязка, авто-раскладка
-- [ ] Боковая панель: форма из JSON Schema (строки, числа, enum, boolean, массивы, селектор credentials, cron-конструктор с человекочитаемым описанием, редактор IF-выражений с подсказками), валидация на лету
-- [ ] Контекстное меню (дублировать, удалить, отключить, копировать/вставить), горячие клавиши, множественное выделение, Undo/Redo, копирование фрагмента
-- [ ] Автосохранение черновика + явное сохранение, индикатор несохранённого, импорт/экспорт JSON
-- [ ] Кнопки «Запустить», «Проверить граф» (подсветка ошибок), «AI-ассистент»
-- [ ] Режим запуска: статусы в реальном времени по SSE (цвета/иконки/спиннер), анимация данных по рёбрам, счётчики, панель логов/входов/выходов, итоговое время
+- [x] Палитра нод по категориям с поиском, drag-and-drop
+- [x] Соединение портов с подсветкой допустимых целей и валидацией (типы, циклы, дубли) с сообщением
+- [x] Zoom/pan, миникарта, сетка/привязка, авто-раскладка
+- [x] Боковая панель: форма из JSON Schema (строки, числа, enum, boolean, массивы, селектор credentials, cron-конструктор с человекочитаемым описанием, редактор IF-выражений с подсказками), валидация на лету
+- [x] Контекстное меню (дублировать, удалить, отключить, копировать/вставить), горячие клавиши, множественное выделение, Undo/Redo, копирование фрагмента
+- [x] Автосохранение черновика + явное сохранение, индикатор несохранённого, импорт/экспорт JSON
+- [~] Кнопки «Запустить», «Проверить граф» (подсветка ошибок) — готово; «AI-ассистент» — в фазе 6.3
+- [x] Режим запуска: статусы в реальном времени по SSE (цвета/иконки/спиннер), анимация данных по рёбрам, счётчики, панель логов/входов/выходов, итоговое время
 
 ### 5.4 Тесты
-- [ ] vitest: валидация соединений, undo/redo, генерация форм из схемы, i18n
-- [ ] Playwright e2e: регистрация → workflow перетаскиванием → настройка → запуск на учебном проекте → живые статусы → находки/AI-отчёт → сравнение запусков (→ шаблоны после фазы 6)
-- [ ] Скриншоты dark/light × RU/EN в `docs/screens/`
+- [x] vitest: валидация соединений, undo/redo, генерация форм из схемы, i18n
+- [x] Playwright e2e: регистрация → workflow перетаскиванием → настройка → запуск на учебном проекте → живые статусы → находки/AI-отчёт → сравнение запусков (→ шаблоны после фазы 6)
+- [x] Скриншоты dark/light × RU/EN в `docs/screens/`
 
 ### Гейт фазы 5
-- [ ] vitest + Playwright зелёные
-- [ ] Скриншоты сохранены
-- [ ] Ручной прогон в браузере
-- [ ] REPORT.md, коммит «phase 5: frontend»
+- [x] vitest + Playwright зелёные
+- [x] Скриншоты сохранены
+- [x] Ручной прогон в браузере
+- [x] REPORT.md (коммит делает пользователь)
 
 ---
 
