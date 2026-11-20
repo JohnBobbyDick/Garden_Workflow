@@ -1,0 +1,365 @@
+{
+  "dataset": "library-loans",
+  "formatVersion": 1,
+  "findings": [
+    {
+      "id": "LL-SEC-01",
+      "category": "SECRET",
+      "class": "password",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/net/shelfline/loans/partners/ArchiveDbSettings.kt",
+      "line": 8,
+      "endLine": 8,
+      "alternateLocations": [],
+      "description": "`partners/ArchiveDbSettings.kt`, свойство `dbPass` содержит встроенный пароль учётной записи `archive_reader`, который передаётся в `DriverManagerDataSource` архивной БД."
+    },
+    {
+      "id": "LL-SEC-02",
+      "category": "SECRET",
+      "class": "api-key",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/net/shelfline/loans/partners/IsbnLookupClient.kt",
+      "line": 8,
+      "endLine": 8,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/net/shelfline/loans/partners/IsbnLookupClient.kt",
+          "line": 13,
+          "endLine": 13
+        }
+      ],
+      "description": "`partners/IsbnLookupClient.kt`, строковый `lookupKey` записывается в карту заголовков как `headers[\"X-Api-Key\"]` и уходит партнёрскому ISBN-сервису."
+    },
+    {
+      "id": "LL-SEC-03",
+      "category": "SECRET",
+      "class": "configuration-token",
+      "severity": "HIGH",
+      "path": "src/main/resources/application.yml",
+      "line": 17,
+      "endLine": 17,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/net/shelfline/loans/partners/CatalogSyncHook.kt",
+          "line": 10,
+          "endLine": 10
+        }
+      ],
+      "description": "`application.yml`, `catalog-sync.partner.authorization` хранит готовую строку `Bearer …` без кавычек; `CatalogSyncHook` подставляет её в заголовок `Authorization`."
+    },
+    {
+      "id": "LL-SEC-04",
+      "category": "SECRET",
+      "class": "secret-fallback",
+      "severity": "LOW",
+      "path": "src/main/kotlin/net/shelfline/loans/partners/ReminderGateway.kt",
+      "line": 7,
+      "endLine": 7,
+      "alternateLocations": [],
+      "description": "`partners/ReminderGateway.kt`, `System.getProperty(\"shelfline.reminder.token\", \"…\")` задаёт встроенный токен по умолчанию для сервиса напоминаний; он уходит в `Authorization: Bearer`."
+    },
+    {
+      "id": "LL-SEC-05",
+      "category": "SECRET",
+      "class": "recoverable-token",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/net/shelfline/loans/partners/InterlibraryClient.kt",
+      "line": 9,
+      "endLine": 15,
+      "alternateLocations": [],
+      "description": "`partners/InterlibraryClient.kt`, три литерала склеиваются цепочкой `StringBuilder().append(...)` и передаются в `setBearerAuth` для межбиблиотечного обмена."
+    },
+    {
+      "id": "LL-SCA-01",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "CRITICAL",
+      "path": "build.gradle.kts",
+      "line": 31,
+      "endLine": 31,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 16,
+          "endLine": 16
+        }
+      ],
+      "group": "org.apache.commons",
+      "artifact": "commons-text",
+      "version": "1.8",
+      "advisoryId": "CVE-2022-42889",
+      "advisoryIds": [
+        "CVE-2022-42889",
+        "GHSA-599f-7c49-w659"
+      ],
+      "description": "Версия commons-text задана локальной переменной `templatingRelease = \"1.8\"` и подставлена в шаблон координат."
+    },
+    {
+      "id": "LL-SCA-02",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "HIGH",
+      "path": "build.gradle.kts",
+      "line": 32,
+      "endLine": 32,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 15,
+          "endLine": 15
+        },
+        {
+          "path": "gradle.properties",
+          "line": 3,
+          "endLine": 3
+        }
+      ],
+      "group": "org.jsoup",
+      "artifact": "jsoup",
+      "version": "1.12.2",
+      "advisoryId": "CVE-2021-37714",
+      "advisoryIds": [
+        "CVE-2021-37714",
+        "GHSA-m72m-mhq2-9p6c"
+      ],
+      "description": "Версия jsoup берётся из `gradle.properties` через делегат `val jsoupVersion: String by project`."
+    },
+    {
+      "id": "LL-SCA-03",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "MEDIUM",
+      "path": "build.gradle.kts",
+      "line": 33,
+      "endLine": 33,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 17,
+          "endLine": 17
+        }
+      ],
+      "group": "commons-net",
+      "artifact": "commons-net",
+      "version": "3.6",
+      "advisoryId": "CVE-2021-37533",
+      "advisoryIds": [
+        "CVE-2021-37533",
+        "GHSA-cgp8-4m63-fhh5"
+      ],
+      "description": "Версия commons-net задана через `extra[\"ftpClientLine\"] = \"3.6\"` и подставлена шаблоном `${extra[...]}`."
+    },
+    {
+      "id": "LL-SCA-04",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "HIGH",
+      "path": "build.gradle.kts",
+      "line": 30,
+      "endLine": 30,
+      "alternateLocations": [
+        {
+          "path": "gradle/libs.versions.toml",
+          "line": 2,
+          "endLine": 2
+        },
+        {
+          "path": "gradle/libs.versions.toml",
+          "line": 5,
+          "endLine": 5
+        }
+      ],
+      "group": "net.minidev",
+      "artifact": "json-smart",
+      "version": "2.4.7",
+      "advisoryId": "CVE-2023-1370",
+      "advisoryIds": [
+        "CVE-2023-1370",
+        "GHSA-493p-pfq6-5258"
+      ],
+      "description": "Зависимость объявлена через version catalog `libs.json.smart`; версия `jsonSmart = \"2.4.7\"` в `gradle/libs.versions.toml`."
+    },
+    {
+      "id": "LL-SCA-05",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "HIGH",
+      "path": "build.gradle.kts",
+      "line": 34,
+      "endLine": 34,
+      "alternateLocations": [
+        {
+          "path": "gradle.lockfile",
+          "line": 17,
+          "endLine": 17
+        }
+      ],
+      "group": "org.mybatis",
+      "artifact": "mybatis",
+      "version": "3.5.4",
+      "advisoryId": "CVE-2020-26945",
+      "advisoryIds": [
+        "CVE-2020-26945",
+        "GHSA-qq48-m4jx-xqh8"
+      ],
+      "description": "В `build.gradle.kts` объявлена 3.5.5, но `gradle.lockfile` фиксирует 3.5.4 — по правилам отчёта версия берётся из lockfile."
+    },
+    {
+      "id": "LL-SAST-01",
+      "category": "SAST",
+      "class": "sql-injection",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/net/shelfline/loans/catalog/TitleRepository.kt",
+      "line": 9,
+      "endLine": 14,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/net/shelfline/loans/catalog/TitleSearchController.kt",
+          "line": 13,
+          "endLine": 13
+        },
+        {
+          "path": "src/main/kotlin/net/shelfline/loans/catalog/TitleSearchService.kt",
+          "line": 8,
+          "endLine": 10
+        }
+      ],
+      "description": "`catalog/TitleRepository.kt`, `searchByAuthor`. `@RequestParam author` из `TitleSearchController.byAuthor` через `TitleSearchService.authorMatches` попадает в `String.format` с SQL-шаблоном и затем в `JdbcTemplate.queryForList`."
+    },
+    {
+      "id": "LL-SAST-02",
+      "category": "SAST",
+      "class": "tls-verification",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/net/shelfline/loans/partners/LegacyMirrorConnector.kt",
+      "line": 14,
+      "endLine": 22,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/net/shelfline/loans/partners/LegacyMirrorConnector.kt",
+          "line": 16,
+          "endLine": 16
+        }
+      ],
+      "description": "`partners/LegacyMirrorConnector.kt`, `open`. Анонимный `X509TrustManager` с пустым `checkServerTrusted` установлен в `SSLContext`, его фабрика сокетов назначена `HttpsURLConnection` — цепочка сертификатов не проверяется."
+    },
+    {
+      "id": "LL-SAST-03",
+      "category": "SAST",
+      "class": "credentialed-cors",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/net/shelfline/loans/config/BrowserAccessConfig.kt",
+      "line": 10,
+      "endLine": 13,
+      "alternateLocations": [],
+      "description": "`config/BrowserAccessConfig.kt`, `addCorsMappings`. Для `/api/members/**` (данные читателя, выдачи) заданы `allowedOriginPatterns(\"*\")` и `allowCredentials(true)` — любой origin получает ответы с cookie сессии."
+    },
+    {
+      "id": "LL-SAST-04",
+      "category": "SAST",
+      "class": "route-authorization",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/net/shelfline/loans/config/DeskSecurityConfig.kt",
+      "line": 21,
+      "endLine": 21,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/net/shelfline/loans/desk/OverdueReportController.kt",
+          "line": 12,
+          "endLine": 13
+        }
+      ],
+      "description": "`config/DeskSecurityConfig.kt`, Kotlin DSL `authorizeHttpRequests`. `permitAll` на `GET /api/desk/overdue/export` стоит перед правилом `/api/desk/**` с ролью `LIBRARIAN`; `OverdueReportController.exportOverdue` отдаёт логины и домашние адреса должников без аутентификации."
+    },
+    {
+      "id": "LL-SAST-05",
+      "category": "SAST",
+      "class": "object-authorization",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/net/shelfline/loans/loans/LoanRepository.kt",
+      "line": 20,
+      "endLine": 21,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/net/shelfline/loans/loans/MemberLoanController.kt",
+          "line": 15,
+          "endLine": 16
+        },
+        {
+          "path": "src/main/kotlin/net/shelfline/loans/loans/LoanService.kt",
+          "line": 8,
+          "endLine": 8
+        }
+      ],
+      "description": "`loans/MemberLoanController.kt`, `loan`, → `LoanService.details` → `LoanRepository.loadById`. `GET /api/members/me/loans/{loanId}` выбирает выдачу только по ID; в таблице `loan` есть владелец `member_login`, но принципал не сверяется."
+    }
+  ],
+  "controls": [
+    {
+      "id": "LL-CTRL-01",
+      "category": "SECRET",
+      "class": "api-key",
+      "path": "README.md",
+      "line": 12,
+      "endLine": 12,
+      "description": "Плейсхолдер `YOUR_API_KEY` в документации, приложение его не читает."
+    },
+    {
+      "id": "LL-CTRL-02",
+      "category": "SECRET",
+      "class": "configuration-token",
+      "path": "src/main/resources/application.yml",
+      "line": 19,
+      "endLine": 19,
+      "description": "Ссылка на переменную окружения без значения по умолчанию."
+    },
+    {
+      "id": "LL-CTRL-03",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "path": "build.gradle.kts",
+      "line": 35,
+      "endLine": 35,
+      "group": "org.apache.commons",
+      "artifact": "commons-lang3",
+      "version": "3.18.0",
+      "description": "Версия 3.18.0 — первая исправленная (верхняя граница диапазона исключена)."
+    },
+    {
+      "id": "LL-CTRL-04",
+      "category": "SAST",
+      "class": "sql-injection",
+      "path": "src/main/kotlin/net/shelfline/loans/catalog/TitleRepository.kt",
+      "line": 17,
+      "endLine": 18,
+      "description": "Параметризованный запрос с `?` рядом с уязвимым."
+    },
+    {
+      "id": "LL-CTRL-05",
+      "category": "SAST",
+      "class": "route-authorization",
+      "path": "src/main/kotlin/net/shelfline/loans/config/DeskSecurityConfig.kt",
+      "line": 19,
+      "endLine": 19,
+      "description": "Публичная статика (`static/assets`), без персональных данных."
+    },
+    {
+      "id": "LL-CTRL-06",
+      "category": "SAST",
+      "class": "tls-verification",
+      "path": "src/main/kotlin/net/shelfline/loans/partners/OpenCatalogClient.kt",
+      "line": 10,
+      "endLine": 15,
+      "description": "Обычный HTTPS-клиент со штатной проверкой сертификатов."
+    },
+    {
+      "id": "LL-CTRL-07",
+      "category": "SAST",
+      "class": "object-authorization",
+      "path": "src/main/kotlin/net/shelfline/loans/loans/LoanRepository.kt",
+      "line": 23,
+      "endLine": 24,
+      "description": "Выборка по `loan_id` и `member_login` из `principal.name` (`MemberLoanController.receipt`)."
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+[versions]
+jsonSmart = "2.4.7"
+
+[libraries]
+json-smart = { module = "net.minidev:json-smart", version.ref = "jsonSmart" }

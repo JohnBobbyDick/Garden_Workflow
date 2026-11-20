@@ -1,0 +1,19 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: shelfline-loans
+  datasource:
+    url: jdbc:h2:mem:shelfline;DB_CLOSE_DELAY=-1
+  sql:
+    init:
+      mode: always
+
+catalog-sync:
+  enabled: false
+  partner:
+    endpoint: https://sync.shelfline.invalid/v1
+    authorization: Bearer csy_Hn4Rt8Lq2Vz6Mw9Pk3Xb
+  mirror:
+    token: ${CATALOG_MIRROR_TOKEN}

@@ -1,0 +1,378 @@
+{
+  "dataset": "parcel-lockers",
+  "formatVersion": 1,
+  "findings": [
+    {
+      "id": "PL-SEC-01",
+      "category": "SECRET",
+      "class": "password",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/io/lockerhub/parcels/outbound/LockerFirmwareSettings.kt",
+      "line": 5,
+      "endLine": 5,
+      "alternateLocations": [],
+      "description": "`outbound/LockerFirmwareSettings.kt`, `maintenancePasswd` — встроенный пароль сервисной консоли прошивки шкафчиков."
+    },
+    {
+      "id": "PL-SEC-02",
+      "category": "SECRET",
+      "class": "api-key",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/io/lockerhub/parcels/outbound/RoutingPartnerClient.kt",
+      "line": 11,
+      "endLine": 11,
+      "alternateLocations": [],
+      "description": "`outbound/RoutingPartnerClient.kt`, литерал ключа присваивается прямо `headers[\"X-Api-Key\"]` и уходит партнёру маршрутизации."
+    },
+    {
+      "id": "PL-SEC-03",
+      "category": "SECRET",
+      "class": "configuration-token",
+      "severity": "HIGH",
+      "path": "src/main/resources/application.yml",
+      "line": 13,
+      "endLine": 13,
+      "alternateLocations": [],
+      "description": "`application.yml`, `courier-webhooks.outbound.authorization` содержит литерал `Bearer …`; `CourierWebhookPublisher` кладёт его в `Authorization`."
+    },
+    {
+      "id": "PL-SEC-04",
+      "category": "SECRET",
+      "class": "secret-fallback",
+      "severity": "LOW",
+      "path": "src/main/kotlin/io/lockerhub/parcels/outbound/TelemetryUplink.kt",
+      "line": 10,
+      "endLine": 10,
+      "alternateLocations": [],
+      "description": "`outbound/TelemetryUplink.kt`, `System.getenv()` сохраняется в `env`, затем `env[\"LOCKERHUB_TELEMETRY_TOKEN\"] ?: \"…\"` подставляет встроенный токен телеметрии."
+    },
+    {
+      "id": "PL-SEC-05",
+      "category": "SECRET",
+      "class": "recoverable-token",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/io/lockerhub/parcels/outbound/CarrierLabelClient.kt",
+      "line": 8,
+      "endLine": 11,
+      "alternateLocations": [],
+      "description": "`outbound/CarrierLabelClient.kt`, два локальных литерала собираются `\"%s%s\".format(prefix, body)` и передаются в `setBearerAuth`."
+    },
+    {
+      "id": "PL-SCA-01a",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "HIGH",
+      "path": "build.gradle.kts",
+      "line": 31,
+      "endLine": 31,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 21,
+          "endLine": 21
+        }
+      ],
+      "group": "com.thoughtworks.xstream",
+      "artifact": "xstream",
+      "version": "1.4.17",
+      "advisoryId": "CVE-2021-39153",
+      "advisoryIds": [
+        "CVE-2021-39153",
+        "GHSA-2q8x-2p7f-574v"
+      ],
+      "description": "Версия xstream из локальной переменной `xmlBridgeVersion = \"1.4.17\"`; этой версии соответствуют две записи справочника."
+    },
+    {
+      "id": "PL-SCA-01b",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "HIGH",
+      "path": "build.gradle.kts",
+      "line": 31,
+      "endLine": 31,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 21,
+          "endLine": 21
+        }
+      ],
+      "group": "com.thoughtworks.xstream",
+      "artifact": "xstream",
+      "version": "1.4.17",
+      "advisoryId": "CVE-2021-39149",
+      "advisoryIds": [
+        "CVE-2021-39149",
+        "GHSA-3ccq-5vw3-2p6x"
+      ],
+      "description": "Версия xstream из локальной переменной `xmlBridgeVersion = \"1.4.17\"`; этой версии соответствуют две записи справочника."
+    },
+    {
+      "id": "PL-SCA-02",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "MEDIUM",
+      "path": "build.gradle.kts",
+      "line": 34,
+      "endLine": 34,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 19,
+          "endLine": 19
+        }
+      ],
+      "group": "org.apache.pdfbox",
+      "artifact": "pdfbox",
+      "version": "2.0.23",
+      "advisoryId": "CVE-2021-31812",
+      "advisoryIds": [
+        "CVE-2021-31812",
+        "GHSA-7grw-6pjh-jpc9"
+      ],
+      "description": "Версия pdfbox задана `extra[\"pdfLine\"] = \"2.0.23\"`; 2.0.23 вне диапазонов `<2.0.23`, но внутри `[2.0.0, 2.0.24)`."
+    },
+    {
+      "id": "PL-SCA-03",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "MEDIUM",
+      "path": "build.gradle.kts",
+      "line": 35,
+      "endLine": 35,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 20,
+          "endLine": 20
+        },
+        {
+          "path": "gradle.properties",
+          "line": 2,
+          "endLine": 2
+        }
+      ],
+      "group": "org.apache.httpcomponents",
+      "artifact": "httpclient",
+      "version": "4.5.12",
+      "advisoryId": "CVE-2020-13956",
+      "advisoryIds": [
+        "CVE-2020-13956",
+        "GHSA-7r82-7xv7-xcpj"
+      ],
+      "description": "Версия httpclient из `gradle.properties` (`httpClientVersion=4.5.12`) через `by project`."
+    },
+    {
+      "id": "PL-SCA-04",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "HIGH",
+      "path": "build.gradle.kts",
+      "line": 32,
+      "endLine": 32,
+      "alternateLocations": [
+        {
+          "path": "gradle/libs.versions.toml",
+          "line": 5,
+          "endLine": 5
+        },
+        {
+          "path": "gradle/libs.versions.toml",
+          "line": 8,
+          "endLine": 8
+        }
+      ],
+      "group": "commons-fileupload",
+      "artifact": "commons-fileupload",
+      "version": "1.4",
+      "advisoryId": "CVE-2023-24998",
+      "advisoryIds": [
+        "CVE-2023-24998",
+        "GHSA-hfrx-6qgj-fp6c"
+      ],
+      "description": "Зависимость из version catalog `libs.commons.fileupload` (`fileupload = \"1.4\"`, запись с `group`/`name`)."
+    },
+    {
+      "id": "PL-SCA-05",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "HIGH",
+      "path": "build.gradle.kts",
+      "line": 30,
+      "endLine": 30,
+      "alternateLocations": [
+        {
+          "path": "gradle.lockfile",
+          "line": 5,
+          "endLine": 5
+        }
+      ],
+      "group": "com.google.code.gson",
+      "artifact": "gson",
+      "version": "2.8.8",
+      "advisoryId": "CVE-2022-25647",
+      "advisoryIds": [
+        "CVE-2022-25647",
+        "GHSA-4jrv-ppp4-jm57"
+      ],
+      "description": "Объявлена безопасная 2.10.1, но `gradle.lockfile` фиксирует 2.8.8 — версия берётся из lockfile."
+    },
+    {
+      "id": "PL-SAST-01",
+      "category": "SAST",
+      "class": "sql-injection",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/io/lockerhub/parcels/stations/StationRepository.kt",
+      "line": 14,
+      "endLine": 18,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/io/lockerhub/parcels/stations/CourierRouteController.kt",
+          "line": 13,
+          "endLine": 13
+        },
+        {
+          "path": "src/main/kotlin/io/lockerhub/parcels/stations/RoutePlanner.kt",
+          "line": 8,
+          "endLine": 10
+        }
+      ],
+      "description": "`stations/StationRepository.kt`, `lockersAtStation`. `@RequestParam station` из `CourierRouteController.stationLockers` через `RoutePlanner.lockersAt` склеивается `+` в SQL и выполняется `queryForList`."
+    },
+    {
+      "id": "PL-SAST-02",
+      "category": "SAST",
+      "class": "tls-verification",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/io/lockerhub/parcels/outbound/PermissiveTrust.kt",
+      "line": 6,
+      "endLine": 8,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/io/lockerhub/parcels/outbound/CourierTrackingClient.kt",
+          "line": 12,
+          "endLine": 12
+        }
+      ],
+      "description": "`outbound/PermissiveTrust.kt`, `checkServerTrusted(...) = Unit` принимает любую цепочку; `CourierTrackingClient` ставит этот менеджер в `SSLContext` своего `HttpClient`."
+    },
+    {
+      "id": "PL-SAST-03",
+      "category": "SAST",
+      "class": "credentialed-cors",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/io/lockerhub/parcels/web/RecipientAppCors.kt",
+      "line": 14,
+      "endLine": 16,
+      "alternateLocations": [],
+      "description": "`web/RecipientAppCors.kt`, `setAllowedOriginPatterns(listOf(\"*\"))` + `setAllowCredentials(true)`; лямбда-`CorsConfigurationSource` применяет их к `/api/my/**` (посылки и коды получения)."
+    },
+    {
+      "id": "PL-SAST-04",
+      "category": "SAST",
+      "class": "route-authorization",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/io/lockerhub/parcels/web/AccessRules.kt",
+      "line": 21,
+      "endLine": 21,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/io/lockerhub/parcels/ops/StationServiceController.kt",
+          "line": 16,
+          "endLine": 17
+        }
+      ],
+      "description": "`web/AccessRules.kt`, `permitAll` на `/api/ops/stations/*/door-codes` стоит раньше `/api/ops/**` с ролями `OPERATOR`/`ADMIN`; `StationServiceController.doorCodes` анонимно отдаёт коды дверей ячеек."
+    },
+    {
+      "id": "PL-SAST-05",
+      "category": "SAST",
+      "class": "object-authorization",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/io/lockerhub/parcels/parcels/ParcelRepository.kt",
+      "line": 15,
+      "endLine": 17,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/io/lockerhub/parcels/parcels/MyParcelsController.kt",
+          "line": 15,
+          "endLine": 17
+        },
+        {
+          "path": "src/main/kotlin/io/lockerhub/parcels/parcels/ParcelService.kt",
+          "line": 8,
+          "endLine": 8
+        }
+      ],
+      "description": "`parcels/MyParcelsController.kt`, `parcel`, → `ParcelService.lookup` → `ParcelRepository.findOne`. `GET /api/my/parcels/{parcelId}` читает посылку по одному именованному параметру `:parcelId`; колонка `owner_id` не сверяется с принципалом."
+    }
+  ],
+  "controls": [
+    {
+      "id": "PL-CTRL-01",
+      "category": "SECRET",
+      "class": "api-key",
+      "path": "README.md",
+      "line": 9,
+      "endLine": 9,
+      "description": "Плейсхолдер в README."
+    },
+    {
+      "id": "PL-CTRL-02",
+      "category": "SECRET",
+      "class": "configuration-token",
+      "path": "src/main/resources/application.yml",
+      "line": 18,
+      "endLine": 18,
+      "description": "Ссылка на переменную окружения без встроенного значения."
+    },
+    {
+      "id": "PL-CTRL-03",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "path": "build.gradle.kts",
+      "line": 33,
+      "endLine": 33,
+      "group": "org.apache.commons",
+      "artifact": "commons-lang3",
+      "version": "3.18.0",
+      "description": "Объявлена уязвимая 3.12.0, но `gradle.lockfile` фиксирует 3.18.0 (исправленную) — находки нет."
+    },
+    {
+      "id": "PL-CTRL-04",
+      "category": "SAST",
+      "class": "sql-injection",
+      "path": "src/main/kotlin/io/lockerhub/parcels/stations/StationRepository.kt",
+      "line": 9,
+      "endLine": 11,
+      "description": "Параметризованный запрос рядом с уязвимым."
+    },
+    {
+      "id": "PL-CTRL-05",
+      "category": "SAST",
+      "class": "route-authorization",
+      "path": "src/main/kotlin/io/lockerhub/parcels/web/AccessRules.kt",
+      "line": 19,
+      "endLine": 19,
+      "description": "Публичная статическая главная страница."
+    },
+    {
+      "id": "PL-CTRL-06",
+      "category": "SAST",
+      "class": "tls-verification",
+      "path": "src/main/kotlin/io/lockerhub/parcels/outbound/StationMapClient.kt",
+      "line": 11,
+      "endLine": 14,
+      "description": "Штатный HTTPS-клиент."
+    },
+    {
+      "id": "PL-CTRL-07",
+      "category": "SAST",
+      "class": "object-authorization",
+      "path": "src/main/kotlin/io/lockerhub/parcels/parcels/ParcelRepository.kt",
+      "line": 20,
+      "endLine": 22,
+      "description": "Выборка с фильтром `owner_id = principal.name`."
+    }
+  ]
+}

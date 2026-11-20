@@ -25,113 +25,114 @@
 ## Фаза 0 — Исследование, план, скелет (§19)
 
 ### 0.1 Изучение входных данных
-- [ ] Прочитать `Garden Центр-инвест.pdf` целиком, выписать обязательные/дополнительные требования и расхождения с prompt.md
-- [ ] Прочитать `TZ.md` (чеклист разделов 1.1, 1.2.1–1.2.3, 1.3)
-- [ ] `git clone https://github.com/TBagirov/training` во временную директорию → скопировать содержимое без `.git` в `fixtures/organizer-training/`
-- [ ] Прочитать **все** файлы набора: каждый `.kt`, `application.yml`, `schema.sql`, `data.sql`, `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`, `gradle.lockfile`
-- [ ] Прочитать `ground-truth/training-findings.json` + `.md` (15 findings, 6 controls, `alternateLocations`, `difficultyRationale`, `expectedDetection`)
-- [ ] Прочитать `docs/submission-format.md`, `docs/training-result-example.json`
-- [ ] Прочитать `vulnerability-database/vulnerabilities.json`, `schema.json`, `README.md`
-- [ ] Выписать для себя таблицу «находка эталона → какое общее правило её ловит» (без хардкода имён)
+- [x] Прочитать `Garden Центр-инвест.pdf` целиком, выписать обязательные/дополнительные требования и расхождения с prompt.md
+- [x] Прочитать `TZ.md` (чеклист разделов 1.1, 1.2.1–1.2.3, 1.3)
+- [x] `git clone https://github.com/TBagirov/training` во временную директорию → скопировать содержимое без `.git` в `fixtures/organizer-training/`
+- [x] Прочитать **все** файлы набора: каждый `.kt`, `application.yml`, `schema.sql`, `data.sql`, `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`, `gradle.lockfile`
+- [x] Прочитать `ground-truth/training-findings.json` + `.md` (15 findings, 6 controls, `alternateLocations`, `difficultyRationale`, `expectedDetection`)
+- [x] Прочитать `docs/submission-format.md`, `docs/training-result-example.json`
+- [x] Прочитать `vulnerability-database/vulnerabilities.json`, `schema.json`, `README.md`
+- [x] Выписать для себя таблицу «находка эталона → какое общее правило её ловит» (без хардкода имён)
 
 ### 0.2 План и скелет
-- [ ] `docs/PLAN.md`: модули, порядок, риски (tree-sitter-kotlin на py3.12, PostgreSQL в тестах, Playwright, доступность LLM)
-- [ ] Структура каталогов по §5: `backend/`, `frontend/`, `cli/`, `fixtures/`, `docs/`, `scripts/`
-- [ ] `backend/pyproject.toml` (Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic v2, tree-sitter, tree-sitter-kotlin, httpx, argon2/bcrypt, cryptography, aiosmtpd для тестов, pytest, pytest-asyncio)
-- [ ] `backend/app/main.py` с `GET /api/healthz`
-- [ ] `frontend/`: Vite + React 18 + TS + Tailwind + `@xyflow/react` + Zustand + TanStack Query + i18n; собирается `npm run build`
-- [ ] `Makefile`: заготовки `up`, `down`, `dev-backend`, `dev-frontend`, `test`, `test-eval`, `e2e`, `lint`, `seed`
-- [ ] `.env.example`, `.gitignore` (`.env`, `node_modules`, `__pycache__`, артефакты)
-- [ ] `docs/REPORT.md` с разделом «Журнал фаз»
+- [x] `docs/PLAN.md`: модули, порядок, риски (tree-sitter-kotlin на py3.12, PostgreSQL в тестах, Playwright, доступность LLM)
+- [x] Структура каталогов по §5: `backend/`, `frontend/`, `cli/`, `fixtures/`, `docs/`, `scripts/`
+- [x] `backend/pyproject.toml` (Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic v2, tree-sitter, tree-sitter-kotlin, httpx, argon2/bcrypt, cryptography, aiosmtpd для тестов, pytest, pytest-asyncio)
+- [x] `backend/app/main.py` с `GET /api/healthz`
+- [x] `frontend/`: Vite + React 18 + TS + Tailwind + `@xyflow/react` + Zustand + TanStack Query + i18n; собирается `npm run build`
+- [x] `Makefile`: заготовки `up`, `down`, `dev-backend`, `dev-frontend`, `test`, `test-eval`, `e2e`, `lint`, `seed`
+- [x] `.env.example`, `.gitignore` (`.env`, `node_modules`, `__pycache__`, артефакты)
+- [x] `docs/REPORT.md` с разделом «Журнал фаз»
 
 ### Гейт фазы 0
-- [ ] `make test` проходит (пустой/минимальный набор)
-- [ ] `curl /api/healthz` → 200
-- [ ] `frontend` собирается
-- [ ] План сверен с prompt.md
-- [ ] Коммит «phase 0: research, plan, skeleton»
+- [x] `make test` проходит (пустой/минимальный набор)
+- [x] `curl /api/healthz` → 200
+- [x] `frontend` собирается
+- [x] План сверен с prompt.md
+- [x] Коммит «phase 0: research, plan, skeleton»
 
 ---
 
 ## Фаза 1 — Анализаторы (§8, §9, §10, §3.1)
 
 ### 1.1 Общее (`analyzers/common/`)
-- [ ] `finding.py`: модель `Finding` со всеми полями §10 (id стабильный хэш category+rule+path+нормализованный контекст; SCA-поля; SECRET-поля `fingerprint`/`masked_value`; diff-поля; `autofix`)
-- [ ] `severity.py`: шкала LOW<MEDIUM<HIGH<CRITICAL, матрицы SCA/SECRET/SAST как таблица данных + функция «почему такой уровень» → `severity_reason` (§9)
-- [ ] `files.py`: обход файлов с исключениями (`build/`, `.git/`, `node_modules/`, бинарники, лимит размера), относительные пути с `/`
-- [ ] `kotlin_ast.py`: обёртка tree-sitter-kotlin + запасной regex-режим
-- [ ] Дедупликация: одна проблема = одна находка, выбирается самый специфичный `class`
-- [ ] Маскирование значений: `fingerprint` (8 hex SHA-256 + длина), маска `ab…(len=24)`, маскированный сниппет
+- [x] `finding.py`: модель `Finding` со всеми полями §10 (id стабильный хэш category+rule+path+нормализованный контекст; SCA-поля; SECRET-поля `fingerprint`/`masked_value`; diff-поля; `autofix`)
+- [x] `severity.py`: шкала LOW<MEDIUM<HIGH<CRITICAL, матрицы SCA/SECRET/SAST как таблица данных + функция «почему такой уровень» → `severity_reason` (§9)
+- [x] `files.py`: обход файлов с исключениями (`build/`, `.git/`, `node_modules/`, бинарники, лимит размера), относительные пути с `/`
+- [x] `kotlin_ast.py`: обёртка tree-sitter-kotlin (запасной regex-режим заменён устойчивым к ошибкам разбором tree-sitter — см. REPORT, решения)
+- [x] Дедупликация: одна проблема = одна находка, выбирается самый специфичный `class`
+- [x] Маскирование значений: `fingerprint` (8 hex SHA-256 + длина), маска `ab…(len=24)`, маскированный сниппет
 
 ### 1.2 Секреты (`analyzers/secrets/`, §8.1)
-- [ ] Набор расширений файлов + Dockerfile + текстовые; `.md`/`.txt`/`docs/` с подавлением плейсхолдеров
-- [ ] Слой 1, сигнатуры: AWS (AKIA/ASIA + secret рядом), GitHub PAT (`ghp_`, `github_pat_`, `gho_`…), Telegram bot token, Slack `xox[abpr]-`, Stripe `sk_live_`, Google `AIza`, JWT с проверкой base64url-заголовка, PEM private keys, URL с кредами, JDBC с паролем, Basic-auth
-- [ ] Слой 2, контекст имён: пары ключ→значение в yml/properties/json/env/kt/java; заголовки `X-Api-Key`, `Authorization: Bearer`; `setBearerAuth`, `header(...)`, `.password(...)`; именованные аргументы Kotlin; `const val`/`val`; `data class` с дефолтами; полный YAML-путь ключа
-- [ ] Слой 3, Kotlin-AST разрешение констант: локальные/файловые/классовые `val`/`const val`; `a + b`; шаблоны с константами; `StringBuilder.append`; `listOf(..).joinToString`; `String.format`/`.format`; `String(Base64...decode(...))`; `.reversed()`, `.trim()`, `.lowercase()` → `recoverable-token` с диапазоном строк ≤15
-- [ ] Слой 4, fallback: `System.getenv("X") ?: "lit"`, `env.getProperty("x","lit")`, `@Value("\${x:lit}")`, `${VAR:lit}` в YAML/properties, `getOrDefault`, `orElse` → `secret-fallback`
-- [ ] Слой 5, эвристика: энтропия Шеннона по алфавитам + длина + разнообразие классов + секретный контекст; не флагать UUID/хэши коммитов/версии/URL без кредов; пороги настраиваемые
-- [ ] Подавление FP: `${ENV}`, `#{…}`, `{{…}}`, `<…>`, `%…%`, `YOUR_*`, `xxx`, `changeme`/`example`/`dummy`/`sample`, `***`, пустые, `null`; значения из окружения без дефолта не секреты
-- [ ] Тестовые/документационные пути понижают confidence (не игнорируются); порог confidence для официальной выгрузки настраиваемый и задокументирован
-- [ ] Классы: `password`, `api-key`, `configuration-token`, `secret-fallback`, `recoverable-token`, `private-key`, `aws-access-key`, `github-token`, `telegram-token`, `jwt`, `db-credentials`, `generic-secret`
-- [ ] Контроли `YOUR_API_KEY` в README и `${INVENTORY_TOKEN}` без дефолта отброшены общим правилом
-- [ ] Юнит-тесты: каждый слой (позитив + «опасно похожий» негатив), подавления, маскирование
+- [x] Набор расширений файлов + Dockerfile + текстовые; `.md`/`.txt`/`docs/` с подавлением плейсхолдеров
+- [x] Слой 1, сигнатуры: AWS (AKIA/ASIA + secret рядом), GitHub PAT (`ghp_`, `github_pat_`, `gho_`…), Telegram bot token, Slack `xox[abpr]-`, Stripe `sk_live_`, Google `AIza`, JWT с проверкой base64url-заголовка, PEM private keys, URL с кредами, JDBC с паролем, Basic-auth
+- [x] Слой 2, контекст имён: пары ключ→значение в yml/properties/json/env/kt/java; заголовки `X-Api-Key`, `Authorization: Bearer`; `setBearerAuth`, `header(...)`, `.password(...)`; именованные аргументы Kotlin; `const val`/`val`; `data class` с дефолтами; полный YAML-путь ключа
+- [x] Слой 3, Kotlin-AST разрешение констант: локальные/файловые/классовые `val`/`const val`; `a + b`; шаблоны с константами; `StringBuilder.append`; `listOf(..).joinToString`; `String.format`/`.format`; `String(Base64...decode(...))`; `.reversed()`, `.trim()`, `.lowercase()` → `recoverable-token` с диапазоном строк ≤15
+- [x] Слой 4, fallback: `System.getenv("X") ?: "lit"`, `env.getProperty("x","lit")`, `@Value("\${x:lit}")`, `${VAR:lit}` в YAML/properties, `getOrDefault`, `orElse` → `secret-fallback`
+- [x] Слой 5, эвристика: энтропия Шеннона по алфавитам + длина + разнообразие классов + секретный контекст; не флагать UUID/хэши коммитов/версии/URL без кредов; пороги настраиваемые
+- [x] Подавление FP: `${ENV}`, `#{…}`, `{{…}}`, `<…>`, `%…%`, `YOUR_*`, `xxx`, `changeme`/`example`/`dummy`/`sample`, `***`, пустые, `null`; значения из окружения без дефолта не секреты
+- [x] Тестовые/документационные пути понижают confidence (не игнорируются); порог confidence для официальной выгрузки настраиваемый и задокументирован
+- [x] Классы: `password`, `api-key`, `configuration-token`, `secret-fallback`, `recoverable-token`, `private-key`, `aws-access-key`, `github-token`, `telegram-token`, `jwt`, `db-credentials`, `generic-secret`
+- [x] Контроли `YOUR_API_KEY` в README и `${INVENTORY_TOKEN}` без дефолта отброшены общим правилом
+- [x] Юнит-тесты: каждый слой (позитив + «опасно похожий» негатив), подавления, маскирование
 
 ### 1.3 SCA (`analyzers/sca/`, §8.2)
-- [ ] `gradle_parser.py` (tree-sitter, не один regex): `implementation/api/compileOnly/runtimeOnly/testImplementation/kapt/annotationProcessor…`; `add("implementation", "g:a:v")` многострочный и с висячей запятой; `group=, name=, version=`; `platform(...)`/BOM; `libs.xxx`
-- [ ] Версии: литерал, `$var`/`${var}`, `val x = "…"`, `extra["x"]`/`ext`, `providers.gradleProperty("k").get()/.orNull`, `project.property("k")` → `gradle.properties`
-- [ ] Подмодули из `settings.gradle.kts` (`include(...)`); базовый Groovy `build.gradle`
-- [ ] `version_catalog.py`: `gradle/libs.versions.toml` (`[versions]`, `[libraries]`, `module=`/`group+name`, `version.ref`, алиасы)
-- [ ] `lockfile.py`: версия из `gradle.lockfile` побеждает объявленную; без версии (BOM, нет в lockfile) → пропуск с инфо-примечанием
-- [ ] Хранить `declared_version`, `resolved_version`, источник версии, строки объявления и определения переменной (`alternateLocations`)
-- [ ] Транзитивные: только при `include_transitive=true`, `scope=transitive`, не в официальную выгрузку по умолчанию
-- [ ] `versions.py`: numeric-dot-separated, `1.9 == 1.9.0`, `20230618` = один компонент; квалификаторы/динамические/пустые вне области с примечанием; интервалы `lower/lowerInclusive/upper/upperInclusive`
-- [ ] `vulndb.py`: загрузка + валидация по `schema.json` (громкая ошибка), индекс `group:artifact`; копия в `backend/vulndb/vulnerabilities.json`; подключение другого JSON той же схемы
-- [ ] `matcher.py`: одна запись справочника = одна находка; `advisoryId` — CVE из aliases, иначе GHSA; `fixedVersions` → «обновить до ≥ X» (ближайшая в ветке > текущей); `sources`
-- [ ] `cvss.py`: собственный калькулятор базовой оценки CVSS v3.x; сверка с severity справочника
-- [ ] `path` = файл объявления, `line` = строка объявления
-- [ ] Тесты: все формы объявления, version catalog, lockfile, граничные версии, CVSS на эталонных векторах, контроль `commons-lang3:3.20.0` → нет находки
+- [x] `gradle_parser.py` (tree-sitter, не один regex): `implementation/api/compileOnly/runtimeOnly/testImplementation/kapt/annotationProcessor…`; `add("implementation", "g:a:v")` многострочный и с висячей запятой; `group=, name=, version=`; `platform(...)`/BOM; `libs.xxx`
+- [x] Версии: литерал, `$var`/`${var}`, `val x = "…"`, `extra["x"]`/`ext`, `providers.gradleProperty("k").get()/.orNull`, `project.property("k")` → `gradle.properties`
+- [x] Подмодули из `settings.gradle.kts` (`include(...)`); базовый Groovy `build.gradle`
+- [x] `version_catalog.py`: `gradle/libs.versions.toml` (`[versions]`, `[libraries]`, `module=`/`group+name`, `version.ref`, алиасы)
+- [x] `lockfile.py`: версия из `gradle.lockfile` побеждает объявленную; без версии (BOM, нет в lockfile) → пропуск с инфо-примечанием
+- [x] Хранить `declared_version`, `resolved_version`, источник версии, строки объявления и определения переменной (`alternateLocations`)
+- [x] Транзитивные: только при `include_transitive=true`, `scope=transitive`, не в официальную выгрузку по умолчанию
+- [x] `versions.py`: numeric-dot-separated, `1.9 == 1.9.0`, `20230618` = один компонент; квалификаторы/динамические/пустые вне области с примечанием; интервалы `lower/lowerInclusive/upper/upperInclusive`
+- [x] `vulndb.py`: загрузка + валидация по `schema.json` (громкая ошибка), индекс `group:artifact`; копия в `backend/vulndb/vulnerabilities.json`; подключение другого JSON той же схемы
+- [x] `matcher.py`: одна запись справочника = одна находка; `advisoryId` — CVE из aliases, иначе GHSA; `fixedVersions` → «обновить до ≥ X» (ближайшая в ветке > текущей); `sources`
+- [x] `cvss.py`: собственный калькулятор базовой оценки CVSS v3.x; сверка с severity справочника
+- [x] `path` = файл объявления, `line` = строка объявления
+- [x] Тесты: все формы объявления, version catalog, lockfile, граничные версии, CVSS на эталонных векторах, контроль `commons-lang3:3.20.0` → нет находки
 
 ### 1.4 SAST (`analyzers/sast/`, §8.3)
-- [ ] IR поверх tree-sitter: классы, функции, параметры с аннотациями, вызовы, шаблоны строк, присваивания, лямбды
-- [ ] `callgraph.py`: граф вызовов по конструкторным зависимостям (поле `private val x: T` → вызовы `x.m()`), межфайлово
-- [ ] Распознавание Spring-аннотаций (`@RestController`, `@*Mapping`, `@RequestParam`, `@PathVariable`, `@RequestBody`, `@RequestHeader`, `@PreAuthorize`, `@Secured`, `@CrossOrigin`, `@Configuration`, `@Bean`, `@Repository`, `@Service`, `@Query`)
-- [ ] `taint.py`: источники → распространение (присваивания, шаблоны, конкатенация, format, StringBuilder) → стоки
-- [ ] Каждая находка: `class`, `path`, `line`, `endLine` (≤15), маскированный сниппет, `title`, `description`, `severity`, `confidence`, `cwe`, `remediation`, `rule_id`
-- [ ] Правило 1 `sql-injection` (JdbcTemplate.*, Statement, EntityManager, NamedParameterJdbcTemplate, `@Query` со SpEL/конкатенацией, prepareStatement со строкой с подстановкой); параметризованный `?` рядом не срабатывает
-- [ ] Правило 2 `tls-verification` (HostnameVerifier→true, NoopHostnameVerifier, ALLOW_ALL, пустой TrustManager, TrustAllStrategy, setDefaultHostnameVerifier, OkHttp `.hostnameVerifier`); штатный HTTPS-клиент не срабатывает
-- [ ] Правило 3 `credentialed-cors` (`*` в origins/patterns/@CrossOrigin/отражение Origin + allowCredentials true); диапазон охватывает обе настройки; варианты WebMvcConfigurer и CorsConfigurationSource
-- [ ] Правило 4 `route-authorization` (`spring_security.py`): разбор `authorizeHttpRequests`/`antMatchers`/`mvcMatchers`; чувствительность по семантике пути + по содержимому обработчика + теневое правило; публичный каталог без ПДн не находка; строка = строка `permitAll`; `csrf.disable()` + cookie-сессия отдельным предупреждением; изменяющие методы без защиты — низкая уверенность
-- [ ] Правило 5 `object-authorization` (IDOR/BOLA): контроллер → сервис → репозиторий; нет Authentication/Principal/SecurityContextHolder/сравнения владельца/`@PreAuthorize #id`; запрос только по ID; основное место — доступ к данным, вызов контроллера в `alternate_locations`; одна находка на проблему
-- [ ] Правило 6 `hardcoded-credentials` (InMemoryUserDetailsManager, `.password("{noop}…")`)
-- [ ] Правило 7 `unsafe-deserialization`
-- [ ] Правило 8 `path-traversal`
-- [ ] Правило 9 `weak-crypto`
-- [ ] Правило 10 `missing-input-validation`
-- [ ] Правило 11 `insecure-endpoint` (включая конфиги actuator/h2/debug/stacktrace)
-- [ ] Правила 6–11 не дают FP на `training-project/`; иначе доработать или понизить confidence и исключить из официальной выгрузки
-- [ ] Метаданные правил: `autofix: llm|deterministic|none`
-- [ ] Тесты: позитив + негатив на каждое правило, межфайловый IDOR, цепочки `requestMatchers`, шаблоны строк
+- [x] IR поверх tree-sitter: классы, функции, параметры с аннотациями, вызовы, шаблоны строк, присваивания, лямбды
+- [x] `callgraph.py`: граф вызовов по конструкторным зависимостям (поле `private val x: T` → вызовы `x.m()`), межфайлово
+- [x] Распознавание Spring-аннотаций (`@RestController`, `@*Mapping`, `@RequestParam`, `@PathVariable`, `@RequestBody`, `@RequestHeader`, `@PreAuthorize`, `@Secured`, `@CrossOrigin`, `@Configuration`, `@Bean`, `@Repository`, `@Service`, `@Query`)
+- [x] `taint.py`: источники → распространение (присваивания, шаблоны, конкатенация, format, StringBuilder) → стоки
+- [x] Каждая находка: `class`, `path`, `line`, `endLine` (≤15), маскированный сниппет, `title`, `description`, `severity`, `confidence`, `cwe`, `remediation`, `rule_id`
+- [x] Правило 1 `sql-injection` (JdbcTemplate.*, Statement, EntityManager, NamedParameterJdbcTemplate, `@Query` со SpEL/конкатенацией, prepareStatement со строкой с подстановкой); параметризованный `?` рядом не срабатывает
+- [x] Правило 2 `tls-verification` (HostnameVerifier→true, NoopHostnameVerifier, ALLOW_ALL, пустой TrustManager, TrustAllStrategy, setDefaultHostnameVerifier, OkHttp `.hostnameVerifier`); штатный HTTPS-клиент не срабатывает
+- [x] Правило 3 `credentialed-cors` (`*` в origins/patterns/@CrossOrigin/отражение Origin + allowCredentials true); диапазон охватывает обе настройки; варианты WebMvcConfigurer и CorsConfigurationSource
+- [x] Правило 4 `route-authorization` (`spring_security.py`): разбор `authorizeHttpRequests`/`antMatchers`/`mvcMatchers`; чувствительность по семантике пути + по содержимому обработчика + теневое правило; публичный каталог без ПДн не находка; строка = строка `permitAll`; `csrf.disable()` + cookie-сессия отдельным предупреждением; изменяющие методы без защиты — низкая уверенность
+- [x] Правило 5 `object-authorization` (IDOR/BOLA): контроллер → сервис → репозиторий; нет Authentication/Principal/SecurityContextHolder/сравнения владельца/`@PreAuthorize #id`; запрос только по ID; основное место — доступ к данным, вызов контроллера в `alternate_locations`; одна находка на проблему
+- [x] Правило 6 `hardcoded-credentials` (InMemoryUserDetailsManager, `.password("{noop}…")`)
+- [x] Правило 7 `unsafe-deserialization`
+- [x] Правило 8 `path-traversal`
+- [x] Правило 9 `weak-crypto`
+- [x] Правило 10 `missing-input-validation`
+- [x] Правило 11 `insecure-endpoint` (включая конфиги actuator/h2/debug/stacktrace)
+- [x] Правила 6–11 не дают FP на `training-project/`; иначе доработать или понизить confidence и исключить из официальной выгрузки
+- [x] Метаданные правил: `autofix: llm|deterministic|none`
+- [x] Тесты: позитив + негатив на каждое правило, межфайловый IDOR, цепочки `requestMatchers`, шаблоны строк
 
 ### 1.5 Экспорт и отчёты (`export/`, §3.1, §10)
-- [ ] `submission_json.py`: маппинг `Finding → запись` строго по `docs/submission-format.md` (category верхним регистром, относительный path без `..`, class, line, endLine ≤ line+14, SCA group/artifact/version/advisoryId); фильтр по confidence; без транзитивных; без diff/autofix-полей
-- [ ] Собственный валидатор формата организаторов; невалидный экспорт = ошибка; `training-result-example.json` проходит, невалидные случаи отклоняются (тест)
-- [ ] `markdown.py`, `html.py`: сводка, таблица по категориям, детали (файл:строки, координаты+версия+CVE/GHSA для SCA), severity, рекомендация, AI-раздел; секреты скрыты
+- [x] `submission_json.py`: маппинг `Finding → запись` строго по `docs/submission-format.md` (category верхним регистром, относительный path без `..`, class, line, endLine ≤ line+14, SCA group/artifact/version/advisoryId); фильтр по confidence; без транзитивных; без diff/autofix-полей
+- [x] Собственный валидатор формата организаторов; невалидный экспорт = ошибка; `training-result-example.json` проходит, невалидные случаи отклоняются (тест)
+- [x] `markdown.py`, `html.py`: сводка, таблица по категориям, детали (файл:строки, координаты+версия+CVE/GHSA для SCA), severity, рекомендация; секреты скрыты
+- [ ] AI-раздел в markdown/html — подключается в фазе LLM (узел AI-объяснения)
 
 ### 1.6 Eval-харнесс и мутанты (§17.2–17.3)
-- [ ] `backend/tests/eval/`: запуск трёх анализаторов на `training-project/`, сверка с ground truth (категория+путь+class+строка в диапазоне с учётом `alternateLocations`; SCA координаты+версия+advisory); падает на пропуске, контроле или необъяснённой лишней находке; печать таблицы recall/precision
-- [ ] `fixtures/mutants/` — минимум 3 мутанта: переименованные пакеты/классы/переменные/файлы, сдвинутые строки, другие приёмы (StringBuilder/joinToString/format; `?: "…"`/getProperty; ext/catalog/gradleProperty; другой порядок requestMatchers/antMatchers; IDOR через сервис; CORS через CorsConfigurationSource; TLS через TrustManager; SQL через String.format) + новые безопасные контроли
-- [ ] Для каждого мутанта файл ожидаемых находок; харнесс на мутантах с теми же требованиями
-- [ ] `make test-eval`
+- [x] `backend/tests/eval/`: запуск трёх анализаторов на `training-project/`, сверка с ground truth (категория+путь+class+строка в диапазоне с учётом `alternateLocations`; SCA координаты+версия+advisory); падает на пропуске, контроле или необъяснённой лишней находке; печать таблицы recall/precision
+- [x] `fixtures/mutants/` — минимум 3 мутанта: переименованные пакеты/классы/переменные/файлы, сдвинутые строки, другие приёмы (StringBuilder/joinToString/format; `?: "…"`/getProperty; ext/catalog/gradleProperty; другой порядок requestMatchers/antMatchers; IDOR через сервис; CORS через CorsConfigurationSource; TLS через TrustManager; SQL через String.format) + новые безопасные контроли
+- [x] Для каждого мутанта файл ожидаемых находок; харнесс на мутантах с теми же требованиями
+- [x] `make test-eval`
 
 ### 1.7 Документация
-- [ ] `docs/ANALYZERS.md`: каждое правило (что ищет, почему, как снижаются FP), шкала критичности, порог confidence
+- [x] `docs/ANALYZERS.md`: каждое правило (что ищет, почему, как снижаются FP), шкала критичности, порог confidence
 
 ### Гейт фазы 1
-- [ ] Eval на учебном наборе: **15/15**, 0 контролей, 0 необъяснённых лишних
-- [ ] Все мутанты проходят
-- [ ] grep по запрещённым именам в `backend/app` пуст
-- [ ] Валидатор `submission.json` зелёный
-- [ ] Журнал в REPORT.md, коммит «phase 1: analyzers»
+- [x] Eval на учебном наборе: **15/15**, 0 контролей, 0 необъяснённых лишних
+- [x] Все мутанты проходят
+- [x] grep по запрещённым именам в `backend/app` пуст
+- [x] Валидатор `submission.json` зелёный
+- [x] Журнал в REPORT.md, коммит «phase 1: analyzers»
 
 ---
 

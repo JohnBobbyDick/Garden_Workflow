@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: lockerhub-parcels
+  datasource:
+    url: jdbc:h2:mem:lockerhub;DB_CLOSE_DELAY=-1
+  sql:
+    init:
+      mode: always
+
+courier-webhooks:
+  outbound:
+    url: https://hooks.couriers.lockerhub.invalid/v3/events
+    authorization: Bearer cwh_Pz8Ks3Nf6Wq1Lx9Tm4Rd
+    retries: 3
+
+routing:
+  partner:
+    signing-token: ${ROUTING_SIGNING_TOKEN}
+
+logging:
+  level:
+    io.lockerhub: INFO

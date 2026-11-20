@@ -1,0 +1,29 @@
+# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of source control.
+ch.qos.logback:logback-classic:1.5.38=runtimeClasspath
+ch.qos.logback:logback-core:1.5.38=runtimeClasspath
+com.h2database:h2:2.4.240=runtimeClasspath
+com.zaxxer:HikariCP:7.0.2=runtimeClasspath
+commons-net:commons-net:3.6=compileClasspath,runtimeClasspath
+net.minidev:accessors-smart:2.4.7=compileClasspath,runtimeClasspath
+net.minidev:json-smart:2.4.7=compileClasspath,runtimeClasspath
+org.apache.commons:commons-lang3:3.18.0=compileClasspath,runtimeClasspath
+org.apache.commons:commons-text:1.8=compileClasspath,runtimeClasspath
+org.jetbrains.kotlin:kotlin-reflect:2.2.21=compileClasspath,runtimeClasspath
+org.jetbrains.kotlin:kotlin-stdlib:2.2.21=compileClasspath,runtimeClasspath
+org.jetbrains:annotations:13.0=compileClasspath,runtimeClasspath
+org.jsoup:jsoup:1.12.2=compileClasspath,runtimeClasspath
+org.mybatis:mybatis:3.5.4=compileClasspath,runtimeClasspath
+org.ow2.asm:asm:9.1=compileClasspath,runtimeClasspath
+org.slf4j:slf4j-api:2.0.20=compileClasspath,runtimeClasspath
+org.springframework.boot:spring-boot-starter-jdbc:4.0.9=compileClasspath,runtimeClasspath
+org.springframework.boot:spring-boot-starter-security:4.0.9=compileClasspath,runtimeClasspath
+org.springframework.boot:spring-boot-starter-webmvc:4.0.9=compileClasspath,runtimeClasspath
+org.springframework.boot:spring-boot:4.0.9=compileClasspath,runtimeClasspath
+org.springframework.security:spring-security-config:7.0.8=compileClasspath,runtimeClasspath
+org.springframework.security:spring-security-web:7.0.8=compileClasspath,runtimeClasspath
+org.springframework:spring-jdbc:7.0.10=compileClasspath,runtimeClasspath
+org.springframework:spring-webmvc:7.0.10=compileClasspath,runtimeClasspath
+org.yaml:snakeyaml:2.5=runtimeClasspath
+empty=annotationProcessor,testCompileClasspath,testRuntimeClasspath

@@ -1,0 +1,369 @@
+{
+  "dataset": "clinic-appointments",
+  "formatVersion": 1,
+  "findings": [
+    {
+      "id": "CA-SEC-01",
+      "category": "SECRET",
+      "class": "password",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/com/medibook/clinic/integrations/ClinicAdminConsole.kt",
+      "line": 15,
+      "endLine": 15,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/com/medibook/clinic/integrations/ClinicAdminConsole.kt",
+          "line": 10,
+          "endLine": 10
+        }
+      ],
+      "description": "`integrations/ClinicAdminConsole.kt`, `const val adminSecretPassword` в `companion object` — пароль администратора консоли аудита, уходит в Basic-авторизацию."
+    },
+    {
+      "id": "CA-SEC-02",
+      "category": "SECRET",
+      "class": "api-key",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/com/medibook/clinic/integrations/LabOrderClient.kt",
+      "line": 9,
+      "endLine": 9,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/com/medibook/clinic/integrations/LabOrderClient.kt",
+          "line": 14,
+          "endLine": 14
+        }
+      ],
+      "description": "`integrations/LabOrderClient.kt`, строковый `labKey` попадает в заголовок через пару `\"X-Api-Key\" to labKey` и `headers(map.toHeaders())`."
+    },
+    {
+      "id": "CA-SEC-03",
+      "category": "SECRET",
+      "class": "configuration-token",
+      "severity": "HIGH",
+      "path": "src/main/resources/application.properties",
+      "line": 8,
+      "endLine": 8,
+      "alternateLocations": [],
+      "description": "`application.properties`, `insurance.gateway.authorization` хранит литерал `Bearer …` для шлюза страховых заявок; `InsuranceClaims` ставит его в `Authorization`."
+    },
+    {
+      "id": "CA-SEC-04",
+      "category": "SECRET",
+      "class": "secret-fallback",
+      "severity": "LOW",
+      "path": "src/main/kotlin/com/medibook/clinic/integrations/SmsReminderSender.kt",
+      "line": 11,
+      "endLine": 11,
+      "alternateLocations": [],
+      "description": "`integrations/SmsReminderSender.kt`, `@Value(\"${sms.gateway.token:…}\")` содержит встроенный токен SMS-шлюза как значение по умолчанию (в properties ключа нет — используется именно он)."
+    },
+    {
+      "id": "CA-SEC-05",
+      "category": "SECRET",
+      "class": "recoverable-token",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/com/medibook/clinic/integrations/RadiologyArchiveClient.kt",
+      "line": 8,
+      "endLine": 15,
+      "alternateLocations": [],
+      "description": "`integrations/RadiologyArchiveClient.kt`, токен архива снимков собирается `listOf(...).joinToString(\"\")` из трёх литералов и ставится в `Authorization: Bearer`."
+    },
+    {
+      "id": "CA-SCA-01",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "MEDIUM",
+      "path": "build.gradle.kts",
+      "line": 34,
+      "endLine": 34,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 21,
+          "endLine": 21
+        }
+      ],
+      "group": "org.apache.commons",
+      "artifact": "commons-compress",
+      "version": "1.21",
+      "advisoryId": "CVE-2024-25710",
+      "advisoryIds": [
+        "CVE-2024-25710",
+        "GHSA-4g9r-vxhx-9pgx"
+      ],
+      "description": "Версия commons-compress из локальной переменной `compressRev = \"1.21\"`."
+    },
+    {
+      "id": "CA-SCA-02",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "HIGH",
+      "path": "build.gradle.kts",
+      "line": 35,
+      "endLine": 35,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 23,
+          "endLine": 23
+        }
+      ],
+      "group": "commons-io",
+      "artifact": "commons-io",
+      "version": "2.11.0",
+      "advisoryId": "CVE-2024-47554",
+      "advisoryIds": [
+        "CVE-2024-47554",
+        "GHSA-78wr-2p64-hpwj"
+      ],
+      "description": "Версия commons-io задана `extra[\"ioLine\"] = \"2.11.0\"` и приклеена к координатам конкатенацией `+`."
+    },
+    {
+      "id": "CA-SCA-03",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "MEDIUM",
+      "path": "build.gradle.kts",
+      "line": 36,
+      "endLine": 36,
+      "alternateLocations": [
+        {
+          "path": "build.gradle.kts",
+          "line": 22,
+          "endLine": 22
+        },
+        {
+          "path": "gradle.properties",
+          "line": 3,
+          "endLine": 3
+        }
+      ],
+      "group": "org.apache.poi",
+      "artifact": "poi-ooxml",
+      "version": "5.2.3",
+      "advisoryId": "CVE-2025-31672",
+      "advisoryIds": [
+        "CVE-2025-31672",
+        "GHSA-gmg8-593g-7mv3"
+      ],
+      "description": "Версия poi-ooxml берётся из `gradle.properties` (`poiVersion=5.2.3`) через `by project`."
+    },
+    {
+      "id": "CA-SCA-04",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "severity": "CRITICAL",
+      "path": "build.gradle.kts",
+      "line": 37,
+      "endLine": 37,
+      "alternateLocations": [
+        {
+          "path": "gradle/libs.versions.toml",
+          "line": 2,
+          "endLine": 2
+        },
+        {
+          "path": "gradle/libs.versions.toml",
+          "line": 5,
+          "endLine": 5
+        }
+      ],
+      "group": "org.apache.commons",
+      "artifact": "commons-configuration2",
+      "version": "2.7",
+      "advisoryId": "CVE-2022-33980",
+      "advisoryIds": [
+        "CVE-2022-33980",
+        "GHSA-xj57-8qj4-c4m6"
+      ],
+      "description": "Зависимость из version catalog `libs.commons.configuration2`, версия `configuration = \"2.7\"`."
+    },
+    {
+      "id": "CA-SAST-01",
+      "category": "SAST",
+      "class": "sql-injection",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/com/medibook/clinic/schedule/ScheduleDao.kt",
+      "line": 14,
+      "endLine": 18,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/com/medibook/clinic/schedule/ScheduleController.kt",
+          "line": 13,
+          "endLine": 13
+        },
+        {
+          "path": "src/main/kotlin/com/medibook/clinic/schedule/ScheduleService.kt",
+          "line": 8,
+          "endLine": 8
+        }
+      ],
+      "description": "`schedule/ScheduleDao.kt`, `slotsForDoctor`. `@RequestParam doctor` из `ScheduleController.freeSlots` через `ScheduleService` дописывается `StringBuilder.append` в SQL и выполняется `JdbcTemplate.query`."
+    },
+    {
+      "id": "CA-SAST-02",
+      "category": "SAST",
+      "class": "tls-verification",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/com/medibook/clinic/integrations/LabResultsFeed.kt",
+      "line": 11,
+      "endLine": 11,
+      "alternateLocations": [],
+      "description": "`integrations/LabResultsFeed.kt`, OkHttp-клиент лабораторных результатов собран с `.hostnameVerifier { _, _ -> true }` — проверка имени хоста отключена."
+    },
+    {
+      "id": "CA-SAST-03",
+      "category": "SAST",
+      "class": "credentialed-cors",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/com/medibook/clinic/security/PatientPortalCors.kt",
+      "line": 15,
+      "endLine": 18,
+      "alternateLocations": [],
+      "description": "`security/PatientPortalCors.kt`, `corsConfigurationSource`. `addAllowedOriginPattern(\"*\")` вместе с `allowCredentials = true` для `/api/patients/**` (визиты, диагнозы)."
+    },
+    {
+      "id": "CA-SAST-04",
+      "category": "SAST",
+      "class": "route-authorization",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/com/medibook/clinic/security/FrontDeskSecurity.kt",
+      "line": 21,
+      "endLine": 21,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/com/medibook/clinic/frontdesk/DaySheetController.kt",
+          "line": 15,
+          "endLine": 16
+        }
+      ],
+      "description": "`security/FrontDeskSecurity.kt`, `authorizeRequests().antMatchers(...)`. `permitAll` на `GET /api/front-desk/day-sheet` предшествует `/api/front-desk/**` с ролью `RECEPTION`; `DaySheetController.daySheet` отдаёт имена и телефоны пациентов анонимно."
+    },
+    {
+      "id": "CA-SAST-05",
+      "category": "SAST",
+      "class": "object-authorization",
+      "severity": "HIGH",
+      "path": "src/main/kotlin/com/medibook/clinic/visits/VisitDao.kt",
+      "line": 27,
+      "endLine": 31,
+      "alternateLocations": [
+        {
+          "path": "src/main/kotlin/com/medibook/clinic/visits/PatientVisitController.kt",
+          "line": 23,
+          "endLine": 25
+        },
+        {
+          "path": "src/main/kotlin/com/medibook/clinic/visits/VisitService.kt",
+          "line": 8,
+          "endLine": 8
+        }
+      ],
+      "description": "`visits/PatientVisitController.kt`, `visit`, → `VisitService.open` → `VisitDao.byId`. `GET /api/patients/self/visits/{visitId}` принимает `Principal`, но использует его только в логе; запрос фильтрует лишь `visit_id`, владелец `patient_login` не проверяется."
+    },
+    {
+      "id": "CA-SAST-06",
+      "category": "SAST",
+      "class": "csrf-disabled",
+      "severity": "MEDIUM",
+      "path": "src/main/kotlin/com/medibook/clinic/security/FrontDeskSecurity.kt",
+      "line": 16,
+      "endLine": 16,
+      "alternateLocations": [],
+      "description": "CSRF-защита отключена (`http.csrf().disable()`) при аутентификации httpBasic: браузер автоматически отправляет сохранённые учётные данные, поэтому межсайтовые запросы проходят."
+    }
+  ],
+  "controls": [
+    {
+      "id": "CA-CTRL-01",
+      "category": "SECRET",
+      "class": "api-key",
+      "path": "README.md",
+      "line": 10,
+      "endLine": 10,
+      "description": "Плейсхолдер в README, не читается приложением."
+    },
+    {
+      "id": "CA-CTRL-02",
+      "category": "SECRET",
+      "class": "configuration-token",
+      "path": "src/main/resources/application.properties",
+      "line": 10,
+      "endLine": 10,
+      "description": "`${PHARMACY_API_TOKEN}` без значения по умолчанию."
+    },
+    {
+      "id": "CA-CTRL-03",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "path": "build.gradle.kts",
+      "line": 39,
+      "endLine": 39,
+      "group": "org.jsoup",
+      "artifact": "jsoup",
+      "version": "1.15.3",
+      "description": "jsoup 1.15.3 выше границы 1.14.2."
+    },
+    {
+      "id": "CA-CTRL-04",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "path": "build.gradle.kts",
+      "line": 38,
+      "endLine": 38,
+      "group": "org.apache.httpcomponents",
+      "artifact": "httpclient",
+      "version": "4.5.13",
+      "description": "Ровно исправленная версия 4.5.13 (граница исключена)."
+    },
+    {
+      "id": "CA-CTRL-05",
+      "category": "SCA",
+      "class": "known-vulnerable-dependency",
+      "path": "build.gradle.kts",
+      "line": 33,
+      "endLine": 33,
+      "group": "org.json",
+      "artifact": "json",
+      "version": "20231013",
+      "description": "Исправленная версия org.json."
+    },
+    {
+      "id": "CA-CTRL-06",
+      "category": "SAST",
+      "class": "sql-injection",
+      "path": "src/main/kotlin/com/medibook/clinic/schedule/ScheduleDao.kt",
+      "line": 21,
+      "endLine": 22,
+      "description": "Параметризованный запрос рядом с уязвимым."
+    },
+    {
+      "id": "CA-CTRL-07",
+      "category": "SAST",
+      "class": "route-authorization",
+      "path": "src/main/kotlin/com/medibook/clinic/security/FrontDeskSecurity.kt",
+      "line": 19,
+      "endLine": 19,
+      "description": "Публичная статика (часы работы)."
+    },
+    {
+      "id": "CA-CTRL-08",
+      "category": "SAST",
+      "class": "tls-verification",
+      "path": "src/main/kotlin/com/medibook/clinic/integrations/PharmacyClient.kt",
+      "line": 14,
+      "endLine": 16,
+      "description": "OkHttp-клиент со штатной проверкой TLS."
+    },
+    {
+      "id": "CA-CTRL-09",
+      "category": "SAST",
+      "class": "object-authorization",
+      "path": "src/main/kotlin/com/medibook/clinic/visits/VisitDao.kt",
+      "line": 20,
+      "endLine": 25,
+      "description": "Выборка по `visit_id` и `patient_login = principal.name`."
+    }
+  ]
+}

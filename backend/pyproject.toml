@@ -1,0 +1,59 @@
+[project]
+name = "aisw-backend"
+version = "0.1.0"
+description = "AI Security Workflow — visual security-check automation platform (backend)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0.30",
+    "alembic>=1.13",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "psycopg[binary]>=3.2",
+    "httpx>=0.27",
+    "tree-sitter>=0.23",
+    "tree-sitter-kotlin>=1.0",
+    "jsonschema>=4.22",
+    "pyyaml>=6.0",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.8",
+    "cryptography>=42",
+    "python-multipart>=0.0.9",
+    "croniter>=2.0",
+    "aiosmtplib>=3.0",
+    "sse-starlette>=2.1",
+    "tzdata>=2024.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "aiosmtpd>=1.4",
+    "ruff>=0.5",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "postgres: integration tests that require PostgreSQL (APP_TEST_DATABASE_URL)",
+    "eval: accuracy evaluation on organizer dataset and mutants",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008"]
