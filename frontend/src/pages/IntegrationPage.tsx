@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, withWs } from '../api/client'
 import { useWorkflows, useWs } from '../api/hooks'
@@ -8,6 +9,9 @@ import { Badge, Button, Card, CopyButton, Field, Input, PageHeader, Select, Swit
 import { useLang } from '../i18n'
 import { fmtDate } from '../lib/format'
 import { toast } from '../store/toast'
+
+interface Delivery { id: string; provider: string; event: string; delivery_id: string; run_ids: string[]; created_at: string }
+interface StatusReport { id: string; run_id: string; provider: string; kind: string; state: string; target: string; response_code: number | null; error: string | null; created_at: string }
 
 interface Token { id: string; name: string; prefix: string; workflow_id: string | null; created_at: string; last_used_at: string | null; revoked: boolean }
 
@@ -23,6 +27,8 @@ export default function IntegrationPage() {
   const [fresh, setFresh] = useState<string | null>(null)
   useEffect(() => { if (!wf && wfs.data?.length) setWf(wfs.data[0].id) }, [wf, wfs.data])
   const yaml = useQuery({ queryKey: ['yaml', provider, wf], enabled: !!wf, queryFn: () => api<string>(`/api/ci/yaml?provider=${provider}&workflow_id=${wf}`) })
+  const hooks = useQuery({ queryKey: ['webhook-status', ws], refetchInterval: 15_000,
+    queryFn: () => api<{ deliveries: Delivery[]; statuses: StatusReport[] }>(withWs('/api/ci/webhooks/status', ws)) })
   const tokens = useQuery({ queryKey: ['tokens', ws], queryFn: () => api<Token[]>(withWs('/api/api-tokens', ws)) })
   const create = async () => {
     try {
@@ -56,6 +62,29 @@ export default function IntegrationPage() {
               <div key={p} className="mb-1 flex items-center gap-2"><code className="flex-1 truncate rounded bg-surface-2 px-2 py-1 text-xs">{origin}/api/v1/webhooks/{p}</code>
                 <CopyButton text={`${origin}/api/v1/webhooks/${p}`} label="" /></div>
             ))}
+            <div className="mt-3 border-t border-border pt-3">
+              <div className="mb-2 text-xs font-semibold">{t('integration.deliveries')}</div>
+              {!hooks.data?.deliveries.length && !hooks.data?.statuses.length
+                ? <p className="text-xs text-muted">{t('integration.noDeliveries')}</p> : (
+                  <ul className="max-h-60 space-y-1 overflow-y-auto text-xs">
+                    {hooks.data?.deliveries.map((d) => (
+                      <li key={d.id} className="flex flex-wrap items-center gap-2">
+                        <Badge>{d.provider}</Badge><span className="font-mono">{d.event}</span>
+                        <span className="text-muted">{fmtDate(d.created_at, lang)}</span>
+                        {d.run_ids.length ? d.run_ids.map((r) => <Link key={r} className="text-primary" to={`/runs/${r}`}>#{r.slice(0, 6)}</Link>)
+                          : <span className="text-muted">— {t('integration.runs')}: 0</span>}
+                      </li>
+                    ))}
+                    {hooks.data?.statuses.map((r) => (
+                      <li key={r.id} className="flex flex-wrap items-center gap-2" title={r.error ?? r.target}>
+                        <Badge tone={r.error ? 'danger' : r.state === 'success' ? 'success' : r.state === 'pending' ? 'info' : 'warning'}>{r.kind}: {r.state}</Badge>
+                        <span className="truncate font-mono text-muted">{r.target}</span>
+                        <span className={r.error ? 'text-danger' : 'text-muted'}>HTTP {r.response_code ?? '—'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+            </div>
           </Card>
         </div>
       </div>

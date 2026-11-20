@@ -155,3 +155,14 @@ def test_builtin_templates_are_valid_and_seed_is_idempotent(client, db, alice):
     rid = client.post(f"/api/workflows/{wid}/run", headers=alice.headers).json()["id"]
     drain(db)
     assert client.get(f"/api/runs/{rid}", headers=alice.headers).json()["summary"]["total"] == 5
+
+
+def test_search_is_case_insensitive_for_cyrillic(client, alice, bob):
+    """SQLite ``lower()`` folds only ASCII: «полный» must still find «Полный аудит» (and vice versa)."""
+    wid = make_workflow(client, alice)
+    tid = client.post("/api/templates", json={"workflow_id": wid, "name": "Полный Аудит Kotlin",
+                                              "description": "Проверка СЕКРЕТОВ", "category": "Custom"},
+                      headers=alice.headers).json()["id"]
+    for q in ("полный аудит", "ПОЛНЫЙ", "секретов"):
+        found = client.get("/api/templates", params={"q": q}, headers=bob.headers).json()["templates"]
+        assert tid in [t["id"] for t in found], q

@@ -59,6 +59,11 @@ CLASS_TITLES = {
 }
 
 
+# AutoFix applicability: a secret literal is moved to an env variable by the LLM; a private key file must be deleted
+# and rotated — that is not a snippet change, so only a recommendation is given.
+SECRET_AUTOFIX = {"private-key": "none"}
+
+
 @dataclass
 class SecretsConfig:
     include: list[str] | None = None
@@ -131,11 +136,7 @@ def _to_finding(c: Candidate, f: ProjectFile, lines: list[str]) -> Finding:
     confidence = c.confidence
     if is_test_or_doc_path(f.rel) and not f.rel.lower().endswith(".md"):
         confidence *= 0.6
-    secrets_to_mask = [c.value, *c.fragments]
-    from app.analyzers.secrets.rules import strip_auth_scheme
-
-    _, bare = strip_auth_scheme(c.value)
-    secrets_to_mask.append(bare)
+    secrets_to_mask = candidate_values(c)
     snippet = mask_in_text("\n".join(lines[c.line - 1: c.end_line]), secrets_to_mask)
     return Finding(
         category="SECRET", cls=c.cls, rule_id=c.rule_id, title=CLASS_TITLES.get(c.cls, c.title),
@@ -143,11 +144,22 @@ def _to_finding(c: Candidate, f: ProjectFile, lines: list[str]) -> Finding:
         remediation=REMEDIATION.get(c.cls, DEFAULT_REMEDIATION), severity=sev, severity_reason=reason,
         confidence=round(min(confidence, 0.99), 2), path=f.rel, line=c.line, end_line=c.end_line, snippet=snippet,
         cwe="CWE-798", context_key=c.context, value_fingerprint=fingerprint(c.value), masked_value=mask_value(c.value),
-        autofix="llm",
+        autofix=SECRET_AUTOFIX.get(c.cls, "llm"),  # type: ignore[arg-type]
     )
 
 
-def scan_secrets(root: str | Path, config: SecretsConfig | None = None) -> list[Finding]:
+def candidate_values(c: Candidate) -> list[str]:
+    """Raw values to mask for one candidate (value, fragments, value without auth scheme). In memory only."""
+    from app.analyzers.secrets.rules import strip_auth_scheme
+
+    _, bare = strip_auth_scheme(c.value)
+    return [v for v in (c.value, *c.fragments, bare) if v]
+
+
+def scan_secrets(root: str | Path, config: SecretsConfig | None = None,
+                 collect: dict[str, set[str]] | None = None) -> list[Finding]:
+    """``collect`` (optional) receives raw secret values per file for line-preserving masking (AutoFix context);
+    it lives only in memory and is never stored or logged."""
     config = config or SecretsConfig()
     root = Path(root)
     files = [f for f in walk_project(root, config.include, (config.exclude or []) + config.extra_exclude,
@@ -181,4 +193,8 @@ def scan_secrets(root: str | Path, config: SecretsConfig | None = None) -> list[
         elif f.suffix not in (".pem", ".key"):
             cands += config_files.scan_generic(text, docs)
         findings.extend(_to_finding(c, f, lines) for c in cands)
+        if collect is not None and cands:
+            bucket = collect.setdefault(f.rel, set())
+            for c in cands:
+                bucket.update(candidate_values(c))
     return dedupe_findings(findings)

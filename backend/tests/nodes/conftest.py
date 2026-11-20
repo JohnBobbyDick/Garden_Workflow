@@ -45,6 +45,12 @@ class StubServices:
     def record_findings(self, node_id, findings):
         self.findings.extend(findings)
 
+    def previous_score(self, signature):
+        return getattr(self, "previous", None)
+
+    def annotate_findings(self, updates):
+        self.annotations = {**getattr(self, "annotations", {}), **updates}
+
     def update_run(self, **fields):
         self.run_fields.update(fields)
 
@@ -63,6 +69,17 @@ class StubServices:
     def workspace_settings(self):
         return self.settings
 
+    def ai_provider_config(self, override=None):
+        return getattr(self, "provider_cfg", None)
+
+    def save_autofix(self, node_id, finding, outcome):
+        self.autofixes = [*getattr(self, "autofixes", []), (finding.id, outcome)]
+        return f"af{len(self.autofixes)}"
+
+    async def create_autofix_pr(self, autofix_id, finding, target_branch, note):
+        self.prs = [*getattr(self, "prs", []), (autofix_id, target_branch, note)]
+        return f"http://mock/pull/{autofix_id}"
+
 
 @pytest.fixture
 def services(tmp_path):
@@ -70,12 +87,12 @@ def services(tmp_path):
 
 
 def run_node(node_type: str, inputs: dict, config: dict, services=None, run: RunInfo | None = None,
-             masker: Masker | None = None):
+             masker: Masker | None = None, state: dict | None = None):
     cls = get_registry().get(node_type)
     assert cls is not None, node_type
     sink = ListSink()
     ctx = NodeContext(run or RunInfo(run_id="r1", workspace_id="w1", public_url="http://ui"), "n1", node_type, sink,
-                      masker or Masker(), services, {})
+                      masker or Masker(), services, state if state is not None else {})
     out = asyncio.run(cls().execute(ctx, inputs, apply_defaults(cls.config_schema, config)))
     return out, sink
 

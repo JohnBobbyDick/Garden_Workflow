@@ -33,6 +33,6 @@ class WebhookTrigger(BaseNode):
         p = ctx.run.trigger_payload
         data = {"trigger_type": ctx.run.trigger_type, "provider": p.get("provider") or config.get("provider"),
                 "event": p.get("event"), "ref": p.get("ref"), "head_sha": p.get("head_sha"),
-                "base_sha": p.get("base_sha"), "pr_number": p.get("pr_number"), "repo": p.get("repo"),
+                "base_sha": p.get("base_sha"), "base_ref": p.get("base_ref"), "pr_number": p.get("pr_number"), "repo": p.get("repo"),
                 "source": p.get("source") or {}, "diff_context": p.get("diff_context")}
         return {"out": Envelope.make("trigger", data, ctx.node_id, f"{data['provider']}: {data['event'] or 'ci'}")}

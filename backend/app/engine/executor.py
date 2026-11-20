@@ -90,7 +90,10 @@ class Executor:
         self.status: dict[str, str] = {n.id: "pending" for n in graph.nodes}
         self.outputs: dict[str, dict[str, Envelope]] = {}
         self.active_edges: set[str] = set()
-        self.state: dict[str, Any] = {}
+        self.state: dict[str, Any] = {
+            # which analyzers this run uses (score comparability, see app/scoring/trend.py)
+            "scanner_set": "+".join(sorted({n.type for n in graph.nodes if n.type.startswith("scanner.")
+                                            and n.type != "scanner.diff" and not n.disabled}))}
         self._tasks: dict[str, asyncio.Task] = {}
         self._started: dict[str, float] = {}
         self._cancelled = False

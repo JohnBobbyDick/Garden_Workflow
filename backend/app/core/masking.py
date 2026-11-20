@@ -66,7 +66,9 @@ class Masker:
             m._values = set(self._values)
         return m
 
-    def mask(self, text: str) -> str:
+    def mask_known(self, text: str) -> str:
+        """Registered values + token shapes only, without the ``password=…`` heuristics: for validated code
+        (AutoFix new_snippet) where ``val password: String`` is a type annotation, not a secret."""
         if not text:
             return text
         with self._lock:
@@ -76,6 +78,12 @@ class Masker:
                 text = text.replace(v, mask_value(v))
         for p in _PATTERNS:
             text = p.sub(lambda m: mask_value(m.group(0)), text)
+        return text
+
+    def mask(self, text: str) -> str:
+        if not text:
+            return text
+        text = self.mask_known(text)
         for p in _KEEP_PREFIX:
             text = p.sub(lambda m: m.group(1) + (m.group(2) if _already_masked(m.group(2)) else mask_value(m.group(2))),
                          text)

@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -195,6 +196,28 @@ async def ci_run_status(run_id: str, wait: float = 0, tok: m.ApiToken = Depends(
     return ci_status_out(run)
 
 
+@router.get("/v1/ci/runs/{run_id}/verdict")
+def ci_run_verdict(run_id: str, tok: m.ApiToken = Depends(ci_token), s: Session = Depends(get_session)) -> JSONResponse:
+    """HTTP 200 = PASS, 422 = FAIL (only new findings block when a diff-aware node ran; otherwise the gate)."""
+    run = _ci_run(s, tok, run_id)
+    if run.status not in TERMINAL:
+        raise ApiError(409, "run_not_finished", "запуск ещё не завершён", {"status": run.status})
+    if run.status != "success":
+        raise ApiError(409, "run_failed", f"запуск завершился со статусом {run.status}", {"error": run.error})
+    findings = _findings(s, run.id)
+    v = dict(run.verdict or {})
+    if v.get("verdict") not in ("PASS", "FAIL"):
+        v = {"verdict": "FAIL" if gate_of(run) == "fail" else "PASS", "diff_available": False,
+             "existing_count": 0, "basis": "gate"}
+    new = [f for f in findings if f.diff_status == "new"] if v.get("diff_available") else []
+    body = {**v, "new_findings": [{"id": f.id, "category": f.category, "class": f.cls, "severity": f.severity,
+                                   "title": f.title, "path": f.path, "line": f.line, "end_line": f.end_line,
+                                   "snippet": f.snippet, "advisory_id": f.advisory_id,
+                                   "introduced_in_commit": f.introduced_in_commit} for f in new],
+            "links": links(run.id)}
+    return JSONResponse(jsonable_encoder(body), status_code=200 if v["verdict"] == "PASS" else 422)
+
+
 @router.get("/v1/ci/runs/{run_id}/report")
 def ci_run_report(run_id: str, format: str = "json", tok: m.ApiToken = Depends(ci_token),  # noqa: A002
                   s: Session = Depends(get_session)):
@@ -234,3 +257,24 @@ def ci_yaml(provider: str, workflow_id: str, branches: str = "main", user: m.Use
 @router.get("/ci/cli")
 def ci_cli() -> FileResponse:
     return FileResponse(REPO_ROOT / "cli" / "aisw_ci.py", media_type="text/x-python", filename="aisw_ci.py")
+
+
+# ---- Webhook / status-check health -----------------------------------------------------------------------------
+@router.get("/ci/webhooks/status")
+def webhook_status(workspace_id: str | None = None, limit: int = 20, user: m.User = Depends(current_user),
+                   s: Session = Depends(get_session)) -> dict:
+    """Recent webhook deliveries and statuses/comments written back to GitHub/GitLab for this workspace."""
+    ws = resolve_workspace(s, user, workspace_id, "viewer")
+    limit = max(1, min(limit, 100))
+    deliveries = s.scalars(select(m.WebhookDelivery).where(m.WebhookDelivery.workspace_id == ws)
+                           .order_by(m.WebhookDelivery.created_at.desc()).limit(limit))
+    statuses = s.scalars(select(m.CiStatusReport).join(m.Run, m.Run.id == m.CiStatusReport.run_id)
+                         .where(m.Run.workspace_id == ws)
+                         .order_by(m.CiStatusReport.created_at.desc()).limit(limit))
+    return {
+        "deliveries": [{"id": d.id, "provider": d.provider, "event": d.event, "delivery_id": d.delivery_id[:40],
+                        "run_ids": d.run_ids, "created_at": d.created_at} for d in deliveries],
+        "statuses": [{"id": r.id, "run_id": r.run_id, "provider": r.provider, "kind": r.kind, "state": r.state,
+                      "target": r.target, "response_code": r.response_code, "error": r.error,
+                      "created_at": r.created_at} for r in statuses],
+    }

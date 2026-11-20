@@ -19,6 +19,7 @@ from app.engine import runs as run_service
 from app.engine.data import finding_dict
 from app.export.submission_json import OFFICIAL_MIN_CONFIDENCE
 from app.nodes.output.report_export import ExportValidationError, build_reports
+from app.nodes.source.repo_source import INTERNAL_SOURCE_KEYS
 
 router = APIRouter(tags=["runs"])
 TERMINAL = {"success", "failed", "cancelled"}
@@ -39,7 +40,7 @@ def run_out(s: Session, r: m.Run, full: bool = False) -> dict:
          "score_delta": r.score_delta}
     if full:
         d["graph_snapshot"] = r.graph_snapshot
-        d["source"] = r.source
+        d["source"] = {k: v for k, v in (r.source or {}).items() if k not in INTERNAL_SOURCE_KEYS}
         d["trigger_payload"] = {k: v for k, v in (r.trigger_payload or {}).items() if k != "diff_context"}
         d["notifications"] = r.notifications or []
         d["nodes"] = [{"node_id": n.node_id, "node_type": n.node_type, "status": n.status, "started_at": n.started_at,

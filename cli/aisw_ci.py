@@ -16,10 +16,12 @@ import argparse
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 import zipfile
@@ -60,34 +62,86 @@ def git(*args: str, cwd: Path) -> str | None:
         return None
 
 
+BUILD_NAMES = {f.rsplit("/", 1)[-1] for f in BUILD_FILES}
+HUNK_NEW_RE = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+MAX_BLAME_RANGES = 300
+
+
+def changed_ranges(diff: str) -> dict[str, list[tuple[int, int]]]:
+    """{repo-relative path: [(start, end)]} of added lines in a --unified=0 diff."""
+    out: dict[str, list[tuple[int, int]]] = {}
+    path = None
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            p = line[4:].strip()
+            path = None if p == "/dev/null" else (p[2:] if p.startswith("b/") else p)
+        elif path and (m := HUNK_NEW_RE.match(line)):
+            start, count = int(m.group(1)), int(m.group(2) if m.group(2) is not None else 1)
+            if count:
+                out.setdefault(path, []).append((start, start + count - 1))
+    return out
+
+
+def parse_blame(text: str) -> dict[int, list[str]]:
+    info: dict[str, dict[str, str]] = {}
+    out: dict[int, list[str]] = {}
+    sha, final = None, 0
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 3 and re.fullmatch(r"[0-9a-f]{40}", parts[0]) and parts[1].isdigit():
+            sha, final = parts[0], int(parts[2])
+            info.setdefault(sha, {})
+        elif sha and line.startswith("author-mail "):
+            info[sha]["mail"] = line[12:].strip().strip("<>")
+        elif sha and line.startswith("author "):
+            info[sha]["name"] = line[7:].strip()
+        elif sha and line.startswith("\t"):
+            out[final] = [sha, info[sha].get("mail") or info[sha].get("name") or ""]
+    return out
+
+
 def diff_context(root: Path, base_ref: str | None) -> dict | None:
-    """git diff from the merge base + base versions of build files + blame of changed lines (if history exists)."""
+    """git diff from the merge base (three dots) + base versions of build files + blame of changed lines."""
     head = (git("rev-parse", "HEAD", cwd=root) or "").strip()
     if not head:
         return None
     base = base_ref or os.environ.get("GITHUB_BASE_REF") or os.environ.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME") or "main"
-    candidates = [f"origin/{base}", base]
-    merge_base = None
-    for c in candidates:
-        mb = git("merge-base", c, "HEAD", cwd=root)
+    if base.startswith("-"):
+        return None
+    base_sha = merge_base = None
+    for c in (f"origin/{base}", base):
+        sha = git("rev-parse", "--verify", "--quiet", f"{c}^{{commit}}", cwd=root)
+        mb = git("merge-base", c, "HEAD", cwd=root) if sha else None
         if mb:
-            merge_base = mb.strip()
+            base_sha, merge_base = sha.strip(), mb.strip()
             break
     if not merge_base:
         return None
     top = (git("rev-parse", "--show-toplevel", cwd=root) or "").strip()
     prefix = Path(root).resolve().relative_to(Path(top).resolve()).as_posix() if top else ""
     prefix = "" if prefix == "." else prefix
-    diff = git("diff", "--unified=0", "--find-renames", "-w", "--ignore-blank-lines", f"{merge_base}...HEAD",
-               "--", ".", cwd=root) or ""
+    diff = git("diff", "--no-ext-diff", "--no-textconv", "--unified=0", "--find-renames", "-w", "--ignore-blank-lines",
+               f"{base_sha}...HEAD", "--", ".", cwd=root) or ""
     base_files = {}
-    for f in BUILD_FILES:
-        rel = f"{prefix}/{f}" if prefix else f
-        content = git("show", f"{merge_base}:{rel}", cwd=root)
-        if content is not None:
-            base_files[f] = content
-    return {"base_sha": merge_base, "head_sha": head, "merge_base": merge_base, "diff": diff[:5_000_000],
-            "path_prefix": prefix, "base_files": base_files}
+    for full in (git("ls-tree", "-r", "--full-name", "--name-only", merge_base, "--", ".", cwd=root) or "").splitlines():
+        if full.rsplit("/", 1)[-1] in BUILD_NAMES:
+            content = git("show", "--no-textconv", f"{merge_base}:{full}", cwd=root)
+            rel = full[len(prefix) + 1:] if prefix and full.startswith(prefix + "/") else full
+            if content is not None:
+                base_files[rel] = content
+    blame: dict[str, dict[int, list[str]]] = {}
+    budget = MAX_BLAME_RANGES
+    for path, ranges in changed_ranges(diff).items():
+        rel = path[len(prefix) + 1:] if prefix and path.startswith(prefix + "/") else path
+        for start, end in ranges:
+            if budget <= 0:
+                break
+            budget -= 1
+            out = git("blame", "--porcelain", "-L", f"{start},{end}", "HEAD", "--", path, cwd=Path(top or root))
+            if out:
+                blame.setdefault(rel, {}).update(parse_blame(out))
+    return {"base_sha": base_sha, "head_sha": head, "merge_base": merge_base, "diff": diff[:5_000_000],
+            "path_prefix": prefix, "base_files": base_files, "blame": blame}
 
 
 def request(method: str, url: str, token: str, body: bytes | None = None, ctype: str | None = None,
@@ -138,15 +192,81 @@ def ci_meta() -> dict[str, str]:
     return {"provider": "ci", "repo": "", "ref": "", "commit_sha": "", "pr": ""}
 
 
-def render_summary(st: dict) -> str:
+COMMENT_MARKER = "<!-- aisw-report -->"
+
+
+def _scm_call(method: str, url: str, headers: dict[str, str], payload: dict | None = None) -> tuple[int, object]:
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(url, data=data, method=method, headers={**headers, "User-Agent": "aisw-ci/1",
+                                                                         "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 - CI provider API from CI env
+            raw = r.read()
+            return r.status, json.loads(raw) if raw else None
+    except urllib.error.HTTPError as e:
+        return e.code, None
+
+
+def _comment_target() -> tuple[str, dict[str, str], str, str] | None:
+    """(list/create url, auth headers, update url template with {id}, update method) or None when not applicable."""
+    if os.environ.get("GITHUB_ACTIONS"):
+        token, repo = os.environ.get("GITHUB_TOKEN", ""), os.environ.get("GITHUB_REPOSITORY", "")
+        pr = ci_meta().get("pr", "")
+        if not (token and repo and pr.isdigit()):
+            return None
+        api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+        return (f"{api}/repos/{repo}/issues/{pr}/comments", {"Authorization": f"Bearer {token}",
+                                                             "Accept": "application/vnd.github+json"},
+                f"{api}/repos/{repo}/issues/comments/{{id}}", "PATCH")
+    if os.environ.get("GITLAB_CI"):
+        token, iid = os.environ.get("GITLAB_TOKEN", ""), os.environ.get("CI_MERGE_REQUEST_IID", "")
+        project = os.environ.get("CI_PROJECT_ID") or os.environ.get("CI_PROJECT_PATH", "")
+        if not (token and project and iid.isdigit()):
+            return None
+        api = os.environ.get("CI_API_V4_URL", "https://gitlab.com/api/v4").rstrip("/")
+        base = f"{api}/projects/{urllib.parse.quote(project, safe='')}/merge_requests/{iid}/notes"
+        return base, {"PRIVATE-TOKEN": token}, base + "/{id}", "PUT"
+    return None
+
+
+def publish_comment(text: str) -> str:
+    """Create or update (by marker) a single report comment on the PR/MR. Returns created|updated|skipped|failed."""
+    target = _comment_target()
+    if target is None:
+        return "skipped"
+    url, headers, update_url, update_method = target
+    body = {"body": f"{COMMENT_MARKER}\n{text}"}
+    code, existing = _scm_call("GET", url, headers)
+    if code == 200 and isinstance(existing, list):
+        for c in existing:
+            if isinstance(c, dict) and COMMENT_MARKER in str(c.get("body", "")):
+                code, _ = _scm_call(update_method, update_url.format(id=c["id"]), headers, body)
+                return "updated" if code in (200, 201) else "failed"
+    code, _ = _scm_call("POST", url, headers, body)
+    return "created" if code in (200, 201) else "failed"
+
+
+def render_summary(st: dict, verdict_body: dict | None = None) -> str:
     sev = st.get("summary", {}).get("by_severity", {})
-    verdict = (st.get("verdict") or {}).get("verdict")
+    v = st.get("verdict") or {}
+    verdict = v.get("verdict")
     lines = ["## AI Security Workflow", "",
              f"**Gate:** {'❌ FAIL' if st.get('gate') == 'fail' else '✅ PASS'}"
              + (f" · **Diff verdict:** {verdict}" if verdict else ""), "",
              "| CRITICAL | HIGH | MEDIUM | LOW | Всего |", "|---|---|---|---|---|",
              f"| {sev.get('CRITICAL', 0)} | {sev.get('HIGH', 0)} | {sev.get('MEDIUM', 0)} | {sev.get('LOW', 0)} | "
-             f"{st.get('summary', {}).get('total', 0)} |", "", f"Отчёт: {st.get('links', {}).get('ui', '')}"]
+             f"{st.get('summary', {}).get('total', 0)} |", ""]
+    new = (verdict_body or {}).get("new_findings") or []
+    if verdict and v.get("diff_available"):
+        lines.append(f"**Новые находки в этом diff:** {len(new)} (порог блокировки {v.get('threshold')})")
+        if new:
+            lines += ["", "| Severity | Находка | Где | Коммит |", "|---|---|---|---|"]
+            for f in new[:30]:
+                where = f"{f.get('path')}:{f.get('line')}"
+                commit = (f.get("introduced_in_commit") or "")[:7] or "—"
+                lines.append(f"| {f.get('severity')} | {f.get('title')} | `{where}` | `{commit}` |")
+        lines += ["", f"ℹ️ {v.get('existing_count', 0)} существующих находок не блокируют.", ""]
+    lines.append(f"Отчёт: {st.get('links', {}).get('ui', '')}")
     return "\n".join(lines) + "\n"
 
 
@@ -160,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--summary", default=os.environ.get("GITHUB_STEP_SUMMARY", ""))
     ap.add_argument("--base", default=None, help="base branch for diff-aware scanning")
     ap.add_argument("--timeout", type=float, default=1800)
+    ap.add_argument("--no-comment", action="store_true", help="do not post the report comment to the PR/MR")
     args = ap.parse_args(argv)
     if not args.url or not args.token:
         print("aisw: нужны --url и AISW_TOKEN", file=sys.stderr)
@@ -196,11 +317,23 @@ def main(argv: list[str] | None = None) -> int:
             code, raw = request("GET", f"{base}/api/v1/ci/runs/{run['id']}/report?format={fmt}", args.token)
             if code == 200:
                 (out / name).write_bytes(raw)
-        summary = render_summary(st)
+        verdict_body = None
+        if (st.get("verdict") or {}).get("verdict"):
+            code, raw = request("GET", f"{base}/api/v1/ci/runs/{run['id']}/verdict", args.token)
+            if code in (200, 422):
+                verdict_body = json.loads(raw)
+        summary = render_summary(st, verdict_body)
         print(summary)
         if args.summary:
             with open(args.summary, "a", encoding="utf-8") as f:
                 f.write(summary)
+        if not args.no_comment:
+            try:
+                result = publish_comment(summary)
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                result = f"failed ({e.__class__.__name__})"
+            if result != "skipped":
+                print(f"aisw: комментарий к PR/MR: {result}")
         verdict = (st.get("verdict") or {}).get("verdict")
         failed = verdict == "FAIL" if verdict in ("PASS", "FAIL") else st.get("gate") == "fail"
         print(f"aisw: gate: {'FAIL' if failed else 'PASS'}")

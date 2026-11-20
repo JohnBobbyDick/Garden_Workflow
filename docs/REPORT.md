@@ -166,3 +166,498 @@
   - **Playwright e2e** — 1 passed. Сценарий: регистрация → сценарий собирается перетаскиванием 7 блоков и 10 соединений → неверное соединение отклонено с сообщением → настройка источника через сгенерированную форму → «Проверить граф» → запуск с живыми статусами → 15 находок и AI-отчёт (без AI, с пометкой) → второй запуск → сравнение. Браузер — системный Edge;
   - скриншоты тёмной и светлой темы на RU и EN (дашборд, редактор, детали запуска) — в `docs/screens/`.
 - **Ручная проверка в браузере** (Puppeteer): вход, дашборд, редактор, запуск из редактора с живыми статусами, детали запуска.
+
+### Фаза 6 — задачи со звёздочкой (§12)
+
+Основная часть фазы написана в предыдущей сессии и не была отмечена в `todo.md`. В этой сессии каждый пункт сверен с кодом, найденные пробелы закрыты, гейт пройден.
+
+- **12.1 Библиотека шаблонов** (`app/api/templates.py`, `app/templates_lib.py`, `app/seed/builtin_templates.py`, `frontend/src/pages/TemplatesPage.tsx`).
+  - При публикации из графа вычищаются секреты, ссылки на credentials, URL и пути репозиториев, chat_id. Вместо них в шаблон попадают объявленные параметры: имя, тип, описание, значение по умолчанию.
+  - Каталог: поиск по названию, описанию и тегам; фильтры по категории, рейтингу, автору, «избранное», «мои»; сортировка «новые / популярные / рейтинг».
+  - Карточка шаблона: read-only превью React Flow, список нод, параметры, отзывы.
+  - «Использовать»: мастер подстановки параметров, причём секреты выбираются только из хранилища своего workspace. Создаётся независимая копия с `forked_from`, `usage_count` увеличивается.
+  - Рейтинг 1–5 (одна оценка на пользователя, можно менять), отзывы (CRUD своих), избранное.
+  - Модерация: автор снимает шаблон с публикации или обновляет версию; администратор платформы может скрыть шаблон.
+  - 7 встроенных шаблонов от «System» создаются при старте и через `make seed` (идемпотентно).
+- **12.2 CI/CD** (`app/api/ci.py`, `app/api/webhooks.py`, `app/ci/*`, `cli/aisw_ci.py`, `frontend/src/pages/IntegrationPage.tsx`).
+  - API-токены: хранится хэш, токен показывается один раз, можно отозвать, можно ограничить одним workflow.
+  - CI API: `POST/GET /api/v1/ci/runs` (long-poll) и `GET /api/v1/ci/runs/{id}/report`.
+  - CLI на stdlib: exit 0 при PASS, 1 при FAIL, 2 при ошибке платформы.
+  - Генератор YAML для GitHub Actions и GitLab CI.
+  - Вебхуки GitHub/GitLab: проверка подписи, идемпотентность по delivery id, лимит тела, статусы `pending → success/failure` в провайдер.
+  - **Доработано в этой сессии:**
+    - CLI сам публикует комментарий к PR/MR с маркером `<!-- aisw-report -->`. Повторный запуск обновляет этот комментарий, а не создаёт новый. Работает при наличии `GITHUB_TOKEN`/`GITLAB_TOKEN`; отключается флагом `--no-comment`. Тесты: `tests/ci/test_cli_comment.py` на mock GitHub/GitLab.
+    - Статус webhook: новый эндпоинт `GET /api/ci/webhooks/status` (последние доставки и статусы, отправленные в провайдер; доступ только внутри своего workspace) и блок на экране «Интеграция».
+- **12.3 AI-генерация и чат-правка** (`app/ai/workflow_gen.py`, `app/api/ai.py`, `frontend/src/editor/AiAssistant.tsx`).
+  - В промпт передаётся каталог нод из реестра. Сгенерированный граф проверяется `engine/validator.py`; при ошибках — до 3 попыток исправления, затем отказ без применения.
+  - Секретные литералы вычищаются из графа.
+  - Чат возвращает операции над графом. Пользователь видит превью-diff и нажимает «Применить» или «Отклонить»; применённая правка попадает в undo/redo. История чата хранится вместе с workflow.
+  - Оба эталонных примера (из PDF и из TZ.md) — тест-кейсы.
+  - **Доработано в этой сессии:** поля, которые нельзя угадать (`x-required-user-input` и обязательные credential-поля, включая незаполненные `{{param:…}}`), теперь подсвечиваются на самой ноде холста значком «требует заполнения». Раньше подсветка была только в боковой панели. Логика: `missingUserInput` в `src/lib/schemaForm.ts`, покрыта vitest.
+- **Окружение**: на macOS venv и `node_modules` были рассинхронизированы с `pyproject.toml`/`package.json` (не хватало `email-validator` и `@types/node`). Переустановлены: `uv pip install -e ".[dev]"`, `npm ci`. Playwright запускается с системным Chrome: `PW_CHANNEL=chrome npx playwright test`.
+- **Гейт**:
+  - `pytest -q` — **511 passed, 1 skipped**;
+  - eval — 4 passed (учебный набор 15/15 + 3 мутанта);
+  - `ruff` чистый;
+  - `tsc` — без ошибок;
+  - `vitest` — 23 passed;
+  - `npm run build` проходит;
+  - Playwright — 2 passed, включая сценарий «использовать встроенный шаблон → запуск → опубликовать свой → найти → оценить»;
+  - grep по запрещённым именам и `TODO`/`NotImplementedError` в `backend/app` и `cli` пуст.
+- **Демонстрация на запущенном стеке** (uvicorn с in-process воркером и mock GitHub из `scripts/mock_scm.py`):
+  - 12.1: в каталоге 7 встроенных шаблонов. «Проверка секретов» → «Использовать» с путём к учебному проекту → запуск копии: success, 5 секретов. Публикация копии: путь вычищен, объявлены параметры `src.git_url` и `src.path`. Шаблон находится поиском `demo`, оценка 5★ сохранилась.
+  - 12.2:
+    - YAML для GitHub и GitLab разбирается как валидный;
+    - CLI на шаблоне «CI gate: упасть на Critical» → **exit 1**: 1 CRITICAL, 7 HIGH, 7 MEDIUM, 15 находок в `submission.json`;
+    - CLI на сценарии только с секретами → **exit 0** (PASS — максимум HIGH);
+    - вебхук с неверной подписью → **401**, с верной → **202**; mock GitHub получил `POST /repos/demo/shop/statuses/<sha>` со статусом `pending`, затем `success`; `/api/ci/webhooks/status` показывает доставку и оба статуса.
+  - 12.3: **живой проверки нет**. Реальной LLM в окружении нет (Ollama и LM Studio не установлены, ключей нет). Функциональность подтверждена контрактными тестами на локальном OpenAI-compatible HTTP-сервере (`tests/api/test_ai_workflows.py`): эталоны PDF и TZ, цикл исправления, отказ после 3 попыток, чат-операции, применение и отклонение, история.
+
+### Фаза 6А.1 — Diff-aware scan (§12А.1)
+
+- **Модули**: `app/analyzers/diff/{hunks,git,blame,classifier,sca_diff}.py`, нода `scanner.diff` (`app/nodes/scanners/diff_scan.py`).
+- **Интеграция**:
+  - `source.repo` передаёт git-подсказки: base/head из события, base-ветку, ссылку на токен и границу поиска `.git`;
+  - сервис `annotate_findings` дописывает diff-поля к сохранённым находкам;
+  - `GET /api/v1/ci/runs/{id}/verdict` отвечает 200 при PASS и 422 при FAIL;
+  - commit status «N new critical — merge blocked»;
+  - платформа публикует один комментарий в PR/MR и обновляет его по маркеру (GitHub и GitLab).
+- **CLI**:
+  - diff от base (три точки);
+  - базовые версии **всех** файлов сборки, включая подмодули;
+  - `git blame` по изменённым диапазонам;
+  - таблица новых находок в `$GITHUB_STEP_SUMMARY` и в комментарии.
+- **UI**: бейдж `diff: PASS/FAIL`, вкладки «Новые / Существующие / Все», в карточке находки hunk, коммит и автор. Проверено в браузере на демо-запуске.
+- **Найдено и исправлено**: в CLI `git ls-tree` из подкаталога возвращал пути относительно cwd, поэтому `git show` не находил базовые файлы сборки и все SCA-находки считались новыми. Исправлено флагом `--full-name`; регрессию ловит `test_ci_verdict_endpoint_and_cli_exit_codes`.
+- **Тесты (новые)**:
+  - `tests/unit/test_diff_hunks.py`: несколько hunks; новые, удалённые, переименованные и бинарные файлы; пути в кавычках; изменения только в пробелах;
+  - `tests/unit/test_diff_git.py`: три точки против двух на реальном git, изменения только в пробелах, отказ на инъекции `--upload-pack=…` и неверный sha, атрибуция через blame;
+  - `tests/unit/test_diff_classifier.py`: изменённая строка, нетронутый файл, многострочный диапазон, межфайловый IDOR, пороги, `report_only`; SCA: повышение версии только через `gradle.properties` → new, без изменений → existing, обновление версии → `fixed_in_diff`;
+  - `tests/nodes/test_diff_node.py`: FAIL на сгенерированном AWS-ключе с 15 существующими, PASS после revert, `on_missing_diff`, `.git` не ищется выше границы;
+  - `tests/ci/test_diff_aware_ci.py`: вебхук PR → failure и комментарий → synchronize → success, тот же комментарий обновлён (PATCH); CLI exit 1/0 и verdict 422/200; upsert комментария в GitLab (GET/POST/GET/PUT).
+- **Гейт**:
+  - `pytest -q` — **534 passed, 1 skipped**;
+  - eval: учебный набор 15/15 и все мутанты 100%, 0 контролей; `submission.json` не изменился — diff-поля в него не попадают;
+  - `ruff`, `tsc`, `vitest` (23) — чисто;
+  - grep по запрещённым именам пуст.
+- **Демо на запущенном стеке** (`scripts/demo_diff.sh`):
+  - PR opened → verdict **FAIL** (2 новых, 15 существующих), статус `failure — 2 new critical — merge blocked`, комментарий «🔴 FAIL … Ключ доступа AWS в `…RepairDeskApplication.kt:13`, коммит `32bb6e2`»;
+  - ключ удалён → **PASS**, статус `success`, на PR остался 1 комментарий (обновлён).
+- **Замечание**: один AWS-ключ (Key ID и Secret на соседних строках) даёт две находки `aws-access-key` (строки 13 и 14). Это поведение анализатора секретов из фазы 1, эталон на него не влияет. Кандидат на доработку: объединять пару «ID + Secret» в одну находку.
+
+### Фаза 6А.2 — Security Score (§12А.2)
+
+**Сделано**
+- `backend/app/scoring/`:
+  - `formula.py`: `score = round(100·exp(−Σ weight×novelty / S))`, `S = 50·max(1, √(LOC/1000))`; учитываются только
+    находки с confidence ≥ 0.6; параметры переопределяются для workspace;
+  - `priority.py`: Priority Fix List, `fix_effort` из таблицы или от AI с валидацией, детерминированные
+    `expected_gain` / `cumulative_gain`;
+  - `trend.py`: подпись набора сканеров и МНК-тренд;
+  - `service.py`: post-run хук `record_score`, delta к предыдущему сравнимому запуску, история с маркерами;
+  - `sprint_plan.py`: AI-план с валидатором и детерминированным fallback.
+- Нода `analysis.security_score`: score доступен в выражениях как `score.value` / `score.delta`.
+- API (`app/api/scoring.py`): `GET /projects/{id}/score/history`, `GET /runs/{id}/score`, `POST /runs/{id}/sprint-plan`,
+  `GET /dashboard`, `GET/PUT /settings/score` (только admin, аудит).
+- UI (`frontend/src/components/score.tsx`): карточка Security Score на дашборде (дельта, тренд, график с маркерами,
+  топ-3, AI-план) и вкладка Score в деталях запуска. Обе показывают оговорку «метрика внутреннего тренда».
+- Документация: раздел 2 в `docs/TEAM_FEATURES.md` (формула, обоснование, калибровка S0 на учебном наборе и мутантах).
+  `docs/NODES.md` перегенерирован (21 нода).
+
+**Гейт**
+- Backend: pytest 551 passed / 1 skipped; ruff чисто. Eval 15/15 на учебном наборе и всех мутантах; `submission.json`
+  не изменился.
+- Frontend: vitest 23, Playwright 2, tsc чисто.
+- Живое демо на стеке (`APP_INPROCESS_WORKER`, путь-проект с копией учебного репозитория):
+  - первый запуск: score 31, delta —;
+  - bump `commons-text` и `jsoup`: score 41, delta +10, топ-3 пересчитан;
+  - AI-план без LLM: `ai_generated: false`, projected 71;
+  - дашборд и вкладка Score проверены в браузере (puppeteer).
+
+**Решения и ограничения**
+- S0 = 50 выбрано по калибровке: учебный репозиторий 31, мутанты 49–50, исправление одной HIGH даёт видимые +3…+5.
+  При S0 = 25 учебный проект почти обнуляется (9), при S0 = 100 выглядит «нормально» (55).
+- Delta сравнивает только запуски с той же подписью набора сканеров. При смене набора delta = `null` и на графике
+  ставится маркер.
+- В LLM для AI-плана не уходят пути, сниппеты и авторы (покрыто тестом); `projected_score` всегда пересчитывается.
+- Живой AI-план с настоящей LLM не показан: LLM в окружении нет. Валидатор проверен на локальном OpenAI-совместимом
+  fake-сервере (неверный projected → исправлен, выдуманный id и CVE → удалены, effort 42 → отклонён).
+
+### Фаза 6А.3 — AI AutoFix (§12А.3) и гейт фазы 6А
+
+**Сделано**
+- Применимость правил. Метаданные `autofix` приведены к ТЗ: SAST-правила, у которых нет детерминированного
+  исправления, переведены на `llm`; архитектурные (`unsafe-deserialization`, `csrf-disabled`, `private-key`) — на
+  `none`. Покрытие считается из метаданных: **27 из 30 правил** (`GET /api/autofix/coverage`).
+- `backend/app/autofix/`:
+  - `context.py`: маскированный построчно контекст (±10 строк, объемлющая функция/класс через tree-sitter,
+    связанные места); сырые значения секретов берутся из `scan_secrets(collect=…)` и живут только в памяти;
+  - `validator.py`: 7 шагов чеклиста, одна повторная попытка LLM; маскированный unified diff;
+  - `sca_bump.py`: обновление версии в месте определения (литерал, `val`, `gradle.properties`, catalog, `extra`) и в
+    lockfile;
+  - `source.py`: восстановление исходников запуска (каталог, зашифрованный архив до TTL, git на точном коммите);
+    очистка просроченных архивов встроена в цикл воркера;
+  - `pr/scm.py`, `pull_request.py`: PR в GitHub / MR в GitLab через REST, идемпотентно, метка `security-autofix`,
+    шаблон описания, аудит; 403 без `allow_write` и для репозитория/фикстур организаторов;
+  - `service.py`: оркестрация.
+- API `app/api/autofix.py`: `POST /runs/{id}/findings/{fid}/autofix`, `GET /runs/{id}/autofixes`, `GET /autofixes/{id}`,
+  `GET /autofixes/{id}/patch`, `POST /autofixes/{id}/pull-request`, `GET /autofix/coverage`.
+- Нода `ai.autofix` (параметры `auto_create_pr`, `max_findings`, `min_severity`, `target_branch`, `pr_template`).
+- Источник кода теперь сохраняет у запуска сведения для восстановления (`scan_path`, `token_ref` — внутренние поля,
+  API их не отдаёт).
+- Mock GitHub/GitLab дополнен обновлением PR/MR и метками.
+- UI (`frontend/src/components/autofix.tsx`): панель AutoFix в карточке находки — чеклист, diff, `requires_config`,
+  «Создать/Обновить PR», «Скачать .patch», покрытие. Добавлена иконка `wrench`.
+- Документация: раздел 3 в `docs/TEAM_FEATURES.md`; `docs/NODES.md` перегенерирован (22 ноды).
+
+**Гейт фазы 6А**
+- Backend: pytest 576 passed / 1 skipped, ruff чисто; grep-проверка на имена учебного проекта в `backend/app` пуста.
+- Eval 15/15 на учебном наборе и всех мутантах. `submission.json` не изменился: поле `autofix` в выгрузку не входит.
+- Frontend: vitest 23, Playwright 2, tsc чисто.
+- Тесты 12А.3 на mock LLM:
+  - корректный фикс → validated;
+  - нет `old_snippet` → reject;
+  - фикс не убирает находку → reject на самопроверке;
+  - фикс добавляет находку → reject;
+  - ломает синтаксис → reject;
+  - секрет в `new_snippet` → reject;
+  - повторная попытка исправляет ответ.
+- Тесты SCA-bump: все 5 форм × с lockfile и без.
+- Тесты PR: последовательность запросов, заголовки, тела и идемпотентность на mock GitHub и GitLab; без
+  `allow_write` → 403; репозиторий организаторов → 403; маски и секреты не попадают ни в тело PR, ни в файлы.
+- Тесты хранения: TTL архива и очистка.
+- Демо `scripts/demo_autofix.sh` на запущенном стеке:
+  - PR-вебхук → AutoFix пароля (7/7 шагов) → PR на mock GitHub;
+  - diff-aware прогон ветки `autofix/…`: **PASS, 0 новых, 14 существующих (было 15)**;
+  - репозиторий организаторов: SCA-bump и только `.patch`.
+- UI проверен в браузере (puppeteer): панель для фикса с PR и для `.patch`.
+- Демо 12А.1 (`demo_diff.sh`) и 12А.2 выполнены ранее в этой фазе.
+
+**Решения и ограничения**
+- Тест поймал реальную ошибку: эвристика маскера `password…: значение` портила код (`legacyImportPassword: String` →
+  `…(len=6)`) при сохранении `new_snippet`, и испорченный файл ушёл бы в PR. Добавлен `Masker.mask_known` (только
+  известные значения и формы токенов) для проверенного кода. Тест PR проверяет содержимое отправленного файла.
+- Реальное содержимое файлов в БД не хранится: для PR исходники восстанавливаются, и сохранённое предложение
+  применяется заново.
+- В `.patch` удаляемые строки с секретом маскированы: такой патч только для ревью. Патчи SCA и SQL применяются через
+  `git apply`.
+- Настоящей LLM нет: в демо — локальный OpenAI-совместимый endpoint, явно помеченный. Восстановление `git_url` на
+  точном коммите реализовано через `repo_guard.clone_repo`, но автотестом не покрыто: нужен сетевой allowlisted
+  репозиторий. Режимы «каталог» и «архив» покрыты тестами.
+- Тесты SCA-bump и большинство тестов AutoFix прошли с первого запуска (без красной фазы). Красными были тесты
+  PR (порядок фикстур и найденная ошибка маскера) и несколько уточнений.
+
+### Фаза 7 — Упаковка и документация (§18)
+
+**Сделано**
+
+- **Docker.**
+  - `backend/Dockerfile`: python:3.12-slim, git, непривилегированный пользователь. Один образ для API, воркера и
+    mock-сервисов; раскладка как в репозитории, поэтому пути к `fixtures/`, `cli/` и `scripts/` работают без
+    изменений.
+  - `docker/entrypoint.sh`: `api` (сначала `alembic upgrade head`, затем uvicorn), `worker`, `mock`.
+  - `frontend/Dockerfile`: сборка Vite → nginx. `docker/nginx.conf`: прокси `/api` с выключенной буферизацией для
+    SSE, SPA fallback, заголовки безопасности (без дублей с backend).
+  - `.dockerignore`: `.env`, venv, node_modules и данные в образ не попадают.
+- **`docker-compose.yml`.**
+  - Сервисы: `postgres` (healthcheck), `backend` (healthcheck `/api/healthz`, миграции при старте), `worker` (ждёт
+    healthy backend), `frontend` (`:8080`, `FRONTEND_PORT`).
+  - Профили: `mock` (Telegram/Webhook `:8025`, SMTP `:2525`, GitHub/GitLab `:8026`) и `ollama` (`:11434`).
+  - Тома `pg-data`, `aisw-data`, `ollama-data`. `.env.example` переписан с комментариями.
+- **Makefile.** Новые цели `up-mock`, `up-ollama`, `clean`, `logs`, `smoke`, `demo-diff`, `demo-autofix`,
+  `api-doc`, `docs`; `lint` проверяет и `scripts/`.
+- **`scripts/demo_stack.py`** (`make smoke`) — сквозная проверка поднятого стека. Регистрация → проект → сценарий
+  `manual → source → [secrets, sca, sast] → merge → score → if_else → ai.report → report_export → notify.webhook`
+  (ветка `false` → webhook) → запуск. Проверяет: 15 находок, `submission.json`, доставку на mock, наличие score.
+- **`README.md`.** Быстрый старт за 5 команд, LLM (Ollama в Compose и на хосте, OpenRouter `:free`, Gemini, LM
+  Studio), уведомления (реальные и mock), демо, тесты, структура, пример ноды на 20 строк, CI, ограничения.
+- **`docs/`.**
+  - Новые: `ARCHITECTURE.md` (Mermaid: компоненты и последовательность запуска), `API.md` (генерируется из OpenAPI:
+    95 операций с русскими описаниями), `CI_CD.md`, `AI.md`, `SECURITY.md` (модель угроз → механизм → тест),
+    `PRESENTATION_NOTES.md` (все пункты §18, 22 ноды, реальные примеры работы валидатора, сценарий демо).
+  - `ANALYZERS.md` дополнен текущими результатами eval, метаданными AutoFix и связью с diff/score.
+  - `NODES.md` перегенерирован.
+
+**Найдено и исправлено**
+
+- **Свежий клон: `make dev-backend` падал** с `sqlite3.OperationalError: unable to open database file`. Alembic
+  запускается раньше приложения, а каталог `backend/data` создавался только в `app/db.py::_default_db`.
+  - Исправление: `app.db.ensure_sqlite_dir` вызывается и в `Database`, и в `alembic/env.py`.
+  - Регрессионный тест `tests/integration::test_alembic_upgrade_creates_missing_sqlite_directory` был красным до
+    правки и зелёный после.
+- **Дубли заголовков** `X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy` (backend + nginx): в
+  `/api/` nginx скрывает заголовки backend и ставит свои один раз. Проверено curl.
+
+- **Подделка `X-Forwarded-For`** (нашло автоматическое ревью безопасности). uvicorn был запущен с
+  `--forwarded-allow-ips='*'`, а порт backend опубликован на всех интерфейсах: подстановкой заголовка можно было обойти
+  rate limit входа.
+  - Исправление: доверие к forwarded-заголовкам только от `FORWARDED_ALLOW_IPS` (по умолчанию localhost); nginx
+    перезаписывает `X-Forwarded-For` значением `$remote_addr`; порт backend опубликован только на `127.0.0.1`.
+  - Проверка: 12 входов с разными поддельными `X-Forwarded-For` → 10 × 401, затем 429; `make smoke` OK.
+
+**Гейт — холодный старт по README**
+
+1. `docker compose down -v` и удаление образов `aisw-*`.
+2. Чистая копия дерева (`git ls-files -co --exclude-standard`, без venv, node_modules и данных).
+3. По README: `cp .env.example .env`. Порт 8080 на машине занят посторонним traefik, поэтому, как описано в README,
+   выставлены `FRONTEND_PORT=8088` и соответствующие URL.
+4. `docker compose --profile mock build --no-cache` (≈1 мин) → `up -d` → все сервисы healthy примерно за 20 с.
+5. `scripts/demo_stack.py`: **OK** — 15 находок (1 Critical / 7 High / 7 Medium), `submission.json` 15, вебхук
+   доставлен, Security Score 31.
+6. Telegram через mock (`APP_TELEGRAM_API_BASE=http://mock:8025`): `sendMessage` и `sendDocument` доставлены, токен
+   в URL замаскирован (`/bot•••/`).
+7. UI через nginx (puppeteer): вход, страница запуска (15 находок, вкладки Score/AI/Логи), дашборд со score и
+   топ-3; сессия переживает перезагрузку. SSE через nginx: `text/event-stream`, события `node.status`,
+   `edge.data`, `node.log`, `run.status`.
+8. Цели Makefile:
+   - в чистой копии: `install` (uv + `npm ci`), `lint`, `docs`, `test` (577 + 23), `test-eval`, `dev-backend` +
+     `seed` после исправления;
+   - в репозитории: `test-pg` (PostgreSQL в Docker), `up-mock` → `smoke` OK → `down` → `clean` (тома удалены),
+     `mock`;
+   - `e2e`: Playwright 2/2;
+   - `demo-diff` и `demo-autofix` проверены в фазе 6A.
+
+**Регресс:** pytest **577 passed / 1 skipped**; eval: training 15/15, clinic-appointments 15/15, library-loans 15/15,
+parcel-lockers 16/16, контролей и лишних 0; ruff чисто; grep-guard 0; `tsc` чисто; vitest 23; Playwright 2.
+
+**Решения и ограничения**
+
+- Скриптовые демо diff-aware и AutoFix-PR работают на dev-стеке: они сами поднимают mock GitHub и временные
+  git-репозитории. В Compose для этого есть профиль `mock` и `make smoke`.
+- Реальные LLM, Telegram, SMTP и GitHub не проверялись (в окружении нет LLM, внешние сервисы недоступны) —
+  оговорено в README и AI.md.
+- Новые файлы (Dockerfile'ы, `docker/`, `docs/*`, `scripts/*`, `backend/app/autofix/**` и др.) пока не в git: чистая
+  копия собрана из отслеживаемых и неигнорируемых файлов. Коммит делает пользователь.
+
+### Фаза 8 — Финальная верификация (§17.11, §21, §22)
+
+**Автоматические проверки**
+
+| Проверка | Команда | Результат |
+| --- | --- | --- |
+| Backend unit / API / engine / security / CI | `make test` | **578 passed, 1 skipped** (skip — PostgreSQL-тест без `APP_TEST_DATABASE_URL`) |
+| Frontend | `make test` (vitest) | **23 passed** (6 файлов) |
+| PostgreSQL | `make test-pg` | **1 passed**: миграции, `alembic check`, очередь `FOR UPDATE SKIP LOCKED`, полный запуск на PostgreSQL 16 |
+| E2E | `make e2e` (`PW_CHANNEL=chrome`) | **2 passed**: регистрация → сборка графа перетаскиванием → запуск → живые статусы → находки и AI → сравнение; библиотека шаблонов |
+| Точность | `make test-eval` | см. таблицу в разделе 2 |
+| Lint | `make lint` | ruff и `tsc --noEmit` — без ошибок |
+| Запрещённые имена | `grep -R "repairdesk\|RepairTicketReader\|WarrantyHeaders" backend/app` | 0 совпадений |
+| Заглушки | `grep -rnE '\bTODO\b\|FIXME\|NotImplementedError\|pass +# *later'` по `backend/app`, `frontend/src`, `cli`, `scripts`, `docker` | 0 совпадений. «fake»/«dummy» есть только в словаре плейсхолдеров сканера секретов и в константе защиты от тайминг-атаки в `core/security.py` |
+
+**Демо-сценарий §21**
+
+Шаги 1–8 и 10 проходили на Compose (PostgreSQL, отдельный воркер, nginx, профиль `mock`) скриптом
+`scripts/demo_full.py`, шаги 9 и 11 — на dev-стеке скриптами `demo_diff.sh` / `demo_autofix.sh`. Перетаскивание нод
+(шаг 3) подтверждено e2e-тестом Playwright.
+
+| Шаг | Результат |
+| --- | --- |
+| 1. Регистрация → workspace → AI, Telegram/SMTP | Пользователь создан, создан второй workspace «Команда безопасности». Токен Telegram сохранён в хранилище, API вернул только маску. SMTP — mock `:2525`. AI-провайдер **не настраивался**: реальной LLM нет (см. раздел 4). |
+| 2. Проект из репозитория организаторов | `git_url` `https://github.com/TBagirov/training` (allowlist по умолчанию), `subdir` `training-project` — клонирован из интернета. |
+| 3. Сценарий | 13 нод, 16 рёбер: `manual → source → [secrets, sca, sast] → merge → score → if_else(severity.max >= HIGH) → ai.report → report_export → telegram + smtp`, ветка `false` → `notify.webhook`. Проверка графа без ошибок. В UI граф собирается перетаскиванием (`frontend/e2e/flow.spec.ts`). |
+| 4. Запуск | `success` за 4 с. SSE: `node.status`, `node.input`, `node.output`, `edge.data`, `node.log`, `run.status`. **15 находок** (1 Critical / 7 High / 7 Medium), контролей 0. Ветка `false` — `skipped`. На mock доставлены `telegram` (`sendMessage` + `sendDocument`) и `smtp`, токен в записях замаскирован. `submission.json`: 15 находок, `app/export/validator.py` — ошибок нет. AI-отчёт сформирован **детерминированно** (`ai_generated=false`, без fix-диффов). |
+| 5. Правка → повторный запуск → сравнение | Архив с параметризованным SQL (`'$frameTag'` → `?` + аргумент): 15 → 14, `/api/runs/compare` — **устранено 1 (sql-injection)**, новых 0, без изменений 14. |
+| 6. Шаблон | Опубликован; параметры `source.git_url`, `telegram.bot_token`, `telegram.chat_id`, `smtp.host`, `smtp.from_addr`, `smtp.to`, `webhook.url` (ссылки на секреты и chat_id вычищены). Поиск по названию находит шаблон, «Использовать» создаёт копию (`forked_from`), копия отредактирована (удалена нода smtp → версия 2). |
+| 7. CI/CD | YAML для GitHub Actions (1384 байта) и GitLab CI (800 байт). CLI, скачанный с платформы (`/api/ci/cli`), на копии проекта завершился **exit 1** (`gate: FAIL`, Critical), отчёт `report.md` + `submission.json`. Вебхук с HMAC-подписью → статус на mock GitHub — шаг 9 (`demo_diff`). |
+| 8. AI-генерация | **Не выполнен вживую**: нет LLM. Генерация, «добавь e-mail» в чате, превью, применение и 3 попытки исправления подтверждены контрактными тестами `tests/api/test_ai_workflows.py` (7 тестов) на локальном OpenAI-совместимом сервере. |
+| 9. Diff-aware | PR с синтетическим AWS-ключом → `verdict FAIL`, 2 новых Critical, статус `failure`, комментарий в PR. Ключ убран → `PASS`, 0 новых, **15 existing**, статус `success`, тот же комментарий обновлён. |
+| 10. Security Score | Первый прогон 31 → исправлены SQL-инъекция и проверка TLS → 35 (**дельта +4**), находок 15 → 13. Priority Fix List — 13 пунктов, топ-3: SCA-обновления (+8, +4, +4). AI-план — детерминированный (LLM не настроена), 13 пунктов. |
+| 11. AI AutoFix | Пароль `PartsImportSettings.kt:4` → AutoFix `validated` (7/7 шагов, `requires_config: LEGACY_IMPORT_PASSWORD`) → PR на mock GitHub (ветка `autofix/<id>`) → прогон ветки: **PASS, 0 новых, 14 existing** (было 15). Для репозитория организаторов SCA-фикс доступен только как `.patch`. LLM-ответ давал **локальный демо-endpoint** (явно помечен в выводе), валидатор, самопроверка и PR — продуктовый код. |
+
+**Найдено и исправлено в фазе 8**
+
+- Поиск шаблонов на SQLite не находил «Полный аудит» по запросу «полный»: SQLite `lower()` понижает регистр только
+  ASCII. Теперь имя, описание и теги сравниваются в Python через `casefold()` (одинаково на SQLite и PostgreSQL;
+  фильтры по категории и автору применяются и к совпадениям по тегам). Тест
+  `tests/api/test_templates.py::test_search_is_case_insensitive_for_cyrillic` был красным до правки и зелёный после.
+
+**Не выполнено:** реальная LLM. Загрузка Ollama в профиле `ollama` была начата и остановлена по решению
+пользователя: модель будет развёрнута на другом компьютере. Шаги 4 (AI-часть), 8 и 10 (AI-план) нужно повторить
+там: `docker compose --profile ollama up -d`, затем `ollama pull qwen2.5:3b` и
+`python scripts/demo_full.py --model qwen2.5:3b`.
+
+## 2. Тесты и точность
+
+```text
+make test        → backend: 578 passed, 1 skipped in ~60 s; frontend: 6 files, 23 tests passed
+make test-pg     → 1 passed (PostgreSQL 16 в Docker)
+make e2e         → 2 passed (Playwright, системный Chrome)
+make test-eval   → 4 passed
+```
+
+| Набор | Recall | Precision | Найдено / эталон | Контроли (не должны срабатывать) | Лишние |
+| --- | --- | --- | --- | --- | --- |
+| Учебный `training-project` | 100 % | 100 % | 15 / 15 | 0 из 6 | 0 |
+| Мутант `clinic-appointments` | 100 % | 100 % | 15 / 15 | 0 | 0 |
+| Мутант `library-loans` | 100 % | 100 % | 15 / 15 | 0 | 0 |
+| Мутант `parcel-lockers` | 100 % | 100 % | 16 / 16 | 0 | 0 |
+
+Сверка по правилам README эталона: категория, путь, класс, строка с учётом `alternateLocations`; для SCA — координаты,
+версия, advisory. Официальная выгрузка — находки с `confidence ≥ 0.6`.
+
+## 3. Чеклист соответствия ТЗ
+
+Статусы: **DONE** — реализовано и подтверждено тестом или запуском; **PARTIAL** — реализовано, но часть не проверена
+вживую; **NOT DONE** — не реализовано.
+
+### 3.1. TZ.md 1.1 — основной функционал
+
+| Пункт | Статус | Где | Подтверждение |
+| --- | --- | --- | --- |
+| Drag-and-drop редактор | DONE | `frontend/src/editor/EditorPage.tsx`, `Palette.tsx` | e2e `flow.spec.ts` (перетаскивание из палитры) |
+| Добавление, настройка, соединение нод | DONE | `SidePanel.tsx`, `SchemaForm.tsx` (форма из JSON Schema), `graphModel.ts`; undo/redo — `history.ts` | e2e; vitest `SchemaForm.test.tsx`, `graphModel.test.ts`, `history.test.ts` |
+| Триггеры ручного запуска и расписания | DONE | `nodes/triggers/manual.py`, `schedule.py`, `engine/scheduler.py` | `test_scheduler_creates_one_run_per_slot_even_with_two_workers`, `test_schedule_respects_timezone` |
+| IF/ELSE | DONE | `nodes/logic/if_else.py`, `engine/expressions.py` | `test_if_else_routes_by_expression`; демо шаг 4 (ветка false skipped) |
+| Сравнение и регулярные выражения | DONE | `nodes/logic/compare.py`, `regex_match.py` | `test_compare_node`, `test_regex_filter_findings_and_extract`, `test_regex_catastrophic_pattern_is_stopped` |
+| Собственный поиск секретов | DONE | `analyzers/secrets/` | eval (5/5 секретов во всех наборах), `tests/unit/test_secrets*` |
+| Собственный SCA | DONE | `analyzers/sca/` | eval (5/5 SCA), `tests/unit/test_sca*` |
+| Собственный SAST Kotlin/Spring | DONE | `analyzers/sast/` (tree-sitter-kotlin) | eval, `tests/unit/test_sast*` |
+| Классификация критичности | DONE | `analyzers/common/severity.py`, CVSS v3 `analyzers/sca/cvss.py` | eval (severity в эталоне), unit-тесты |
+| LLM для объяснения | PARTIAL | `app/ai/`, нода `ai.report` | контрактные тесты `tests/ai/*`, `test_ai_report_end_to_end`; **без реальной модели** |
+| Рекомендации по исправлению | DONE | детерминированно: `ai/deterministic.py` (шаги, безопасная версия); от LLM — `fix` с проверкой `before` | демо шаг 4 (детерминированный отчёт); `test_fix_with_exact_before_is_kept` |
+| Выполнение в реальном времени | DONE | SSE `api/runs.py`, `editor/useRunEvents.ts` | e2e (живые статусы), демо шаг 4 (SSE через nginx) |
+| Передача данных между нодами | DONE | `Envelope`, события `edge.data`, `node.input/output` | `tests/engine/test_executor.py`; демо шаг 4 |
+| Telegram, SMTP, Webhook | DONE (на mock) | `nodes/output/notify_*.py` | `tests/nodes/test_notify_nodes.py`; демо шаг 4 (telegram + smtp), smoke (webhook). Реальные сервисы не проверялись |
+
+### 3.2. TZ.md 1.2.1 — библиотека шаблонов
+
+| Пункт | Статус | Где | Подтверждение |
+| --- | --- | --- | --- |
+| Публикация | DONE | `api/templates.py`, `templates_lib.py` | `test_publish_strips_secrets_repo_urls_and_chat_ids`; демо шаг 6 |
+| Общий каталог | DONE | `TemplatesPage.tsx`, встроенные шаблоны `seed/builtin_templates.py` | `test_catalog_search_filters_and_sort`; e2e (2-й тест) |
+| Описание назначения | DONE | поле `description`, карточка | демо шаг 6 |
+| Поиск и фильтрация | DONE | `GET /api/templates?q&category&min_rating&author&favorites&mine&sort` | `test_catalog_search_filters_and_sort`, `test_search_is_case_insensitive_for_cyrillic` |
+| Просмотр структуры | DONE | read-only превью React Flow + список нод и параметров | e2e (просмотр шаблона) |
+| Копирование в workspace | DONE | `POST /api/templates/{id}/use` | демо шаг 6 (`forked_from`) |
+| Редактирование копии | DONE | обычный сценарий в редакторе | демо шаг 6 (версия 2) |
+| Параметры под проект | DONE | `apply_parameters` (тип, значение по умолчанию, секрет из хранилища) | `tests/api/test_templates.py`; демо шаг 6 |
+| Повторное использование | DONE | счётчик использований, сортировка «популярные» | `test_catalog_search_filters_and_sort` |
+| Рейтинг | DONE | `POST /rate` | `test_catalog_search_filters_and_sort`; e2e |
+| Избранное | DONE | `POST/DELETE /favorite` | `tests/api/test_templates.py` |
+| Отзывы | DONE | `/reviews` | `tests/api/test_templates.py` |
+
+### 3.3. TZ.md 1.2.2 — CI/CD
+
+| Пункт | Статус | Где | Подтверждение |
+| --- | --- | --- | --- |
+| GitHub Actions | DONE | `ci/yaml_generator.py::github_actions` | `tests/ci/test_ci.py`; демо шаг 7 |
+| GitLab CI | DONE | `ci/yaml_generator.py::gitlab_ci` | `tests/ci/test_ci.py`; демо шаг 7 |
+| Генерация YAML | DONE | `GET /api/ci/yaml`, UI «Интеграция» | демо шаг 7 |
+| API запуска | DONE | `POST /api/v1/ci/runs`, `/verdict` (200/422) | `test_cli_end_to_end_exit_codes`, `tests/ci/test_diff_aware_ci.py` |
+| Webhook | DONE | `api/webhooks.py` (HMAC, идемпотентность) | `tests/ci/test_ci.py`; демо шаг 9 |
+| Запуск на каждый commit | DONE | события `push` | `tests/ci/test_ci.py`; демо шаг 9 (synchronize/push) |
+| Запуск на PR/MR | DONE | `pull_request`, `merge_request` | `tests/ci/test_ci.py`; демо шаг 9 |
+| Возврат статуса | DONE | `ci/status.py` (`aisw/security`), exit-код CLI | демо шаги 7, 9 |
+| Передача результатов | DONE | артефакты CLI, Step Summary, комментарий в PR/MR | `tests/ci/test_cli_comment.py`; демо шаг 9 |
+| Ошибка pipeline на Critical | DONE | `output.ci_gate`, CLI exit 1 | `test_cli_end_to_end_exit_codes`; демо шаг 7 |
+| Защита основной ветки | DONE | статус `failure` + инструкция branch protection в YAML; diff-aware вердикт | демо шаг 9; `docs/CI_CD.md` |
+
+### 3.4. TZ.md 1.2.3 — AI-генерация workflow
+
+Все пункты реализованы в `app/ai/workflow_gen.py`, `api/ai.py` и `editor/AiAssistant.tsx` и проверены контрактными
+тестами `tests/api/test_ai_workflows.py` на локальном OpenAI-совместимом сервере. **Живая проверка с реальной LLM не
+проводилась**, поэтому статус каждого пункта — PARTIAL.
+
+| Пункт | Статус | Подтверждение |
+| --- | --- | --- |
+| Ввод текста | PARTIAL | `test_pdf_example_generates_valid_graph_with_catalog_in_prompt` |
+| Распознавание нод, создание нод и связей | PARTIAL | там же: каталог нод из реестра в промпте, граф по ответу |
+| Параметры, триггеры, расписание | PARTIAL | `test_tz_example_and_secret_literals_are_stripped`, `test_chat_set_schedule_and_invalid_ops` |
+| Логические условия, уведомления | PARTIAL | `test_tz_example_and_secret_literals_are_stripped` |
+| Проверка графа | PARTIAL | `test_invalid_graph_is_repaired_with_validator_errors`, `test_generation_gives_up_after_three_attempts` (тот же `engine/validator.py`, что для ручных графов) |
+| Отображение в редакторе, ручная правка | PARTIAL | созданный сценарий открывается в обычном редакторе |
+| Диалоговый режим | PARTIAL | `test_chat_add_email_preview_apply_and_history` (превью диффа, применить / отклонить, история) |
+
+### 3.5. TZ.md 1.3 — технические требования
+
+| Пункт | Статус | Где | Подтверждение |
+| --- | --- | --- | --- |
+| Модульная архитектура | DONE | ноды-плагины, провайдеры, `POST_RUN_HOOKS` | `docs/ARCHITECTURE.md` |
+| Новые типы нод | DONE | один файл + `@register_node` | `test_new_node_in_single_file_is_discovered_listed_and_executed`; пример из README выполнен (фаза 7) |
+| Внешние и локальные LLM | PARTIAL | `ai/providers/ollama.py`, `openai_compat.py` | `tests/ai/test_providers_contract.py`; живой модели нет |
+| Переключение провайдера в настройках | DONE | `PUT /api/settings/ai`, `SettingsPage.tsx` | `test_ai_settings_default_off_and_admin_only`, `test_node_provider_override` |
+| Ollama и OpenAI-compatible | PARTIAL | оба провайдера + профиль `ollama` в Compose | контрактные тесты; живой модели нет |
+| Шифрование секретов | DONE | `core/crypto.py` (AES-256-GCM, версии ключа) | `test_credentials_are_write_only_and_encrypted`, `tests/unit/test_core_crypto_masking.py` |
+| Маскирование в UI | DONE | API отдаёт только маску, сниппеты маскированы | `test_injected_secret_never_appears_in_db_api_events_logs` |
+| Секреты не в логах | DONE | `MaskingLogFilter` | тот же тест-канарейка (caplog); демо: токен Telegram в URL — `/bot•••/` |
+| История запусков | DONE | `runs`, `RunsPage.tsx` | `test_end_to_end_run_findings_exports_and_sse` |
+| Сохранение результатов | DONE | `findings`, `artifacts` | там же; демо шаг 4 |
+| Сохранение AI-отчётов | DONE | `ai_reports` (+ журнал валидатора) | `test_ai_report_end_to_end` |
+| Сравнение запусков | DONE | `GET /api/runs/compare`, `ComparePage.tsx` | `test_compare_runs_shows_fixed_finding`; демо шаг 5 |
+
+### 3.6. Официальный PDF — основные задачи и требования
+
+| Требование | Статус | Подтверждение |
+| --- | --- | --- |
+| 1. Drag-and-drop конструктор | DONE | 3.1 |
+| 2. Триггеры, логика, один канал уведомлений | DONE | 3.1 (все три канала, на mock) |
+| 3. Собственные анализаторы и критичность | DONE | раздел 2 (eval), 3.1 |
+| 4. AI-анализ и рекомендации | PARTIAL | 3.1: интеграция и валидатор готовы, реальная LLM не подключалась |
+| 5. Визуализация выполнения | DONE | 3.1 |
+| ★1 Библиотека шаблонов | DONE | 3.2 |
+| ★2 CI/CD | DONE | 3.3 |
+| ★3 AI-генерация | PARTIAL | 3.4 |
+| Мин. 1 — прототип принимает файлы или ссылку и отправляет уведомление с отчётом | DONE | демо шаг 2 (ссылка на репозиторий организаторов), шаг 5 (архив), шаг 4 (уведомление) |
+| Мин. 2 — без готовых сканеров, LLM не обнаруживает | DONE | `backend/pyproject.toml` (нет Semgrep/Gitleaks/Trivy/detekt), анализаторы в `app/analyzers/`; LLM вызывается только после анализа (`ai.report`, AutoFix) |
+| Мин. 3 — LLM: проверка структуры, файлов/строк, отсутствия выдуманных CVE | PARTIAL | валидатор `ai/validator.py`: `test_schema_violation_reported`, `test_fix_with_wrong_path_before_or_lines_is_dropped`, `test_hallucinated_cve_removed_and_flagged`, `test_safe_version_checked_against_fixed_versions`; на реальной модели не проверялся |
+| Мин. 4 — свой конструктор, без n8n/Node-RED | DONE | собственный `app/engine/` + `@xyflow/react` только для отрисовки |
+| Мин. 5 — сканирование только разрешённых репозиториев | DONE | `core/repo_guard.py`, `test_allowlist_rules`, `test_path_source_outside_scan_roots_rejected`; запись в репозиторий организаторов запрещена кодом |
+| Доп. 1 — модульность | DONE | 3.5 |
+| Доп. 2 — закрытый контур (локальные LLM) | PARTIAL | смена провайдера настройкой, профиль `ollama`; живой запуск модели отложен |
+| Доп. 3 — шифрование и маскирование | DONE | 3.5, `docs/SECURITY.md` |
+| Доп. 4 — история и логирование | DONE | 3.5; события запуска хранятся в `run_events` |
+| Презентация (6 пунктов) | DONE | `docs/PRESENTATION_NOTES.md` |
+
+### 3.7. Фичи команды (prompt.md §12А)
+
+| Пункт | Статус | Где | Подтверждение |
+| --- | --- | --- | --- |
+| 12А.1 Контекст diff, merge-base, три точки | DONE | `analyzers/diff/git.py`, `hunks.py` | `tests/unit/test_diff_git.py`, `test_diff_hunks.py` |
+| 12А.1 Классификация new/existing (переименования, whitespace, SCA, межфайловые) | DONE | `classifier.py`, `sca_diff.py`, `blame.py` | `tests/unit/test_diff_classifier.py` |
+| 12А.1 Нода `scanner.diff`, вердикт, `report_only` | DONE | `nodes/scanners/diff_scan.py` | `tests/nodes/test_diff_node.py` |
+| 12А.1 Возврат в пайплайн 200/422, комментарий в PR | DONE | `api/ci.py`, `ci/status.py` | `tests/ci/test_diff_aware_ci.py`; демо шаг 9 |
+| 12А.2 Формула, детерминированность, LOC-нормировка | DONE | `scoring/formula.py` | `tests/unit/test_scoring.py` |
+| 12А.2 История, тренд, дельта по `scanner_set_signature` | DONE | `scoring/trend.py`, post-run hook | `tests/api/test_score_api.py`; демо шаг 10 (+4) |
+| 12А.2 Priority Fix List | DONE | `scoring/priority.py` | `tests/unit/test_scoring.py`; демо шаг 10 |
+| 12А.2 AI-план на спринт с валидатором чисел | PARTIAL | `scoring/sprint_plan.py` | `tests/api/test_score_api.py` (подсаженный неверный `projected_score` исправлен); вживую — только детерминированный план |
+| 12А.2 UI: график, дельта, дашборд | DONE | `components/score.tsx` | скриншоты (фаза 6А.2, 7) |
+| 12А.3 Метаданные `autofix`, покрытие | DONE | `autofix/coverage.py` | `GET /api/autofix/coverage`: 27 из 30 правил |
+| 12А.3 Контекст, 7 шагов валидации, самопроверка | DONE | `autofix/context.py`, `validator.py` | `tests/api/test_autofix_api.py` (5 reject-кейсов, repair) |
+| 12А.3 SCA-bump (детерминированный) | DONE | `autofix/sca_bump.py` | `tests/unit/test_autofix_sca.py` (11) |
+| 12А.3 PR/MR через REST, идемпотентность, запреты | DONE | `autofix/pr/scm.py`, `pull_request.py` | `tests/api/test_autofix_api.py`; демо шаг 11 |
+| 12А.3 Нода `ai.autofix` | DONE | `nodes/ai/autofix.py` | `tests/nodes/test_autofix_node.py` |
+| 12А.3 Восстановление исходников | PARTIAL | `autofix/source.py` | режимы path/upload покрыты тестами; `git_url` на точном коммите — автотестом не покрыт |
+| 12А.3 LLM-фикс на реальной модели | PARTIAL | — | демо на помеченном локальном endpoint; реальная модель не запускалась |
+
+## 4. Ограничения и непроверенное
+
+- **Реальная LLM не запускалась.** В окружении разработки не было Ollama и LM Studio. Загрузку Ollama в Compose
+  пользователь отложил: модель будет на другом компьютере. AI-слой (отчёт, валидатор, генерация сценариев, AI-план,
+  AutoFix) проверен контрактными тестами на локальных HTTP-серверах в форматах OpenAI и Ollama, в демо без модели
+  работает детерминированный fallback. **Полезность рекомендаций конкретной модели не измерена.**
+- **Реальные Telegram, SMTP, GitHub и GitLab не проверялись.** Интеграции проверены на mock-серверах, повторяющих их
+  HTTP-API (`scripts/mock_services.py`, `scripts/mock_scm.py`). Клонирование публичного репозитория организаторов
+  с GitHub проверено вживую.
+- **Восстановление `git_url` для PR AutoFix** на точном коммите реализовано, но автотестом не покрыто.
+- **Rate limit входа** хранится в памяти процесса. За nginx фактически действует на e-mail (см. `docs/SECURITY.md`).
+- **SAST — только Kotlin/Spring**, SCA — Gradle (Kotlin DSL, Groovy DSL, version catalog, lockfile) по локальному
+  справочнику.
+- **Скрытая вариация** организаторов недоступна. Устойчивость оценена на трёх собственных мутантах с теми же классами
+  проблем (раздел 2).
+- **Противоречия источников.** `prompt.md` требует все три канала уведомлений, AutoFix, score и diff-aware, а PDF —
+  один канал и три звёздочки. Реализовано по более строгому `prompt.md`. PDF разрешает готовые workflow-движки
+  (Temporal, Flowable). Команда сознательно написала собственный движок на asyncio с очередью в PostgreSQL: меньше
+  инфраструктуры, полный контроль над событиями для живой визуализации, IF/ELSE-пропусками и маскированием данных
+  между нодами.
+- **Демо-скрипты diff-aware и AutoFix** работают на dev-стеке: они поднимают собственный mock GitHub и временные
+  git-репозитории.
+
+## 5. Планы развития
+
+- Подключить локальную модель (Ollama, `qwen2.5` / `llama3.1`) и измерить качество объяснений и AutoFix на
+  эталонном наборе: доля принятых пунктов, выдуманные идентификаторы, применимость патчей.
+- SAST для Java и TypeScript, SCA для Maven и npm. Импорт OSV / GitHub Advisory в локальный справочник по расписанию.
+- SARIF-экспорт и загрузка в GitHub Code Scanning.
+- Подавления находок с обоснованием и сроком действия, ревью подавлений.
+- SSO (OIDC/LDAP), распределённый rate limit (Redis/PostgreSQL), Helm-чарт для Kubernetes.
+- Больше каналов (Slack, Mattermost, Jira) — новыми нодами без изменения движка.

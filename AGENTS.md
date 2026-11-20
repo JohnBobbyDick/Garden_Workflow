@@ -57,8 +57,19 @@
 - `@xyflow/react` v13: нет `applyNodeChanges` — изменения применяются `changes.applyTo(nodes)`; нет пропа `colorMode`.
 - Windows без прав на symlink: тесты используют `symlink_or_skip` из `backend/tests/conftest.py`.
 - Тестовое окружение изолируется в `backend/tests/conftest.py` (свой `APP_DATA_DIR`, ключи).
+- macOS: Playwright — `PW_CHANNEL=chrome npx playwright test` (системный Chrome); после `git pull` синхронизировать
+  окружение (`uv pip install -e ".[dev]"`, `npm ci`). `ruff` запускать из `backend/` (там конфиг), иначе `--fix` снимает нужные `noqa`.
+- `git ls-tree` в подкаталоге выдаёт пути от cwd — для `git show <rev>:<path>` нужен `--full-name`.
 - Официальный порог выгрузки `submission.json`: `OFFICIAL_MIN_CONFIDENCE = 0.6`.
+- `Masker.mask()` эвристически маскирует `password…[:=] значение` — на коде это ломает `val password: String`.
+  Для проверенного кода (AutoFix `new_snippet`, «+»-строки патча) использовать `Masker.mask_known()`.
+- Фикстура `scm` (tests/ci) делает `get_settings.cache_clear()` — запрашивать её **до** фикстур, которые патчат
+  `get_settings()` (например `project_dir`), иначе патч теряется.
 - Реальной LLM в окружении нет (Ollama/LM Studio не установлены) — AI проверен контрактными тестами на локальных HTTP-серверах.
+- Docker: на этой машине порт 8080 занят посторонним traefik — для Compose `FRONTEND_PORT=8088` (+`APP_PUBLIC_URL`,
+  `APP_CORS_ORIGINS`). Compose-backend занимает :8000 — перед `npx playwright test` делать `docker compose down`.
+- Свежий клон: каталог SQLite создаёт `app.db.ensure_sqlite_dir` (и в `alembic/env.py`) — не убирать.
+- `docs/API.md` генерируется (`make api-doc`); новый эндпоинт → русская строка в `scripts/gen_api_doc.py::RU`.
 
 ## Процесс
 Работа по фазам из `todo.md` с гейтами (тесты зелёные + ручная проверка на запущенном стеке), TDD (тест → красный →

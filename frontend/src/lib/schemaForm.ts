@@ -50,6 +50,20 @@ export function fieldsFromSchema(schema: JsonSchema, lang: Lang): FieldDef[] {
   })
 }
 
+const UNFILLED_PARAM = /^\{\{param:[^}]+\}\}$/
+
+/** Labels of fields that cannot be guessed (tokens, chat ids, repo paths) and are still empty or an unfilled template parameter. */
+export function missingUserInput(schema: JsonSchema, config: Record<string, unknown>, lang: Lang): string[] {
+  return fieldsFromSchema(schema, lang)
+    .filter((f) => {
+      if (!f.needsUser) return false
+      const v = config[f.key]
+      return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
+        || (typeof v === 'string' && UNFILLED_PARAM.test(v))
+    })
+    .map((f) => f.label)
+}
+
 const MSG = {
   ru: { required: 'обязательное поле', min: 'не меньше {n}', max: 'не больше {n}', number: 'нужно число',
     integer: 'нужно целое число', minItems: 'добавьте хотя бы {n}', pattern: 'неверный формат', minLength: 'слишком коротко' },

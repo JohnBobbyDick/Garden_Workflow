@@ -88,6 +88,28 @@ class DbRunServices:
                                       data=self.masker.mask_obj(finding_dict(f))))
             s.commit()
 
+    def previous_score(self, signature: str) -> int | None:
+        """Score of the previous successful run of the same project with the same scanner set (for the delta)."""
+        from app.scoring.service import previous_run
+
+        with self.db.session() as s:
+            run = s.get(m.Run, self.run_id)
+            prev = previous_run(s, run, signature) if run is not None else None
+            return prev.score if prev is not None else None
+
+    def annotate_findings(self, updates: dict[str, dict[str, Any]]) -> None:
+        """Attach diff-aware fields (diff_status, diff_hunk, introduced_in_commit, author...) to recorded findings."""
+        if not updates:
+            return
+        with self._lock, self.db.session() as s:
+            rows = s.scalars(select(m.FindingRecord).where(m.FindingRecord.run_id == self.run_id,
+                                                           m.FindingRecord.finding_id.in_(list(updates))))
+            for rec in rows:
+                upd = updates[rec.finding_id]
+                rec.diff_status = upd.get("diff_status", rec.diff_status)
+                rec.data = {**(rec.data or {}), **self.masker.mask_obj(upd)}
+            s.commit()
+
     def update_run(self, **fields: Any) -> None:
         bad = set(fields) - RUN_FIELDS
         if bad:
@@ -144,6 +166,33 @@ class DbRunServices:
             s.add(row)
             s.commit()
             return row.id
+
+    def save_autofix(self, node_id: str, finding, outcome) -> str:  # noqa: ANN001
+        v = outcome.validation
+        mk = outcome.masker or self.masker
+        with self._lock, self.db.session() as s:
+            row = m.Autofix(run_id=self.run_id, finding_id=finding.id, kind=outcome.kind, provider=outcome.provider,
+                            model=outcome.model, status=v.status, reason=mk.mask(v.reason) if v.reason else None,
+                            patch=outcome.patch or None, proposal={**outcome.stored_proposal(), "node_id": node_id},
+                            steps=mk.mask_obj(v.steps))
+            s.add(row)
+            s.commit()
+            return row.id
+
+    async def create_autofix_pr(self, autofix_id: str, finding, target_branch: str | None,  # noqa: ANN001
+                                note: str | None) -> str:
+        from app.autofix.pull_request import create_pr
+        from app.core.audit import audit
+
+        run_url = f"{get_settings().public_url.rstrip('/')}/runs/{self.run_id}"
+        with self.db.session() as s:
+            run, af = s.get(m.Run, self.run_id), s.get(m.Autofix, autofix_id)
+            res = await create_pr(s, run, af, finding, run_url, target_branch, note)
+            af.pr_url = res.url
+            audit(s, "autofix.pull_request", user_id=None, workspace_id=self.workspace_id, target=af.id,
+                  details={"url": res.url, "branch": res.branch, "created": res.created, "by": "workflow"})
+            s.commit()
+            return res.url
 
     def workspace_settings(self) -> dict[str, Any]:
         with self.db.session() as s:

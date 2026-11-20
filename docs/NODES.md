@@ -67,9 +67,10 @@ class Shout(BaseNode):
 
 - **Триггеры**: `trigger.manual`, `trigger.schedule`, `trigger.webhook`
 - **Источник кода**: `source.repo`
-- **Сканеры**: `scanner.sast`, `scanner.sca`, `scanner.secrets`
+- **Сканеры**: `scanner.diff`, `scanner.sast`, `scanner.sca`, `scanner.secrets`
 - **Логика**: `logic.compare`, `logic.if_else`, `logic.merge`, `logic.regex`, `logic.set_value`, `logic.severity_filter`
-- **AI**: `ai.report`
+- **Анализ**: `analysis.security_score`
+- **AI**: `ai.autofix`, `ai.report`
 - **Вывод**: `output.ci_gate`, `output.report_export`
 - **Уведомления**: `notify.smtp`, `notify.telegram`, `notify.webhook`
 
@@ -137,6 +138,27 @@ class Shout(BaseNode):
 | `access_token` | credential |  | Токен доступа (приватный репозиторий) (ссылка на секрет хранилища) |
 
 ## Сканеры
+
+### `scanner.diff` — Diff-aware: только новые находки
+
+Делит готовые находки на новые (появились в этом diff) и существующие. SECRET/SAST — по изменённым строкам (git diff от merge-base, три точки), SCA — по версиям в base и head. Вердикт FAIL, если есть новая находка не ниже порога.
+
+| Порт | Направление | Тип | Обязательный | Несколько |
+|---|---|---|---|---|
+| `repo` (Код (git/diff)) | вход | `repo` | да | нет |
+| `findings` (Находки) | вход | `findings` | да | нет |
+| `new_findings` (Новые) | выход | `findings` | — | — |
+| `existing_findings` (Существующие) | выход | `findings` | — | — |
+| `verdict` (Вердикт) | выход | `json` | — | — |
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `base_ref` | string | "main" | Базовая ветка. Для ручного запуска и push без base (по умолчанию main) |
+| `threshold` | LOW \| MEDIUM \| HIGH \| CRITICAL | "CRITICAL" | Порог блокировки |
+| `report_only` | boolean | false | Только отчёт (не блокировать) |
+| `on_missing_diff` | fail \| treat_all_as_new | "fail" | Если нет git/diff-контекста |
+| `ignore_whitespace` | boolean | true | Игнорировать пробельные изменения |
+| `globs` | array<string> | ["*.kt", "*.kts", "*.gradle", "*.properties", "*.yml", "*.yaml", "*.toml", "gradle.lockfile"] | Файлы diff (glob) |
 
 ### `scanner.sast` — SAST Kotlin / Spring
 
@@ -275,7 +297,40 @@ match — есть ли совпадение; extract — извлечь сов�
 | `classes` | array<string> | [] | Классы (пусто — все) |
 | `min_confidence` | number | 0.0 | Минимальная уверенность |
 
+## Анализ
+
+### `analysis.security_score` — Security Score
+
+Детерминированная оценка 0–100: штраф по критичности и новизне находок, нормированный на размер проекта; дельта к прошлому запуску и Priority Fix List. Для if_else (score.value, score.delta) и шаблонов уведомлений. Метрика внутреннего тренда, не рейтинг между проектами.
+
+| Порт | Направление | Тип | Обязательный | Несколько |
+|---|---|---|---|---|
+| `findings` (Находки) | вход | `findings` | да | нет |
+| `repo` (Код (LOC)) | вход | `repo` | нет | нет |
+| `out` (Score) | выход | `json` | — | — |
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `top_n` | integer | 10 | Размер Priority Fix List |
+
 ## AI
+
+### `ai.autofix` — AI AutoFix
+
+Готовит патч для найденных проблем: детерминированное обновление уязвимой зависимости или исправление от LLM. Каждый патч проходит валидатор (схема, совпадение с файлом, без секретов, синтаксис, самопроверка всеми анализаторами). По желанию открывает PR/MR — только в репозиторий с allow_write.
+
+| Порт | Направление | Тип | Обязательный | Несколько |
+|---|---|---|---|---|
+| `in` (Находки) | вход | `findings` | да | нет |
+| `out` (Результаты AutoFix) | выход | `json` | — | — |
+
+| Параметр | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `auto_create_pr` | boolean | false | Создавать PR/MR автоматически. только для validated и репозитория с allow_write |
+| `max_findings` | integer | 3 | Максимум находок |
+| `min_severity` | LOW \| MEDIUM \| HIGH \| CRITICAL | "HIGH" | Минимальная критичность |
+| `target_branch` | string |  | Целевая ветка PR. пусто — base-ветка |
+| `pr_template` | string |  | Шаблон описания PR (добавляется в начало) |
 
 ### `ai.report` — AI-объяснение
 

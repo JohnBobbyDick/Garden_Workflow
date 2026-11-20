@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from app import models as m
+from app.autofix.source import purge_expired_uploads
 from app.db import Database, get_db
 from app.engine import runs as run_service
 from app.engine.events import emit_event
@@ -69,6 +70,8 @@ class Worker:
             try:
                 if loop.time() - last_recover > 30:
                     self.recover_stale()
+                    with self.db.session() as s:
+                        purge_expired_uploads(s)  # encrypted archives past APP_UPLOAD_RETENTION_HOURS
                     last_recover = loop.time()
                 scheduler_tick(self.db)
                 while len(self._tasks) < self.concurrency:

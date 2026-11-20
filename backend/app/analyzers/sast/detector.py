@@ -83,11 +83,13 @@ REMEDIATION = {
     "csrf-disabled": "Не отключать CSRF при сессионной/форменной аутентификации либо перейти на stateless-токены.",
 }
 
-AUTOFIX = {"sql-injection": "llm", "tls-verification": "deterministic", "credentialed-cors": "deterministic",
+# AutoFix applicability (12A.3): SAST fixes are code changes proposed by the LLM and accepted only after the
+# validator's self-check; "deterministic" is reserved for SCA version bumps (no SAST rule has a fixed rewrite);
+# "none" = architectural decision (serialization format, CSRF model of the app) — recommendations only.
+AUTOFIX = {"sql-injection": "llm", "tls-verification": "llm", "credentialed-cors": "llm",
            "route-authorization": "llm", "object-authorization": "llm", "hardcoded-credentials": "llm",
-           "unsafe-deserialization": "llm", "path-traversal": "llm", "weak-crypto": "deterministic",
-           "missing-input-validation": "deterministic", "insecure-endpoint": "deterministic",
-           "csrf-disabled": "deterministic"}
+           "unsafe-deserialization": "none", "path-traversal": "llm", "weak-crypto": "llm",
+           "missing-input-validation": "llm", "insecure-endpoint": "llm", "csrf-disabled": "none"}
 
 DB_TYPES = {"JdbcTemplate", "NamedParameterJdbcTemplate", "JdbcOperations", "NamedParameterJdbcOperations",
             "EntityManager", "Statement", "PreparedStatement", "Connection", "JdbcClient", "DSLContext", "Session",

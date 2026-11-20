@@ -88,6 +88,7 @@ class Finding(BaseModel):
     diff_hunk: str | None = None
     introduced_in_commit: str | None = None
     author: str | None = None
+    version_changed: bool | None = None  # SCA: same vulnerability as in base, but the version moved
     # remediation automation
     autofix: Literal["llm", "deterministic", "none"] = "none"
     # emitted by an analyzer node

@@ -5,15 +5,23 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
+from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
+
+
+def ensure_sqlite_dir(url: str) -> None:
+    """A file-based SQLite database needs its directory (``backend/data`` does not exist in a fresh checkout)."""
+    if url.startswith("sqlite:///") and ":memory:" not in url:
+        Path(url.removeprefix("sqlite:///").split("?", 1)[0]).parent.mkdir(parents=True, exist_ok=True)
 
 
 class Database:
     def __init__(self, url: str) -> None:
         self.url = url
         self.is_sqlite = url.startswith("sqlite")
+        ensure_sqlite_dir(url)
         kwargs: dict = {"future": True, "pool_pre_ping": True}
         if self.is_sqlite:
             kwargs["connect_args"] = {"check_same_thread": False, "timeout": 30}
@@ -62,12 +70,7 @@ _override: Database | None = None
 def _default_db() -> Database:
     from app.config import get_settings
 
-    settings = get_settings()
-    if settings.database_url.startswith("sqlite:///"):
-        from pathlib import Path
-
-        Path(settings.database_url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
-    return Database(settings.database_url)
+    return Database(get_settings().database_url)
 
 
 def get_db() -> Database:

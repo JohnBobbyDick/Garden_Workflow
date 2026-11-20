@@ -96,12 +96,26 @@ def create_app() -> FastAPI:
                        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
                        allow_headers=["Authorization", "Content-Type", "Last-Event-ID"], max_age=600)
 
-    from app.api import ai, auth, ci, credentials, nodes, projects, runs, templates, webhooks, workflows, workspaces
+    from app.api import (
+        ai,
+        auth,
+        autofix,
+        ci,
+        credentials,
+        nodes,
+        projects,
+        runs,
+        scoring,
+        templates,
+        webhooks,
+        workflows,
+        workspaces,
+    )
     from app.api import settings as settings_api
 
     for r in (auth.router, workspaces.router, projects.router, nodes.router, workflows.router, runs.router,
               credentials.router, settings_api.router, ai.router, templates.router, ci.router,
-              webhooks.router):
+              webhooks.router, scoring.router, autofix.router):
         app.include_router(r, prefix=API_PREFIX)
 
     @app.get("/api/healthz", tags=["health"])

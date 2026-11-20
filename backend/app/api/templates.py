@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import models as m
@@ -91,9 +91,6 @@ def list_templates(q: str | None = None, category: str | None = None, min_rating
         stmt = stmt.where(m.Template.author_id == user.id)
     else:
         stmt = stmt.where(m.Template.published.is_(True), m.Template.hidden.is_(False))
-    if q:
-        like = f"%{q.lower()}%"
-        stmt = stmt.where(or_(func.lower(m.Template.name).like(like), func.lower(m.Template.description).like(like)))
     if category:
         stmt = stmt.where(m.Template.category == category)
     if min_rating is not None:
@@ -106,11 +103,10 @@ def list_templates(q: str | None = None, category: str | None = None, min_rating
     order = {"popular": m.Template.usage_count.desc(), "rating": m.Template.rating_avg.desc()}.get(
         sort, m.Template.created_at.desc())
     rows = list(s.scalars(stmt.order_by(order, m.Template.created_at.desc())))
-    if q:  # tags are JSON: match in Python so search covers name, description and tags
-        ql = q.lower()
-        extra = s.scalars(select(m.Template).where(m.Template.published.is_(True), m.Template.hidden.is_(False)))
-        ids = {t.id for t in rows}
-        rows += [t for t in extra if t.id not in ids and any(ql in str(tag).lower() for tag in (t.tags or []))]
+    if q:  # matched in Python: tags are JSON and SQLite lower() folds only ASCII (Cyrillic must be case-insensitive)
+        ql = q.casefold()
+        rows = [t for t in rows if ql in (t.name or "").casefold() or ql in (t.description or "").casefold()
+                or any(ql in str(tag).casefold() for tag in (t.tags or []))]
     return {"templates": [template_out(s, t, user) for t in rows], "categories": list(m.TEMPLATE_CATEGORIES)}
 
 

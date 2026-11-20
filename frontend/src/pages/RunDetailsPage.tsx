@@ -8,6 +8,8 @@ import { useAiReport, useCatalog, useInvalidate, useRun, useRunFindings } from '
 import type { AIReportResponse, Finding, Run } from '../api/types'
 import { GateBadge, SeverityBadge, StatusBadge } from '../components/domain'
 import { Page } from '../components/layout/AppShell'
+import { AutofixPanel } from '../components/autofix'
+import { RunScoreTab } from '../components/score'
 import { Badge, Button, Card, CopyButton, DiffView, EmptyState, ErrorState, Input, PageHeader, Select, Skeleton, Tabs } from '../components/ui'
 import { Icon } from '../components/ui/Icon'
 import { EditorContext } from '../editor/EditorContext'
@@ -19,7 +21,7 @@ import { fmtDate, fmtDuration, SEVERITIES } from '../lib/format'
 import { toast } from '../store/toast'
 
 const nodeTypes = { aisw: NodeCard }
-type Tab = 'graph' | 'findings' | 'ai' | 'logs' | 'artifacts'
+type Tab = 'graph' | 'findings' | 'score' | 'ai' | 'logs' | 'artifacts'
 
 function where(f: Finding) {
   return f.category === 'SCA' ? `${f.group}:${f.artifact}:${f.version}` : `${f.path}:${f.line}${f.end_line && f.end_line !== f.line ? `–${f.end_line}` : ''}`
@@ -55,19 +57,36 @@ function RunGraph({ run, live }: { run: Run; live: ReturnType<typeof useRunEvent
   )
 }
 
-function FindingsTable({ findings }: { findings: Finding[] }) {
+function VerdictBadge({ verdict }: { verdict: Record<string, unknown> | null }) {
+  const { t } = useTranslation()
+  const v = verdict?.verdict as string | undefined
+  if (v !== 'PASS' && v !== 'FAIL') return null
+  const reason = verdict?.would_fail_reason as string | undefined
+  return <Badge tone={v === 'PASS' ? 'success' : 'danger'} title={`${t('run.verdictNew')}: ${verdict?.new_count ?? 0} · ${t('run.diffExisting')}: ${verdict?.existing_count ?? 0}${reason ? ` · ${reason}` : ''}`}>
+    diff: {v}</Badge>
+}
+
+function FindingsTable({ findings, runId }: { findings: Finding[]; runId: string }) {
   const { t } = useTranslation()
   const [cat, setCat] = useState('')
   const [sev, setSev] = useState('')
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<'severity' | 'path'>('severity')
   const [open, setOpen] = useState<string | null>(null)
+  const hasDiff = findings.some((f) => f.diff_status)
+  const [diff, setDiff] = useState<'all' | 'new' | 'existing'>('all')
   const rank = (s: string) => SEVERITIES.indexOf(s as never)
-  const list = findings.filter((f) => (!cat || f.category === cat) && (!sev || f.severity === sev)
+  const counts = { new: findings.filter((f) => f.diff_status === 'new').length, existing: findings.filter((f) => f.diff_status === 'existing').length }
+  const list = findings.filter((f) => (diff === 'all' || f.diff_status === diff) && (!cat || f.category === cat) && (!sev || f.severity === sev)
     && (!q || `${f.title} ${f.class} ${f.path} ${f.advisory_id ?? ''}`.toLowerCase().includes(q.toLowerCase())))
     .sort((a, b) => (sort === 'severity' ? rank(a.severity) - rank(b.severity) || a.path.localeCompare(b.path) : a.path.localeCompare(b.path) || a.line - b.line))
   return (
     <>
+      {hasDiff && (
+        <div className="mb-3"><Tabs label={t('run.diffFilter')} value={diff} onChange={setDiff} tabs={[
+          { id: 'new', label: `${t('run.diffNew')} (${counts.new})` }, { id: 'existing', label: `${t('run.diffExisting')} (${counts.existing})` },
+          { id: 'all', label: `${t('common.all')} (${findings.length})` }]} /></div>
+      )}
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-4">
         <Select aria-label={t('run.allCategories')} value={cat} onChange={(e) => setCat(e.target.value)}>
           <option value="">{t('run.allCategories')}</option>
@@ -93,7 +112,7 @@ function FindingsTable({ findings }: { findings: Finding[] }) {
                     aria-expanded={open === f.id} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setOpen(open === f.id ? null : f.id)}>
                     <td><SeverityBadge severity={f.severity} /></td>
                     <td><Badge>{f.category}</Badge></td>
-                    <td><div className="font-medium">{f.title}</div><div className="font-mono text-xs text-muted">{f.class}{f.diff_status ? ` · ${f.diff_status}` : ''}</div></td>
+                    <td><div className="font-medium">{f.title}</div><div className="font-mono text-xs text-muted">{f.class}{f.diff_status === 'new' && <Badge tone="danger" className="ml-1">{t('run.diffNew')}</Badge>}</div></td>
                     <td className="font-mono text-xs">{where(f)}{f.advisory_id && <div className="text-muted">{f.advisory_id}</div>}</td>
                     <td className="tabular-nums">{Math.round(f.confidence * 100)}%{!f.official && <div className="text-[11px] text-warning">{t('run.lowConfidence')}</div>}</td>
                   </tr>
@@ -106,10 +125,14 @@ function FindingsTable({ findings }: { findings: Finding[] }) {
                           {f.cwe && <p className="text-xs text-muted">{f.cwe}</p>}
                           {f.alternate_locations?.length ? <p className="mt-1 text-xs text-muted">{f.alternate_locations.map((l) => `${l.path}:${l.line}`).join(', ')}</p> : null}
                           {f.fixed_versions?.length ? <p className="mt-1 text-xs"><b>{t('run.fixedIn')}:</b> {f.fixed_versions.join(', ')}</p> : null}
+                          {f.diff_status === 'new' && (f.diff_hunk || f.introduced_in_commit) && (
+                            <p className="mt-1 font-mono text-xs text-muted">{f.diff_hunk}{f.introduced_in_commit && <> · {t('run.commit')} {f.introduced_in_commit.slice(0, 7)}</>}{f.author && <> · {f.author}</>}</p>
+                          )}
                           <p className="mt-2 text-sm"><b>{t('run.recommendation')}:</b> {f.remediation}</p>
                         </div>
                         {f.snippet && <div><div className="label">{t('run.snippet')}</div><pre className="overflow-x-auto rounded-lg border border-border bg-surface p-2 font-mono text-xs">{f.snippet}</pre></div>}
                       </div>
+                      <AutofixPanel runId={runId} finding={f} />
                     </td></tr>
                   )}
                 </Fragment>
@@ -217,7 +240,7 @@ export default function RunDetailsPage() {
   return (
     <Page wide>
       <PageHeader
-        title={<span className="flex flex-wrap items-center gap-2">{t('run.title')}: {r.workflow_name ?? r.id.slice(0, 8)} <StatusBadge status={r.status} /> <GateBadge gate={r.gate} /></span>}
+        title={<span className="flex flex-wrap items-center gap-2">{t('run.title')}: {r.workflow_name ?? r.id.slice(0, 8)} <StatusBadge status={r.status} /> <GateBadge gate={r.gate} /><VerdictBadge verdict={r.verdict} /></span>}
         subtitle={`${t(`trigger.${r.trigger_type}`, r.trigger_type)} · ${fmtDate(r.created_at, lang)} · ${t('common.duration')}: ${fmtDuration(r.duration_ms, lang)}`}
         actions={<>
           {!done && <Button icon="stop" variant="danger" onClick={cancel}>{t('runs.cancel')}</Button>}
@@ -234,12 +257,14 @@ export default function RunDetailsPage() {
       </div>
       <Tabs label={t('run.title')} value={tab} onChange={(v) => setParams({ tab: v })} tabs={[
         { id: 'findings', label: t('run.findings'), count: findings.data?.findings.length },
+        ...(r.score !== null && r.score !== undefined ? [{ id: 'score' as Tab, label: `Score ${r.score}` }] : []),
         { id: 'graph', label: t('run.graph') }, { id: 'ai', label: t('run.ai') },
         { id: 'logs', label: t('run.logs'), count: logs.length }, { id: 'artifacts', label: t('run.artifacts') },
       ]} />
       <div className="mt-4">
         {tab === 'graph' && <RunGraph run={r} live={live} />}
-        {tab === 'findings' && (findings.isLoading || !done ? <Skeleton className="h-48" /> : <FindingsTable findings={findings.data?.findings ?? []} />)}
+        {tab === 'findings' && (findings.isLoading || !done ? <Skeleton className="h-48" /> : <FindingsTable runId={r.id} findings={findings.data?.findings ?? []} />)}
+        {tab === 'score' && (done ? <RunScoreTab runId={r.id} /> : <Skeleton className="h-48" />)}
         {tab === 'ai' && (done ? <AiReport runId={r.id} findings={findings.data?.findings ?? []} /> : <Skeleton className="h-48" />)}
         {tab === 'logs' && (logs.length ? (
           <div className="card max-h-[560px] overflow-auto p-3 font-mono text-xs">

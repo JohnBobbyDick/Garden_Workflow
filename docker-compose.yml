@@ -1,0 +1,103 @@
+# AI Security Workflow — full stack.
+#   docker compose up -d --build                     → http://localhost:8080
+#   docker compose --profile mock up -d              → + local Telegram/SMTP/Webhook/GitHub/GitLab mocks (demo offline)
+#   docker compose --profile ollama up -d            → + local LLM (Ollama) on http://localhost:11434
+# Settings come from .env (copy .env.example). Without APP_MASTER_KEY/APP_JWT_SECRET (APP_ENV=dev) the backend
+# generates keys once into the shared `aisw-data` volume (fine for a demo, never for production).
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-dev}
+  APP_DATABASE_URL: postgresql+psycopg://aisw:${POSTGRES_PASSWORD:-aisw}@postgres:5432/aisw
+  APP_MASTER_KEY: ${APP_MASTER_KEY:-}
+  APP_JWT_SECRET: ${APP_JWT_SECRET:-}
+  APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8080}
+  APP_CORS_ORIGINS: ${APP_CORS_ORIGINS:-http://localhost:8080}
+  APP_SCAN_ROOTS: ${APP_SCAN_ROOTS:-/app/fixtures}
+  APP_UPLOAD_RETENTION_HOURS: ${APP_UPLOAD_RETENTION_HOURS:-72}
+  # in-network services that the SSRF guard may reach (mocks, local Ollama); public internet is always allowed
+  APP_SSRF_ALLOW_HOSTS: ${APP_SSRF_ALLOW_HOSTS:-mock:8025,mock:8026,mock:2525,ollama:11434}
+  APP_TELEGRAM_API_BASE: ${APP_TELEGRAM_API_BASE:-https://api.telegram.org}
+  APP_DATA_DIR: /data
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aisw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aisw}
+      POSTGRES_DB: aisw
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aisw -d aisw"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    image: aisw-backend:local
+    command: ["api"]  # alembic upgrade head → uvicorn
+    environment: *backend-env
+    volumes:
+      - aisw-data:/data
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"  # Swagger/debug from this machine only; users go through nginx
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    image: aisw-backend:local
+    command: ["worker"]
+    environment: *backend-env
+    volumes:
+      - aisw-data:/data
+    depends_on:
+      backend: { condition: service_healthy }  # migrations are applied and dev keys exist
+    restart: unless-stopped
+
+  frontend:
+    build: { context: ., dockerfile: frontend/Dockerfile }
+    image: aisw-frontend:local
+    depends_on:
+      backend: { condition: service_healthy }
+    ports:
+      - "${FRONTEND_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  mock:
+    profiles: ["mock"]
+    image: aisw-backend:local
+    command: ["mock"]
+    environment:
+      MOCK_HTTP_PORT: "8025"
+      MOCK_SMTP_PORT: "2525"
+      MOCK_SCM_PORT: "8026"
+    ports:
+      - "8025:8025"   # Telegram Bot API + webhook receiver; GET /_received shows what arrived
+      - "2525:2525"   # SMTP sink
+      - "8026:8026"   # GitHub/GitLab REST mock; GET /_requests
+    depends_on:
+      backend: { condition: service_healthy }
+
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  aisw-data:
+  ollama-data:

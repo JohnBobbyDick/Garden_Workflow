@@ -262,7 +262,7 @@
 - [x] История запусков с фильтрами (workflow, статус, период, инициатор) + сравнение двух запусков
 - [x] Детали запуска: граф с итоговыми статусами, таблица находок с фильтрами/сортировкой, AI-отчёт с diff-фиксами и копированием, индикатор доверия валидатора, логи, артефакты/экспорт
 - [x] Настройки: AI-провайдер с тестом, credentials, allowlist, участники/роли, расписания, язык/тема
-- [ ] (Библиотека шаблонов, Интеграция CI/CD — в фазе 6)
+- [x] Библиотека шаблонов, Интеграция CI/CD (фаза 6)
 
 ### 5.3 Редактор (обязательно всё)
 - [x] Палитра нод по категориям с поиском, drag-and-drop
@@ -271,7 +271,7 @@
 - [x] Боковая панель: форма из JSON Schema (строки, числа, enum, boolean, массивы, селектор credentials, cron-конструктор с человекочитаемым описанием, редактор IF-выражений с подсказками), валидация на лету
 - [x] Контекстное меню (дублировать, удалить, отключить, копировать/вставить), горячие клавиши, множественное выделение, Undo/Redo, копирование фрагмента
 - [x] Автосохранение черновика + явное сохранение, индикатор несохранённого, импорт/экспорт JSON
-- [~] Кнопки «Запустить», «Проверить граф» (подсветка ошибок) — готово; «AI-ассистент» — в фазе 6.3
+- [~] Кнопки «Запусти   ть», «Проверить граф» (подсветка ошибок) — готово; «AI-ассистент» — в фазе 6.3
 - [x] Режим запуска: статусы в реальном времени по SSE (цвета/иконки/спиннер), анимация данных по рёбрам, счётчики, панель логов/входов/выходов, итоговое время
 
 ### 5.4 Тесты
@@ -290,137 +290,137 @@
 ## Фаза 6 — Задачи со звёздочкой (§12)
 
 ### 6.1 Библиотека шаблонов (§12.1)
-- [ ] Публикация: название, описание, категория (Secrets/SAST/SCA/Full Security Audit/CI/CD/Notifications/Custom), теги, версия, автор; вычистка секретов/credential-ссылок/URL репозиториев/chat_id → параметры шаблона (имя, тип, описание, дефолт)
-- [ ] Каталог: карточки, поиск (название/описание/теги), фильтры (категория, рейтинг, автор, избранное, мои), сортировка (новые, популярные, рейтинг)
-- [ ] Просмотр: описание, автор, использования, средний рейтинг, read-only React Flow-превью, список нод и параметров, отзывы
-- [ ] «Использовать»: мастер подстановки параметров, независимая копия, `usage_count++`, `forked_from`, полная редактируемость
-- [ ] Рейтинг 1–5 (одна оценка, можно менять), отзывы (CRUD своих), избранное
-- [ ] Модерация: снять с публикации / обновить версию; скрытие админом
-- [ ] Seed (автор «System»): «Проверка секретов», «SCA зависимостей», «SAST Kotlin/Spring», «Полный аудит + AI + Telegram», «CI gate: упасть на Critical», «Ежедневная проверка + e-mail», «Проверка по webhook + Webhook-уведомление»; `make seed`
-- [ ] API §15 templates; UI страницы каталога, карточки, публикации, избранного
-- [ ] Тесты: публикация → вычистка → поиск/фильтры → использование → правка копии → рейтинг/избранное/отзывы
+- [x] Публикация: название, описание, категория (Secrets/SAST/SCA/Full Security Audit/CI/CD/Notifications/Custom), теги, версия, автор; вычистка секретов/credential-ссылок/URL репозиториев/chat_id → параметры шаблона (имя, тип, описание, дефолт)
+- [x] Каталог: карточки, поиск (название/описание/теги), фильтры (категория, рейтинг, автор, избранное, мои), сортировка (новые, популярные, рейтинг)
+- [x] Просмотр: описание, автор, использования, средний рейтинг, read-only React Flow-превью, список нод и параметров, отзывы
+- [x] «Использовать»: мастер подстановки параметров, независимая копия, `usage_count++`, `forked_from`, полная редактируемость
+- [x] Рейтинг 1–5 (одна оценка, можно менять), отзывы (CRUD своих), избранное
+- [x] Модерация: снять с публикации / обновить версию; скрытие админом
+- [x] Seed (автор «System»): «Проверка секретов», «SCA зависимостей», «SAST Kotlin/Spring», «Полный аудит + AI + Telegram», «CI gate: упасть на Critical», «Ежедневная проверка + e-mail», «Проверка по webhook + Webhook-уведомление»; `make seed`
+- [x] API §15 templates; UI страницы каталога, карточки, публикации, избранного
+- [x] Тесты: публикация → вычистка → поиск/фильтры → использование → правка копии → рейтинг/избранное/отзывы
 
 ### 6.2 CI/CD (§12.2)
-- [ ] API-токены (хэш, показ один раз, отзыв, ограничение по workflow); `GET/POST/DELETE /api-tokens`
-- [ ] `POST /api/v1/ci/runs` (multipart-архив или git_url из allowlist + метаданные), `GET /api/v1/ci/runs/{id}` (статус, gate, severity-сводка, ссылки), `GET /api/v1/ci/runs/{id}/report`; long-poll
-- [ ] `cli/aisw_ci.py` (только stdlib, один файл): пакует, загружает, опрашивает, печатает сводку, пишет `report.md`/`submission.json`, exit 0/1/2
-- [ ] `ci/yaml_generator.py` + `GET /ci/yaml?provider=…&workflow_id=…`: GitHub Actions (push+PR, `fetch-depth: 0`, `secrets.AISW_TOKEN`, `AISW_URL`, `$GITHUB_STEP_SUMMARY`, артефакты, комментарий PR, падение при Critical, инструкция branch protection); GitLab CI (stage, rules push/MR, `GIT_DEPTH: 0`, переменные, артефакты, `allow_failure: false`, комментарий MR, «Pipelines must succeed»)
-- [ ] Вебхуки `POST /api/v1/webhooks/github|gitlab`: подписи (`X-Hub-Signature-256`, `X-Gitlab-Token`), push/PR/MR (opened/synchronize/reopened), сопоставление с `trigger.webhook`, клон из allowlist, идемпотентность по delivery id, лимит тела
-- [ ] Возврат статуса: GitHub Commit Statuses/Checks, GitLab Commit Status (`pending → success/failed` + ссылка)
-- [ ] UI «Интеграция»: генератор YAML с копированием, токены, статус webhook
-- [ ] Тесты: mock GitHub/GitLab (настоящие HTTP-серверы), проверка заголовков/тел/подписей; неверная подпись → 401/403; YAML парсится и содержит триггеры/шаги/gate; CLI реально вызывает тестовый API
+- [x] API-токены (хэш, показ один раз, отзыв, ограничение по workflow); `GET/POST/DELETE /api-tokens`
+- [x] `POST /api/v1/ci/runs` (multipart-архив или git_url из allowlist + метаданные), `GET /api/v1/ci/runs/{id}` (статус, gate, severity-сводка, ссылки), `GET /api/v1/ci/runs/{id}/report`; long-poll
+- [x] `cli/aisw_ci.py` (только stdlib, один файл): пакует, загружает, опрашивает, печатает сводку, пишет `report.md`/`submission.json`, exit 0/1/2
+- [x] `ci/yaml_generator.py` + `GET /ci/yaml?provider=…&workflow_id=…`: GitHub Actions (push+PR, `fetch-depth: 0`, `secrets.AISW_TOKEN`, `AISW_URL`, `$GITHUB_STEP_SUMMARY`, артефакты, комментарий PR, падение при Critical, инструкция branch protection); GitLab CI (stage, rules push/MR, `GIT_DEPTH: 0`, переменные, артефакты, `allow_failure: false`, комментарий MR, «Pipelines must succeed»)
+- [x] Вебхуки `POST /api/v1/webhooks/github|gitlab`: подписи (`X-Hub-Signature-256`, `X-Gitlab-Token`), push/PR/MR (opened/synchronize/reopened), сопоставление с `trigger.webhook`, клон из allowlist, идемпотентность по delivery id, лимит тела
+- [x] Возврат статуса: GitHub Commit Statuses/Checks, GitLab Commit Status (`pending → success/failed` + ссылка)
+- [x] UI «Интеграция»: генератор YAML с копированием, токены, статус webhook
+- [x] Тесты: mock GitHub/GitLab (настоящие HTTP-серверы), проверка заголовков/тел/подписей; неверная подпись → 401/403; YAML парсится и содержит триггеры/шаги/gate; CLI реально вызывает тестовый API
 
 ### 6.3 AI-генерация и чат-правка workflow (§12.3)
-- [ ] `ai/workflow_gen.py`: каталог нод из реестра + правила графа в промпт; ответ по JSON-схеме графа
-- [ ] Валидация `engine/validator.py` + цикл исправления до 3 попыток; при провале показать ошибки, ничего не применять
-- [ ] Секретные поля — только ссылки на credentials/параметры; незаполняемые параметры подсвечены «требуют заполнения»
-- [ ] Отрисовка в редакторе с авто-раскладкой, можно сразу запустить/править
-- [ ] `ai/chat.py` + `POST /ai/workflows/{id}/chat` (+GET истории): операции `add_node/update_node/remove_node/connect/disconnect/set_schedule` → применение к копии → валидация → превью-diff → «Применить/Отклонить» → undo/redo; история хранится с workflow
-- [ ] Эталонные примеры как тест-кейсы: PDF «каждый день в 14:00 … секреты … на почту» → `schedule(0 14 * * *) → source.repo → scanner.secrets → report_export → notify.smtp`; TZ.md «… секреты и зависимости … Critical или High → Telegram» → schedule + secrets + sca + merge + if_else(severity.max ≥ HIGH) + notify.telegram на true
-- [ ] Тесты на локальном OpenAI-compatible сервере (валидный граф, ошибочный → исправление → отказ, чат-операции применить/откатить); живая проверка при наличии LLM
+- [x] `ai/workflow_gen.py`: каталог нод из реестра + правила графа в промпт; ответ по JSON-схеме графа
+- [x] Валидация `engine/validator.py` + цикл исправления до 3 попыток; при провале показать ошибки, ничего не применять
+- [x] Секретные поля — только ссылки на credentials/параметры; незаполняемые параметры подсвечены «требуют заполнения»
+- [x] Отрисовка в редакторе с авто-раскладкой, можно сразу запустить/править
+- [x] `ai/chat.py` + `POST /ai/workflows/{id}/chat` (+GET истории): операции `add_node/update_node/remove_node/connect/disconnect/set_schedule` → применение к копии → валидация → превью-diff → «Применить/Отклонить» → undo/redo; история хранится с workflow
+- [x] Эталонные примеры как тест-кейсы: PDF «каждый день в 14:00 … секреты … на почту» → `schedule(0 14 * * *) → source.repo → scanner.secrets → report_export → notify.smtp`; TZ.md «… секреты и зависимости … Critical или High → Telegram» → schedule + secrets + sca + merge + if_else(severity.max ≥ HIGH) + notify.telegram на true
+- [x] Тесты на локальном OpenAI-compatible сервере (валидный граф, ошибочный → исправление → отказ, чат-операции применить/откатить); живая проверка не выполнена — реальной LLM в окружении нет (запись в REPORT)
 
 ### Гейт фазы 6
-- [ ] Тесты звёздочек зелёные
-- [ ] Демонстрация каждой звёздочки на запущенном стеке
-- [ ] Playwright дополнен сценарием публикации/использования шаблона
-- [ ] REPORT.md, коммит «phase 6: templates, CI/CD, AI workflow generation»
+- [x] Тесты звёздочек зелёные
+- [x] Демонстрация на запущенном стеке: 12.1 и 12.2 вживую (шаблоны, CLI exit 0/1, вебхук → статусы на mock GitHub); 12.3 — только контрактные тесты (нет LLM)
+- [x] Playwright дополнен сценарием публикации/использования шаблона
+- [x] REPORT.md (коммит делает пользователь)
 
 ---
 
 ## Фаза 6А — Фичи команды (§12А), порядок: diff → score → autofix
 
 ### 6А.1 Diff-aware scan (§12А.1)
-- [ ] `analyzers/diff/git.py`: контекст из вебхуков (GitHub PR base/head, push before/after, `000…0` → merge-base; GitLab diff_refs/last_commit), ручной запуск (base по умолчанию `main`), CLI `diff_context` (git diff, `git show base:file` для файлов сборки, `git blame --porcelain`); git через repo_guard, только чтение; fetch base/head sha с `--deepen` до merge-base с лимитом
-- [ ] `on_missing_diff`: `fail` (по умолчанию) | `treat_all_as_new`
-- [ ] `hunks.py`: `git diff --unified=0 --find-renames <merge_base>...<head>` (три точки), globs по умолчанию, переименования, `ignore_whitespace` (`-w --ignore-blank-lines`), приведение путей к корню проекта
-- [ ] `classifier.py`: SECRET/SAST new если диапазон задевает new_lines (или любое `alternate_location` для межфайловых)
-- [ ] `sca_diff.py`: SCA-парсер на base и head, ключ `(group, artifact, advisoryId)`, `version_changed`, `fixed_in_diff`
-- [ ] `blame.py`: `introduced_in_commit`, `author` (не в LLM, не в шаблоны)
-- [ ] Вердикт FAIL/PASS по порогу (дефолт CRITICAL), `report_only`
-- [ ] Нода `scanner.diff` (входы repo+findings; выходы new_findings, existing_findings, verdict)
-- [ ] `output.ci_gate` учитывает verdict (только новые)
-- [ ] `GET /api/v1/ci/runs/{id}/verdict` → 200/422; поле verdict в `GET /ci/runs/{id}`; CLI exit 0/1/2
-- [ ] Commit status `failure` «N new critical»; комментарий в PR/MR с маркером `<!-- aisw-report -->`, upsert без спама; в CLI-режиме — `$GITHUB_STEP_SUMMARY` + публикация при наличии токена
-- [ ] `scripts/demo_diff.sh`: временный git-репо из копии training-project, ветка со сгенерированным AWS-ключом (не EXAMPLE, не коммитится в наш репо) → FAIL + комментарий → удаление ключа → PASS + обновлённый комментарий; 15 старых = existing
-- [ ] UI: бейдж PASS/FAIL, переключатель Новые/Существующие/Все с diff_hunk/коммитом/автором
-- [ ] Тесты: парсер hunks (несколько, новые/удалённые/переименованные/бинарные, whitespace-only), три точки vs две, классификация (изменённая строка, нетронутый файл, многострочный диапазон, межфайловый IDOR), SCA-diff (через gradle.properties → new; без изменений → existing; фикс → fixed_in_diff), пороги/report_only, 200/422, exit codes, upsert комментария GitHub/GitLab, инъекции аргументов git отклоняются
+- [x] `analyzers/diff/git.py`: контекст из вебхуков (GitHub PR base/head, push before/after, `000…0` → merge-base; GitLab diff_refs/last_commit), ручной запуск (base по умолчанию `main`), CLI `diff_context` (git diff, `git show base:file` для файлов сборки, `git blame --porcelain`); git через repo_guard, только чтение; fetch base/head sha с `--deepen` до merge-base с лимитом
+- [x] `on_missing_diff`: `fail` (по умолчанию) | `treat_all_as_new`
+- [x] `hunks.py`: `git diff --unified=0 --find-renames <merge_base>...<head>` (три точки), globs по умолчанию, переименования, `ignore_whitespace` (`-w --ignore-blank-lines`), приведение путей к корню проекта
+- [x] `classifier.py`: SECRET/SAST new если диапазон задевает new_lines (или любое `alternate_location` для межфайловых)
+- [x] `sca_diff.py`: SCA-парсер на base и head, ключ `(group, artifact, advisoryId)`, `version_changed`, `fixed_in_diff`
+- [x] `blame.py`: `introduced_in_commit`, `author` (не в LLM, не в шаблоны)
+- [x] Вердикт FAIL/PASS по порогу (дефолт CRITICAL), `report_only`
+- [x] Нода `scanner.diff` (входы repo+findings; выходы new_findings, existing_findings, verdict)
+- [x] `output.ci_gate` учитывает verdict (только новые)
+- [x] `GET /api/v1/ci/runs/{id}/verdict` → 200/422; поле verdict в `GET /ci/runs/{id}`; CLI exit 0/1/2
+- [x] Commit status `failure` «N new critical»; комментарий в PR/MR с маркером `<!-- aisw-report -->`, upsert без спама; в CLI-режиме — `$GITHUB_STEP_SUMMARY` + публикация при наличии токена
+- [x] `scripts/demo_diff.sh`: временный git-репо из копии training-project, ветка со сгенерированным AWS-ключом (не EXAMPLE, не коммитится в наш репо) → FAIL + комментарий → удаление ключа → PASS + обновлённый комментарий; 15 старых = existing
+- [x] UI: бейдж PASS/FAIL, переключатель Новые/Существующие/Все с diff_hunk/коммитом/автором
+- [x] Тесты: парсер hunks (несколько, новые/удалённые/переименованные/бинарные, whitespace-only), три точки vs две, классификация (изменённая строка, нетронутый файл, многострочный диапазон, межфайловый IDOR), SCA-diff (через gradle.properties → new; без изменений → existing; фикс → fixed_in_diff), пороги/report_only, 200/422, exit codes, upsert комментария GitHub/GitLab, инъекции аргументов git отклоняются
 
 ### 6А.2 Security Score (§12А.2)
-- [ ] `scoring/formula.py`: penalty = Σ weight×novelty (по confidence ≥ порога), weight 10/5/2/1, novelty 1.5/1.0, S = S0 × max(1, sqrt(LOC/1000)), score = round(100·exp(−penalty/S)); S0=50 по умолчанию; калибровка на учебном наборе и мутантах; параметры в настройках workspace; `score_formula_version`
-- [ ] Детерминированность и независимость от порядка
-- [ ] `trend.py`: score, delta (к предыдущему успешному с той же `scanner_set_signature`), findings_by_severity, verdict, loc, commit; МНК-тренд 7/30 дней, «недостаточно данных» при <3 точек; маркеры смены формулы/набора сканеров
-- [ ] `priority.py`: priority = weight×novelty/fix_effort; fix_effort из LLM (валидируется) или таблицы по class; источник ai/default; ожидаемый +score детерминированно (накопительно для топ-N)
-- [ ] AI-план на спринт: схема `{summary, plan, defer, projected_score}`; валидатор id; пересчёт projected_score, расхождение >1 → замена + `corrected_numbers`; фильтр CVE; fallback без LLM с `ai_generated: false`
-- [ ] Score считается сервисом в конце каждого запуска с находками; нода `analysis.security_score` для графа
-- [ ] API: `GET /projects/{id}/score/history?period=`, `GET /runs/{id}/score`, `POST /runs/{id}/sprint-plan`; `/dashboard` с score/трендом/топ-3
-- [ ] UI: Dashboard (score + дельта + тренд, график с маркерами коммитов, топ-3, карточка AI-плана); вкладка Score в деталях запуска; оговорка «метрика внутреннего тренда»
-- [ ] `docs/TEAM_FEATURES.md`: формула и калибровка
-- [ ] Тесты: ручные примеры, детерминированность, порядок, LOC, novelty, регрессия, ожидаемый +score, валидатор AI-плана (неверный projected_score → исправлен; неизвестный id → отброшен), fallback
+- [x] `scoring/formula.py`: penalty = Σ weight×novelty (по confidence ≥ порога), weight 10/5/2/1, novelty 1.5/1.0, S = S0 × max(1, sqrt(LOC/1000)), score = round(100·exp(−penalty/S)); S0=50 по умолчанию; калибровка на учебном наборе и мутантах; параметры в настройках workspace; `score_formula_version`
+- [x] Детерминированность и независимость от порядка
+- [x] `trend.py`: score, delta (к предыдущему успешному с той же `scanner_set_signature`), findings_by_severity, verdict, loc, commit; МНК-тренд 7/30 дней, «недостаточно данных» при <3 точек; маркеры смены формулы/набора сканеров
+- [x] `priority.py`: priority = weight×novelty/fix_effort; fix_effort из LLM (валидируется) или таблицы по class; источник ai/default; ожидаемый +score детерминированно (накопительно для топ-N)
+- [x] AI-план на спринт: схема `{summary, plan, defer, projected_score}`; валидатор id; пересчёт projected_score, расхождение >1 → замена + `corrected_numbers`; фильтр CVE; fallback без LLM с `ai_generated: false`
+- [x] Score считается сервисом в конце каждого запуска с находками; нода `analysis.security_score` для графа
+- [x] API: `GET /projects/{id}/score/history?period=`, `GET /runs/{id}/score`, `POST /runs/{id}/sprint-plan`; `/dashboard` с score/трендом/топ-3
+- [x] UI: Dashboard (score + дельта + тренд, график с маркерами коммитов, топ-3, карточка AI-плана); вкладка Score в деталях запуска; оговорка «метрика внутреннего тренда»
+- [x] `docs/TEAM_FEATURES.md`: формула и калибровка
+- [x] Тесты: ручные примеры, детерминированность, порядок, LOC, novelty, регрессия, ожидаемый +score, валидатор AI-плана (неверный projected_score → исправлен; неизвестный id → отброшен), fallback
 
 ### 6А.3 AI AutoFix (§12А.3)
-- [ ] Метаданные `autofix` у каждого правила; покрытие «N из M» считается из метаданных
-- [ ] `autofix/sca_bump.py`: детерминированный bump до ближайшей fixedVersion в месте определения версии (литерал, val, gradle.properties, catalog, extra) + правка lockfile + пометка про `--write-locks`
-- [ ] `autofix/context.py`: правило, сниппет ±10, объемлющая функция/класс (tree-sitter, лимит токенов), связанные функции по графу вызовов; всё маскировано; ответ `{file, start_line, end_line, old_snippet, new_snippet, explanation, requires_config}`
-- [ ] `autofix/validator.py` (чеклист в UI): схема → файл/строки → `old_snippet` совпадает с маскированным файлом (маски сопоставляются по позициям) → `new_snippet` без масок/секретов/новых литералов-секретов → применение к копии → tree-sitter без новых ERROR (без компиляции/Gradle) → самопроверка всеми тремя анализаторами (находка исчезла, новых нет) → validated/rejected; одна повторная попытка
-- [ ] `autofix/pr/github.py`: refs → contents (sha blob) → pulls; `autofix/pr/gitlab.py`: branches → commits → merge_requests; идемпотентность; без auto-merge; только `allow_write=true`; токен `repo_write_token`; описание PR по шаблону, label `security-autofix`; аудит
-- [ ] Для организаторов/архивов — diff в UI + скачивание `.patch`
-- [ ] Восстановление исходников на точном коммите или из зашифрованного архива с TTL `APP_UPLOAD_RETENTION_HOURS` (72)
-- [ ] Таблица `autofixes`; нода `ai.autofix`; API `POST /runs/{id}/findings/{fid}/autofix`, `GET /autofixes/{id}`, `GET /autofixes/{id}/patch`, `POST /autofixes/{id}/pull-request`
-- [ ] UI: кнопка AutoFix, чеклист, diff было/стало, requires_config, «Создать PR» (только при allow_write), «Скачать .patch», покрытие правил
-- [ ] Тесты на mock LLM: корректный → validated; нет old_snippet → reject; не убирает находку → reject; добавляет находку → reject; ломает синтаксис → reject; секрет в new_snippet → reject; SCA-bump для каждой формы версии; PR на mock GitHub/GitLab (последовательность, заголовки, тела, идемпотентность); `allow_write=false` → 403; маски не попадают в тело PR
+- [x] Метаданные `autofix` у каждого правила; покрытие «N из M» считается из метаданных
+- [x] `autofix/sca_bump.py`: детерминированный bump до ближайшей fixedVersion в месте определения версии (литерал, val, gradle.properties, catalog, extra) + правка lockfile + пометка про `--write-locks`
+- [x] `autofix/context.py`: правило, сниппет ±10, объемлющая функция/класс (tree-sitter, лимит токенов), связанные функции по графу вызовов; всё маскировано; ответ `{file, start_line, end_line, old_snippet, new_snippet, explanation, requires_config}`
+- [x] `autofix/validator.py` (чеклист в UI): схема → файл/строки → `old_snippet` совпадает с маскированным файлом (маски сопоставляются по позициям) → `new_snippet` без масок/секретов/новых литералов-секретов → применение к копии → tree-sitter без новых ERROR (без компиляции/Gradle) → самопроверка всеми тремя анализаторами (находка исчезла, новых нет) → validated/rejected; одна повторная попытка
+- [x] `autofix/pr/github.py`: refs → contents (sha blob) → pulls; `autofix/pr/gitlab.py`: branches → commits → merge_requests; идемпотентность; без auto-merge; только `allow_write=true`; токен `repo_write_token`; описание PR по шаблону, label `security-autofix`; аудит
+- [x] Для организаторов/архивов — diff в UI + скачивание `.patch`
+- [x] Восстановление исходников на точном коммите или из зашифрованного архива с TTL `APP_UPLOAD_RETENTION_HOURS` (72)
+- [x] Таблица `autofixes`; нода `ai.autofix`; API `POST /runs/{id}/findings/{fid}/autofix`, `GET /autofixes/{id}`, `GET /autofixes/{id}/patch`, `POST /autofixes/{id}/pull-request`
+- [x] UI: кнопка AutoFix, чеклист, diff было/стало, requires_config, «Создать PR» (только при allow_write), «Скачать .patch», покрытие правил
+- [x] Тесты на mock LLM: корректный → validated; нет old_snippet → reject; не убирает находку → reject; добавляет находку → reject; ломает синтаксис → reject; секрет в new_snippet → reject; SCA-bump для каждой формы версии; PR на mock GitHub/GitLab (последовательность, заголовки, тела, идемпотентность); `allow_write=false` → 403; маски не попадают в тело PR
 
 ### Гейт фазы 6А
-- [ ] Тесты 12А зелёные
-- [ ] Eval 15/15 и `submission.json` не изменились
-- [ ] Демо 12А.1–12А.3 выполнены на запущенном стеке с mock GitHub/GitLab
-- [ ] REPORT.md, коммит «phase 6A: diff-aware, security score, autofix»
+- [x] Тесты 12А зелёные
+- [x] Eval 15/15 и `submission.json` не изменились
+- [x] Демо 12А.1–12А.3 выполнены на запущенном стеке с mock GitHub/GitLab
+- [ ] REPORT.md, коммит «phase 6A: diff-aware, security score, autofix» (REPORT.md — готово; коммит делает пользователь)
 
 ---
 
 ## Фаза 7 — Упаковка и документация (§18)
 
-- [ ] `docker-compose.yml`: postgres, backend, worker, frontend (nginx/vite preview), профиль `ollama`, профиль `mock` (Telegram/SMTP/GitHub/GitLab); healthchecks, тома, Alembic при старте, понятные порты
-- [ ] Makefile: все цели работают
-- [ ] `README.md` (RU): что это; быстрый старт за 5 команд; настройка LLM (Ollama, OpenAI-compatible, бесплатные варианты); уведомления; демо; тесты; структура; как добавить ноду (пример ~20 строк); подключение CI; ограничения
-- [ ] `docs/ARCHITECTURE.md` (Mermaid + поток данных)
-- [ ] `docs/NODES.md` (все ноды, порты, параметры, формат данных)
-- [ ] `docs/ANALYZERS.md` (актуализировать)
-- [ ] `docs/API.md`
-- [ ] `docs/CI_CD.md`
-- [ ] `docs/AI.md` (провайдеры, промпты, схема, валидатор, метрики)
-- [ ] `docs/SECURITY.md` (модель угроз, шифрование, маскирование, SSRF, allowlist)
-- [ ] `docs/TEAM_FEATURES.md` (diff-aware, формула score с калибровкой, AutoFix, покрытие)
-- [ ] `docs/PRESENTATION_NOTES.md`: проблема и пользователь; как закрыта цель; все ноды; алгоритмы; классификация; передача данных; LLM и данные; проверка ответа с реальными примерами и метриками; архитектура и «добавить ноду/сервис/переключить на локальную LLM за минуту»; звёздочки; фичи команды с обоснованием; собственный движок как осознанный выбор; планы; пошаговый сценарий демо
+- [x] `docker-compose.yml`: postgres, backend, worker, frontend (nginx/vite preview), профиль `ollama`, профиль `mock` (Telegram/SMTP/GitHub/GitLab); healthchecks, тома, Alembic при старте, понятные порты
+- [x] Makefile: все цели работают
+- [x] `README.md` (RU): что это; быстрый старт за 5 команд; настройка LLM (Ollama, OpenAI-compatible, бесплатные варианты); уведомления; демо; тесты; структура; как добавить ноду (пример ~20 строк); подключение CI; ограничения
+- [x] `docs/ARCHITECTURE.md` (Mermaid + поток данных)
+- [x] `docs/NODES.md` (все ноды, порты, параметры, формат данных)
+- [x] `docs/ANALYZERS.md` (актуализировать)
+- [x] `docs/API.md`
+- [x] `docs/CI_CD.md`
+- [x] `docs/AI.md` (провайдеры, промпты, схема, валидатор, метрики)
+- [x] `docs/SECURITY.md` (модель угроз, шифрование, маскирование, SSRF, allowlist)
+- [x] `docs/TEAM_FEATURES.md` (diff-aware, формула score с калибровкой, AutoFix, покрытие)
+- [x] `docs/PRESENTATION_NOTES.md`: проблема и пользователь; как закрыта цель; все ноды; алгоритмы; классификация; передача данных; LLM и данные; проверка ответа с реальными примерами и метриками; архитектура и «добавить ноду/сервис/переключить на локальную LLM за минуту»; звёздочки; фичи команды с обоснованием; собственный движок как осознанный выбор; планы; пошаговый сценарий демо
 
 ### Гейт фазы 7
-- [ ] Холодный старт: удалить тома/кэш, следовать только README → стек поднимается, демо проходит
-- [ ] REPORT.md, коммит «phase 7: packaging and docs»
+- [x] Холодный старт: удалить тома/кэш, следовать только README → стек поднимается, демо проходит
+- [x] REPORT.md (коммит «phase 7: packaging and docs» — делает пользователь)
 
 ---
 
 ## Фаза 8 — Финальная верификация (§17.11, §21, §22)
 
-- [ ] Полный `make test` (сохранить сводку и число тестов)
-- [ ] Интеграционные тесты хотя бы один раз на PostgreSQL
-- [ ] `make e2e`
-- [ ] Eval на учебном наборе + всех мутантах (таблица)
-- [ ] Сквозной демо-сценарий §21 на `docker compose up`, вывод/скриншоты в REPORT.md:
-  - [ ] 1. Регистрация → workspace → настройка AI и Telegram/SMTP
-  - [ ] 2. Проект: git_url организаторов или загрузка архива
-  - [ ] 3. Сборка workflow перетаскиванием (manual → source → [secrets, sca, sast] → merge → if_else(≥HIGH) → ai.report → telegram + report_export; false → webhook)
-  - [ ] 4. Запуск: живые статусы, 15 находок, 0 контролей, AI-отчёт с diff-фиксами, индикатор доверия, уведомление доставлено, `submission.json` валиден
-  - [ ] 5. Правка уязвимости → повторный запуск → сравнение «устранено 1»
-  - [ ] 6. Публикация шаблона → поиск → использование → правка копии
-  - [ ] 7. YAML GitHub/GitLab; CLI → exit 1 на Critical; webhook с подписью → статус на mock GitHub
+- [x] Полный `make test` (сохранить сводку и число тестов)
+- [x] Интеграционные тесты хотя бы один раз на PostgreSQL
+- [x] `make e2e`
+- [x] Eval на учебном наборе + всех мутантах (таблица)
+- [x] Сквозной демо-сценарий §21 на `docker compose up`, вывод/скриншоты в REPORT.md:
+  - [x] 1. Регистрация → workspace → настройка AI и Telegram/SMTP
+  - [x] 2. Проект: git_url организаторов или загрузка архива
+  - [x] 3. Сборка workflow перетаскиванием (manual → source → [secrets, sca, sast] → merge → if_else(≥HIGH) → ai.report → telegram + report_export; false → webhook)
+  - [x] 4. Запуск: живые статусы, 15 находок, 0 контролей, AI-отчёт с diff-фиксами, индикатор доверия, уведомление доставлено, `submission.json` валиден
+  - [x] 5. Правка уязвимости → повторный запуск → сравнение «устранено 1»
+  - [x] 6. Публикация шаблона → поиск → использование → правка копии
+  - [x] 7. YAML GitHub/GitLab; CLI → exit 1 на Critical; webhook с подписью → статус на mock GitHub
   - [ ] 8. AI-генерация примера → граф → «добавь e-mail» в чате → запуск
-  - [ ] 9. Diff-aware: PR с AWS-ключом → FAIL + комментарий → ключ убран → PASS; старые existing
-  - [ ] 10. Score: первый прогон → починили 2 → зелёная дельта, обновлённый Priority Fix List и AI-план
-  - [ ] 11. AutoFix: хардкод пароля → чеклист + diff → PR на mock GitHub → прогон ветки `autofix/…`: 0 новых
-- [ ] Финальный grep на запрещённые имена в `backend/app` и на `TODO`/`NotImplementedError` в продуктовом коде
-- [ ] `docs/REPORT.md`:
-  - [ ] (1) журнал фаз с результатами гейтов
-  - [ ] (2) вывод `make test`, таблица eval (учебный + мутанты)
-  - [ ] (3) чеклист по каждому пункту `TZ.md` 1.1, 1.2.1–1.2.3, 1.3 + требования PDF + каждый пункт 12А: статус DONE/PARTIAL/NOT DONE, где реализовано, чем подтверждено
-  - [ ] (4) честный список ограничений и непроверенного (реальная LLM, реальный Telegram и т.п.), противоречия prompt.md vs PDF, собственный движок как решение команды
-  - [ ] (5) планы развития
-- [ ] Финальный коммит «phase 8: final verification report»
+  - [x] 9. Diff-aware: PR с AWS-ключом → FAIL + комментарий → ключ убран → PASS; старые existing
+  - [x] 10. Score: первый прогон → починили 2 → зелёная дельта, обновлённый Priority Fix List и AI-план
+  - [x] 11. AutoFix: хардкод пароля → чеклист + diff → PR на mock GitHub → прогон ветки `autofix/…`: 0 новых
+- [x] Финальный grep на запрещённые имена в `backend/app` и на `TODO`/`NotImplementedError` в продуктовом коде
+- [x] `docs/REPORT.md`:
+  - [x] (1) журнал фаз с результатами гейтов
+  - [x] (2) вывод `make test`, таблица eval (учебный + мутанты)
+  - [x] (3) чеклист по каждому пункту `TZ.md` 1.1, 1.2.1–1.2.3, 1.3 + требования PDF + каждый пункт 12А: статус DONE/PARTIAL/NOT DONE, где реализовано, чем подтверждено
+  - [x] (4) честный список ограничений и непроверенного (реальная LLM, реальный Telegram и т.п.), противоречия prompt.md vs PDF, собственный движок как решение команды
+  - [x] (5) планы развития
+- [ ] Финальный коммит «phase 8: final verification report» — делает пользователь

@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 import { useProjects, useRuns, useWorkflows } from '../api/hooks'
 import type { Run, Severity } from '../api/types'
 import { SeverityBadge, StatusBadge } from '../components/domain'
+import { DashboardScoreCard } from '../components/score'
 import { Page } from '../components/layout/AppShell'
 import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from '../components/ui'
 import { Icon } from '../components/ui/Icon'
@@ -71,6 +72,7 @@ export default function DashboardPage() {
           </div>
         </Stat>
       </div>
+      <DashboardScoreCard />
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card title={t('dashboard.chart')} className="xl:col-span-2">
           {chart.length === 0 ? <EmptyState icon="dashboard" title={t('dashboard.noRuns')} hint={t('dashboard.noRunsHint')} /> : (

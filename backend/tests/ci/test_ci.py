@@ -161,6 +161,29 @@ def test_github_webhook_signature_idempotency_and_status(client, db, alice, scm)
     assert ignored.json()["run_ids"] == []
 
 
+def test_webhook_status_endpoint_lists_deliveries_and_ci_statuses(client, db, alice, bob, scm):
+    scm_url, _ = scm
+    setup_webhook(client, alice, scm_url)
+    body = json.dumps(pr_payload()).encode()
+    r = client.post("/api/v1/webhooks/github", content=body, headers={
+        "X-GitHub-Event": "pull_request", "X-GitHub-Delivery": "deliv-77", "Content-Type": "application/json",
+        "X-Hub-Signature-256": gh_sig("gh-webhook-secret-42", body)})
+    run_id = r.json()["run_ids"][0]
+    drain(db)
+    st = client.get(f"/api/ci/webhooks/status?workspace_id={alice.workspace_id}", headers=alice.headers)
+    assert st.status_code == 200, st.text
+    data = st.json()
+    assert data["deliveries"][0]["provider"] == "github"
+    assert data["deliveries"][0]["event"] == "pull_request" and data["deliveries"][0]["run_ids"] == [run_id]
+    states = [x["state"] for x in data["statuses"] if x["run_id"] == run_id and x["kind"] == "status"]
+    assert sorted(states) == ["failure", "pending"]
+    assert all(x["response_code"] in (200, 201) for x in data["statuses"])
+    foreign = client.get(f"/api/ci/webhooks/status?workspace_id={alice.workspace_id}", headers=bob.headers)
+    assert foreign.status_code == 404
+    assert client.get(f"/api/ci/webhooks/status?workspace_id={bob.workspace_id}",
+                      headers=bob.headers).json() == {"deliveries": [], "statuses": []}
+
+
 def test_status_not_written_without_allow_write(client, db, alice, scm):
     scm_url, state = scm
     setup_webhook(client, alice, scm_url, write=False)

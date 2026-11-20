@@ -155,9 +155,12 @@ async def execute_run(db: Database, run_id: str, poll_interval: float = 0.5) -> 
 
 def _register_builtin_hooks() -> None:
     from app.ci.status import report_run_status
+    from app.scoring.service import record_score
 
-    if report_run_status not in POST_RUN_HOOKS:
-        POST_RUN_HOOKS.append(report_run_status)
+    # score first: the commit status / PR comment and the API read it right after the run
+    for hook in (record_score, report_run_status):
+        if hook not in POST_RUN_HOOKS:
+            POST_RUN_HOOKS.append(hook)
 
 
 _register_builtin_hooks()

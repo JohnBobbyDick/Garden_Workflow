@@ -7,6 +7,7 @@ import { Spinner } from '../components/ui'
 import { Icon } from '../components/ui/Icon'
 import { pick } from '../i18n'
 import { fmtDuration } from '../lib/format'
+import { missingUserInput } from '../lib/schemaForm'
 import { CATEGORY_ACCENT, PORT_COLORS, useEditor } from './EditorContext'
 import { specOf, type FlowNode } from './graphModel'
 
@@ -17,8 +18,9 @@ const STATUS_RING: Record<string, string> = {
 
 function NodeCardImpl({ data, selected }: NodeProps<FlowNode>) {
   const { t } = useTranslation()
-  const { catalog, lang } = useEditor()
+  const { catalog, lang, runMode } = useEditor()
   const spec = specOf(catalog, data.nodeType)
+  const missing = spec && !data.disabled ? missingUserInput(spec.config_schema, data.config, lang) : []
   const accent = CATEGORY_ACCENT[spec?.category ?? ''] ?? '#94a3b8'
   const rows = Math.max(spec?.inputs.length ?? 0, spec?.outputs.length ?? 0, 1)
   const title = spec ? pick(spec.title, lang) : data.nodeType
@@ -40,6 +42,12 @@ function NodeCardImpl({ data, selected }: NodeProps<FlowNode>) {
           <span className={clsx({ 'text-success': data.status === 'success', 'text-danger': data.status === 'failed',
             'text-muted': data.status === 'skipped', 'text-warning': data.status === 'cancelled' })}>
             <Icon name={STATUS_ICON[data.status]} size={15} />
+          </span>
+        )}
+        {!data.status && !runMode && missing.length > 0 && (
+          <span className="rounded-full bg-warning/20 px-1.5 text-[10px] font-semibold text-warning"
+            title={`${t('editor.needsInput')}: ${missing.join(', ')}`} aria-label={`${t('editor.needsInput')}: ${missing.join(', ')}`}>
+            <Icon name="alert" size={12} />
           </span>
         )}
         {!data.status && !!data.issues?.length && (

@@ -4,12 +4,12 @@ Real HTTP with in-memory state, used by tests and the Compose ``mock`` profile. 
 GitHub/GitLab — the organizer repository and fixtures are never written to.
 
 GitHub:  POST /repos/{o}/{r}/statuses/{sha}; GET/POST /repos/{o}/{r}/issues/{n}/comments;
-         PATCH /repos/{o}/{r}/issues/comments/{id}; GET /repos/{o}/{r}/git/ref/heads/{b};
+         PATCH /repos/{o}/{r}/issues/comments/{id}; PATCH /repos/{o}/{r}/pulls/{n}; GET /repos/{o}/{r}/git/ref/heads/{b};
          POST /repos/{o}/{r}/git/refs; GET/PUT /repos/{o}/{r}/contents/{path}; GET/POST /repos/{o}/{r}/pulls
 GitLab:  POST /projects/{id}/statuses/{sha}; GET/POST /projects/{id}/merge_requests/{iid}/notes;
          PUT /projects/{id}/merge_requests/{iid}/notes/{nid}; POST /projects/{id}/repository/branches;
          GET /projects/{id}/repository/files/{path}; POST /projects/{id}/repository/commits;
-         GET/POST /projects/{id}/merge_requests
+         GET/POST /projects/{id}/merge_requests; PUT /projects/{id}/merge_requests/{iid}
 Inspection: GET /_requests (all requests), DELETE /_requests.
 """
 
@@ -130,6 +130,9 @@ def make_handler(state: State):
                     state.pulls.append(p)
                     return self._send(201, p)
                 if m := re.match(r"^/repos/([^/]+/[^/]+)/issues/(\d+)/labels$", path):
+                    for p in state.pulls:
+                        if p["repo"] == m[1] and str(p.get("number")) == m[2]:
+                            p["labels"] = sorted(set(p.get("labels") or []) | set(body.get("labels", [])))
                     return self._send(200, [{"name": n} for n in body.get("labels", [])])
                 if m := re.match(r"^/projects/(.+?)/repository/branches$", path):
                     key = f"{m[1]}:{(query.get('branch') or [body.get('branch')])[0]}"
@@ -147,6 +150,7 @@ def make_handler(state: State):
                             return self._send(409, {"message": "Another open merge request already exists"})
                     p = {"repo": m[1], "iid": state.next_id(), "head": body.get("source_branch"),
                          "base": body.get("target_branch"), "title": body.get("title"),
+                         "description": body.get("description"), "labels": body.get("labels"),
                          "web_url": f"http://mock/{m[1]}/-/merge_requests/{state.seq}"}
                     state.pulls.append(p)
                     return self._send(201, p)
@@ -155,6 +159,12 @@ def make_handler(state: State):
         def do_PATCH(self):
             body = self._body()
             path, _ = self._record(body)
+            if m := re.match(r"^/repos/([^/]+/[^/]+)/pulls/(\d+)$", path):
+                with state.lock:
+                    for p in state.pulls:
+                        if p["repo"] == m[1] and str(p.get("number")) == m[2]:
+                            p.update({k: body[k] for k in ("title", "body") if k in body})
+                            return self._send(200, p)
             if m := re.match(r"^/(?:api/v3/)?repos/([^/]+/[^/]+)/issues/comments/(\d+)$", path):
                 with state.lock:
                     for lst in state.comments.values():
@@ -173,6 +183,12 @@ def make_handler(state: State):
                         if str(c["id"]) == m[3]:
                             c["body"] = body.get("body", "")
                             return self._send(200, c)
+                if m := re.match(r"^/projects/(.+?)/merge_requests/(\d+)$", path):
+                    for p in state.pulls:
+                        if p["repo"] == m[1] and str(p.get("iid")) == m[2]:
+                            p.update({"title": body.get("title", p["title"]),
+                                      "description": body.get("description", p.get("description"))})
+                            return self._send(200, p)
                 if m := re.match(r"^/repos/([^/]+/[^/]+)/contents/(.+)$", path):
                     state.files[f"{m[1]}:{m[2]}"] = base64.b64decode(body.get("content", "")).decode("utf-8", "replace")
                     return self._send(200, {"commit": {"sha": "e" * 40}, "content": {"path": m[2]}})

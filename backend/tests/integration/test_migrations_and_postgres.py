@@ -31,6 +31,13 @@ def test_alembic_upgrade_matches_models_on_sqlite(tmp_path):
 PG_URL = os.environ.get("APP_TEST_DATABASE_URL", "")
 
 
+def test_alembic_upgrade_creates_missing_sqlite_directory(tmp_path):
+    """Fresh checkout: ``backend/data`` does not exist yet when ``alembic upgrade head`` runs first."""
+    db_file = tmp_path / "not-created-yet" / "nested" / "aisw.db"
+    command.upgrade(alembic_cfg(f"sqlite:///{db_file.as_posix()}"), "head")
+    assert db_file.exists()
+
+
 @pytest.mark.postgres
 @pytest.mark.skipif(not PG_URL.startswith("postgresql"), reason="APP_TEST_DATABASE_URL (PostgreSQL) not set")
 def test_postgres_migrations_queue_and_full_run():

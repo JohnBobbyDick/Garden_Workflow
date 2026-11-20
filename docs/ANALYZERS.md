@@ -90,3 +90,28 @@
 - `make test` — модульные тесты; у каждого правила есть положительные и «опасно похожие» отрицательные случаи (`tests/unit/test_sast.py`, `test_secrets.py`, `test_sca.py`, `test_analyzer_hardening.py`).
 - `make test-eval` — сверка с эталоном организаторов и с мутантами (`fixtures/mutants/*/expected.json`) по правилам из README эталона: категория, путь, класс и строка (с учётом `alternateLocations`), для SCA — координаты, версия и advisory. Тест падает на пропуске, на срабатывании контроля и на необъяснённой лишней находке.
 - Анализаторы не содержат имён файлов, классов и переменных из учебного набора (это проверяется grep на гейте фазы).
+
+**Текущие результаты** (`make test-eval`, фаза 7): учебный набор — recall 100 % (15/15), precision 100 %, контролей 0,
+лишних 0; мутанты `clinic-appointments` 15/15, `library-loans` 15/15, `parcel-lockers` 16/16, контролей 0, лишних 0.
+
+## Метаданные AutoFix
+
+У каждой находки есть поле `autofix: llm | deterministic | none`. Оно говорит, можно ли автоматически подготовить
+патч ([TEAM_FEATURES.md](TEAM_FEATURES.md#3-ai-autofix-патч-самопроверка-сканером-и-pull-request)):
+
+| Категория | Значение |
+| --- | --- |
+| SCA `known-vulnerable-dependency` | `deterministic`: обновление версии до ближайшей исправленной в месте определения + lockfile. |
+| SECRET (все классы, кроме `private-key`) | `llm`: вынос значения в переменную окружения без значения по умолчанию. |
+| SECRET `private-key` | `none`: файл ключа удаляют и перевыпускают ключ, точечный патч невозможен. |
+| SAST `unsafe-deserialization`, `csrf-disabled` | `none`: архитектурное решение (формат сериализации, модель CSRF приложения). |
+| Остальные SAST-правила | `llm`. |
+
+Покрытие («AutoFix доступен для N из M правил») считается из этих таблиц (`app/autofix/coverage.py`).
+
+## Diff-aware и Security Score
+
+- Классификация находок на `new`/`existing` относительно base-ветки (hunks, переименования, whitespace, SCA по
+  координатам и advisory, межфайловые находки) описана в [TEAM_FEATURES.md, раздел 1](TEAM_FEATURES.md).
+- Security Score использует `severity`, `confidence` (порог 0.6, как у официальной выгрузки) и `diff_status`
+  (новизна ×1.5) — [раздел 2](TEAM_FEATURES.md).

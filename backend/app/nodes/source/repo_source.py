@@ -10,6 +10,7 @@ from app.nodes.base import BaseNode, Envelope, Port, register_node
 from app.nodes.schema import credential, obj, prop
 
 MODES = ["project", "upload", "git_url", "path"]
+INTERNAL_SOURCE_KEYS = ("scan_path", "token_ref")  # kept on the run for AutoFix, never shown in outputs/API
 
 
 def _subdir(root: Path, sub: str | None) -> Path:
@@ -86,9 +87,12 @@ class RepoSource(BaseNode):
         settings = get_settings()
         work = ctx.services.workdir() / f"src-{ctx.node_id}"
         info: dict = {"mode": mode}
+        boundary = work
         if mode == "path":
             root = check_scan_path(str(spec.get("path") or ""), settings.scan_root_paths())
             info["path"] = root.name
+            info["scan_path"] = str(root)  # internal: AutoFix re-materializes the sources (not exposed by the API)
+            boundary = next((r for r in settings.scan_root_paths() if root == r or r in root.parents), root)
         elif mode == "upload":
             if not spec.get("upload_id"):
                 raise RepoGuardError("не указан загруженный архив")
@@ -103,15 +107,28 @@ class RepoSource(BaseNode):
                                            ctx.services.allowlist(), token)
             root = work
             info.update(meta)
-            ctx.services.update_run(source={**info})
+            if spec.get("access_token"):
+                info["token_ref"] = spec["access_token"]  # credential id, never the value
         else:
             raise RepoGuardError(f"неизвестный режим источника {mode!r}")
+        if spec.get("subdir"):
+            info["subdir"] = spec["subdir"]
+        if ctx.has_services:
+            ctx.services.update_run(source={**info})
         root = _subdir(root, spec.get("subdir"))
         files = await asyncio.to_thread(walk_project, root)
         loc = count_loc(files)
         ctx.log("info", f"источник {mode}: {len(files)} файлов, {loc} строк")
-        data = {"root": str(root), "files": len(files), "loc": loc, "source": info,
-                "project_name": ctx.run.project_name or root.name, "diff_context": (trig.data.get("diff_context")
-                                                                                   if trig is not None else None)}
+        tdata = trig.data if trig is not None else {}
+        # git hints for diff-aware scanning; the boundary keeps the .git lookup inside the scanned source
+        git_hint = {"base_sha": tdata.get("base_sha") or spec.get("base_sha"), "head_sha": tdata.get("head_sha"),
+                    "base_ref": tdata.get("base_ref"), "token_ref": spec.get("access_token") if mode == "git_url"
+                    else None, "boundary": str(boundary)}
+        data = {"root": str(root), "files": len(files), "loc": loc,
+                "source": {k: v for k, v in info.items() if k not in INTERNAL_SOURCE_KEYS},
+                "project_name": ctx.run.project_name or root.name, "diff_context": tdata.get("diff_context"),
+                "git": git_hint}
         ctx.state["repo"] = data
+        if ctx.has_services:
+            ctx.services.update_run(loc=loc)
         return {"out": Envelope.make("repo", data, ctx.node_id, f"{len(files)} файлов")}

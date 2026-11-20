@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fieldsFromSchema, validateConfig } from './schemaForm'
+import { fieldsFromSchema, missingUserInput, validateConfig } from './schemaForm'
 
 const schema = {
   type: 'object',
@@ -35,5 +35,22 @@ describe('schema form', () => {
     const errs = validateConfig(schema, { port: 70000, to: [] }, 'ru')
     expect(Object.keys(errs).sort()).toEqual(['host', 'port', 'to'])
     expect(validateConfig(schema, { host: 'smtp', to: ['a@b.c'], port: 25 }, 'ru')).toEqual({})
+  })
+})
+
+describe('missingUserInput', () => {
+  const s = {
+    type: 'object',
+    properties: {
+      chat_id: { type: 'string', title: 'Chat', 'x-required-user-input': true },
+      bot_token: { type: 'string', title: 'Token', credential_ref: true },
+      text: { type: 'string', title: 'Text' },
+    },
+    required: ['bot_token'],
+  }
+  it('lists empty fields the user must fill and ignores filled or optional ones', () => {
+    expect(missingUserInput(s, {}, 'en')).toEqual(['Chat', 'Token'])
+    expect(missingUserInput(s, { chat_id: '42' }, 'en')).toEqual(['Token'])
+    expect(missingUserInput(s, { chat_id: '{{param:x}}', bot_token: 'cred1' }, 'en')).toEqual(['Chat'])
   })
 })
