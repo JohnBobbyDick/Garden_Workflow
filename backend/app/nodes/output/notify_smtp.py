@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import socket
 from email.message import EmailMessage
 from email.utils import make_msgid
 
-import aiosmtplib
-
-from app.config import get_settings
-from app.core.ssrf import check_url
+from app.core.mail import send_mail
 from app.engine.templating import render_template
 from app.nodes.base import BaseNode, Envelope, Port, register_node
 from app.nodes.schema import credential, obj, prop
@@ -40,9 +36,7 @@ class NotifySmtp(BaseNode):
     }, required=["host", "from_addr", "to"])
 
     async def execute(self, ctx, inputs, config):
-        settings = get_settings()
         host, port = config["host"], int(config.get("port") or 587)
-        check_url(f"http://{host}:{port}/", settings.ssrf_allowed())  # same internal-network policy as HTTP
         password = ctx.secret(config["password"]) if config.get("password") else None
         content = build_content(ctx, inputs, config.get("template"))
         msg = EmailMessage()
@@ -58,10 +52,7 @@ class NotifySmtp(BaseNode):
                            filename="report.md")
         security = config.get("security", "starttls")
         try:
-            await aiosmtplib.send(msg, hostname=host, port=port, use_tls=security == "tls",
-                                  start_tls=security == "starttls",
-                                  username=config.get("username") or None, password=password, timeout=30,
-                                  local_hostname=socket.gethostname())  # avoid slow reverse-DNS getfqdn()
+            await send_mail(msg, host=host, port=port, security=security, username=config.get("username"), password=password)
         except Exception as exc:
             ctx.services.add_notification(ctx.node_id, "smtp", "failed", ctx.masker.mask(str(exc))[:500])
             raise

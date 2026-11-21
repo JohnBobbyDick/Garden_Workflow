@@ -13,6 +13,7 @@ from app import models as m
 from app.config import get_settings
 from app.core.audit import audit
 from app.core.errors import ApiError, conflict, unauthorized
+from app.core.registration import consume_registration_code, send_registration_code
 from app.core.security import (
     RefreshError,
     create_access_token,
@@ -48,11 +49,15 @@ def _rate_limit(key: str) -> None:
         q.append(now)
 
 
-class RegisterIn(BaseModel):
+class RegistrationEmail(BaseModel):
     email: EmailStr
+    locale: str = Field(default="ru", pattern="^(ru|en)$")
+
+
+class RegisterIn(RegistrationEmail):
+    code: str = Field(pattern=r"^[0-9]{6}$", min_length=6, max_length=6)
     password: str = Field(min_length=10, max_length=200)
     display_name: str = Field(default="", max_length=200)
-    locale: str = Field(default="ru", pattern="^(ru|en)$")
 
 
 class LoginIn(BaseModel):
@@ -76,11 +81,22 @@ def user_out(u: m.User) -> dict:
             "is_platform_admin": u.is_platform_admin}
 
 
+@router.post("/registration-code", status_code=204)
+async def registration_code(body: RegistrationEmail, request: Request, s: Session = Depends(get_session)) -> Response:
+    email = body.email.lower()
+    _rate_limit(f"registration-code:{client_ip(request)}")
+    if s.scalar(select(m.User.id).where(m.User.email == email)):
+        raise conflict("пользователь с таким e-mail уже существует", "email_taken")
+    await send_registration_code(s, email, body.locale)
+    return Response(status_code=204)
+
+
 @router.post("/register", status_code=201)
 def register(body: RegisterIn, request: Request, s: Session = Depends(get_session)) -> dict:
     email = body.email.lower()
     if s.scalars(select(m.User).where(m.User.email == email)).first():
         raise conflict("пользователь с таким e-mail уже существует", "email_taken")
+    consume_registration_code(s, email, body.code)
     first = (s.scalar(select(func.count()).select_from(m.User)) or 0) == 0
     user = m.User(email=email, password_hash=hash_password(body.password),
                   display_name=body.display_name or email.split("@")[0], locale=body.locale, is_platform_admin=first)

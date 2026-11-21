@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -32,6 +33,12 @@ class Settings(BaseSettings):
     inprocess_worker: bool = False
     ssrf_allow_hosts: str = ""
     telegram_api_base: str = "https://api.telegram.org"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_security: Literal["starttls", "tls", "none"] = "starttls"
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
     node_timeout_seconds: float = 300.0
     run_timeout_seconds: float = 1800.0
     worker_poll_seconds: float = 1.0

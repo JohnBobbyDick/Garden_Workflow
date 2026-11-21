@@ -23,7 +23,7 @@ def test_register_login_me_and_bad_password(client):
     assert r.status_code == 401 and r.json()["error"]["code"] == "invalid_credentials"
     r = client.post("/api/auth/login", json={"email": "carol@example.org", "password": u.password})
     assert r.status_code == 200 and r.json()["access_token"]
-    assert client.post("/api/auth/register", json={"email": "carol@example.org", "password": "Another-pass1"}
+    assert client.post("/api/auth/register", json={"email": "carol@example.org", "password": "Another-pass1", "code": "000000"}
                        ).status_code == 409
 
 

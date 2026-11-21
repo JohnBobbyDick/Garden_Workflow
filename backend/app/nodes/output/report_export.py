@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from app.analyzers.common.finding import Finding
 from app.engine.data import findings_of, summary_dict
 from app.export.html import render_html
 from app.export.markdown import render_markdown
@@ -19,6 +20,11 @@ class ExportValidationError(ValueError):
     pass
 
 
+def report_findings(findings: list[Finding], min_confidence: float, include_transitive: bool) -> list[Finding]:
+    return [f for f in findings if f.confidence >= min_confidence
+            and (include_transitive or f.scope != "transitive")]
+
+
 def build_reports(findings, project_name: str, min_confidence: float, include_transitive: bool,
                   ai_report: dict | None = None, meta: dict | None = None) -> dict[str, str]:
     """Render the official JSON (validated) and the readable Markdown/HTML from the same finding set."""
@@ -26,8 +32,7 @@ def build_reports(findings, project_name: str, min_confidence: float, include_tr
     errors = validate_submission(doc)
     if errors:
         raise ExportValidationError("submission.json не прошёл валидацию формата: " + "; ".join(errors[:5]))
-    shown = [f for f in findings if f.confidence >= min_confidence
-             and (include_transitive or f.scope != "transitive")]
+    shown = report_findings(findings, min_confidence, include_transitive)
     hidden = len(findings) - len(shown)
     meta = dict(meta or {})
     meta["Порог уверенности"] = f"{min_confidence:g}"
@@ -65,8 +70,9 @@ class ReportExport(BaseNode):
         ai = inputs["ai"].data if "ai" in inputs else None
         project = ctx.run.project_name or (ctx.state.get("repo") or {}).get("project_name") or "project"
         meta = {"Запуск": ctx.run.run_id, "Сценарий": ctx.run.workflow_name or "—"}
-        reports = build_reports(findings, project, float(config["min_confidence"]),
-                                bool(config.get("include_transitive")), ai, meta)
+        min_confidence = float(config["min_confidence"])
+        include_transitive = bool(config.get("include_transitive"))
+        reports = build_reports(findings, project, min_confidence, include_transitive, ai, meta)
         reports = {k: ctx.masker.mask(v) for k, v in reports.items()}
         artifacts = []
         for fmt in config["formats"]:
@@ -76,6 +82,9 @@ class ReportExport(BaseNode):
         exported = len(json.loads(reports["submission_json"])["findings"])
         data = {"artifacts": artifacts, "summary": summary_dict(findings), "exported": exported,
                 "project_name": project}
-        ctx.state["report"] = {"markdown": reports["markdown"], "html": reports["html"], "artifacts": artifacts}
+        saved = {"markdown": reports["markdown"], "html": reports["html"], "artifacts": artifacts,
+                 "findings": report_findings(findings, min_confidence, include_transitive)}
+        ctx.state.setdefault("reports_by_node", {})[ctx.node_id] = saved
+        ctx.state["report"] = saved
         ctx.log("info", f"экспортировано {exported} находок: {', '.join(a['name'] for a in artifacts)}")
         return {"out": Envelope.make("report", data, ctx.node_id, f"{len(artifacts)} файла, {exported} находок")}

@@ -22,6 +22,14 @@ class User(IdMixin, CreatedMixin, Base):
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class RegistrationCode(Base):
+    __tablename__ = "registration_codes"
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    digest: Mapped[str] = mapped_column(String(64))
+    issued_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    attempts_left: Mapped[int] = mapped_column(Integer)
+
+
 class Workspace(IdMixin, CreatedMixin, Base):
     __tablename__ = "workspaces"
     name: Mapped[str] = mapped_column(String(200))
