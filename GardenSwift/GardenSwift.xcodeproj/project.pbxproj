@@ -1,0 +1,164 @@
+// !$*UTF8*$!
+{
+    archiveVersion = 1;
+    classes = {};
+    objectVersion = 60;
+    objects = {
+        A10000000000000000000001 = {
+            isa = PBXProject;
+            attributes = { LastUpgradeCheck = 1600; };
+            buildConfigurationList = A1000000000000000000000A;
+            compatibilityVersion = "Xcode 15.0";
+            developmentRegion = ru;
+            knownRegions = (en, Base, ru);
+            mainGroup = A10000000000000000000002;
+            packageReferences = (A1000000000000000000000D);
+            productRefGroup = A10000000000000000000003;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (A10000000000000000000004);
+        };
+        A10000000000000000000002 = {
+            isa = PBXGroup;
+            children = (A10000000000000000000005, A10000000000000000000015, A10000000000000000000017, A10000000000000000000019, A1000000000000000000001B, A10000000000000000000003);
+            sourceTree = "<group>";
+        };
+        A10000000000000000000003 = {
+            isa = PBXGroup;
+            name = Products;
+            children = (A10000000000000000000006);
+            sourceTree = "<group>";
+        };
+        A10000000000000000000004 = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = A1000000000000000000000B;
+            buildPhases = (A10000000000000000000007, A10000000000000000000008, A1000000000000000000001D);
+            buildRules = ();
+            dependencies = ();
+            name = GardenSwift;
+            packageProductDependencies = (A1000000000000000000000E);
+            productName = GardenSwift;
+            productReference = A10000000000000000000006;
+            productType = "com.apple.product-type.application";
+        };
+        A1000000000000000000001B = { isa = PBXVariantGroup; name = Localizable.strings; children = (A1000000000000000000001C); sourceTree = "<group>"; };
+        A1000000000000000000001C = { isa = PBXFileReference; name = en; path = Sources/GardenApp/Resources/en.lproj/Localizable.strings; lastKnownFileType = text.plist.strings; sourceTree = "<group>"; };
+        A1000000000000000000001D = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A1000000000000000000001E); runOnlyForDeploymentPostprocessing = 0; };
+        A1000000000000000000001E = { isa = PBXBuildFile; fileRef = A1000000000000000000001B; };
+        A10000000000000000000019 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/GardenApp/GraphTools.swift; sourceTree = "<group>"; };
+        A1000000000000000000001A = { isa = PBXBuildFile; fileRef = A10000000000000000000019; };
+        A10000000000000000000017 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/GardenApp/PlatformView.swift; sourceTree = "<group>"; };
+        A10000000000000000000018 = { isa = PBXBuildFile; fileRef = A10000000000000000000017; };
+        A10000000000000000000015 = {
+            isa = PBXFileReference;
+            lastKnownFileType = sourcecode.swift;
+            path = Sources/GardenApp/ResultsView.swift;
+            sourceTree = "<group>";
+        };
+        A10000000000000000000016 = {
+            isa = PBXBuildFile;
+            fileRef = A10000000000000000000015;
+        };
+        A10000000000000000000005 = {
+            isa = PBXFileReference;
+            lastKnownFileType = sourcecode.swift;
+            path = Sources/GardenApp/GardenApp.swift;
+            sourceTree = "<group>";
+        };
+        A10000000000000000000006 = {
+            isa = PBXFileReference;
+            explicitFileType = wrapper.application;
+            path = GardenSwift.app;
+            sourceTree = BUILT_PRODUCTS_DIR;
+        };
+        A10000000000000000000007 = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (A10000000000000000000009, A10000000000000000000016, A10000000000000000000018, A1000000000000000000001A);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A10000000000000000000008 = {
+            isa = PBXFrameworksBuildPhase;
+            buildActionMask = 2147483647;
+            files = (A1000000000000000000000F);
+            runOnlyForDeploymentPostprocessing = 0;
+        };
+        A10000000000000000000009 = {
+            isa = PBXBuildFile;
+            fileRef = A10000000000000000000005;
+        };
+        A1000000000000000000000A = {
+            isa = XCConfigurationList;
+            buildConfigurations = (A10000000000000000000011, A10000000000000000000012);
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        A1000000000000000000000B = {
+            isa = XCConfigurationList;
+            buildConfigurations = (A10000000000000000000013, A10000000000000000000014);
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        A1000000000000000000000D = { isa = XCLocalSwiftPackageReference; relativePath = .; };
+        A1000000000000000000000E = {
+            isa = XCSwiftPackageProductDependency;
+            package = A1000000000000000000000D;
+            productName = GardenCore;
+        };
+        A1000000000000000000000F = {
+            isa = PBXBuildFile;
+            productRef = A1000000000000000000000E;
+        };
+        A10000000000000000000011 = {
+            isa = XCBuildConfiguration;
+            buildSettings = { SWIFT_OPTIMIZATION_LEVEL = "-Onone"; };
+            name = Debug;
+        };
+        A10000000000000000000012 = {
+            isa = XCBuildConfiguration;
+            buildSettings = { SWIFT_OPTIMIZATION_LEVEL = "-O"; };
+            name = Release;
+        };
+        A10000000000000000000013 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                CODE_SIGN_STYLE = Automatic;
+                CURRENT_PROJECT_VERSION = 1;
+                GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Garden Security подключается к вашему серверу проверок в локальной сети.";
+                INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                MACOSX_DEPLOYMENT_TARGET = 14.0;
+                MARKETING_VERSION = 0.1.0;
+                PRODUCT_BUNDLE_IDENTIFIER = local.gardensecurity.swift;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SDKROOT = auto;
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+                SWIFT_VERSION = 6.0;
+                TARGETED_DEVICE_FAMILY = "1,2";
+            };
+            name = Debug;
+        };
+        A10000000000000000000014 = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                CODE_SIGN_STYLE = Automatic;
+                CURRENT_PROJECT_VERSION = 1;
+                GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Garden Security подключается к вашему серверу проверок в локальной сети.";
+                INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+                IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+                MACOSX_DEPLOYMENT_TARGET = 14.0;
+                MARKETING_VERSION = 0.1.0;
+                PRODUCT_BUNDLE_IDENTIFIER = local.gardensecurity.swift;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                SDKROOT = auto;
+                SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+                SWIFT_VERSION = 6.0;
+                TARGETED_DEVICE_FAMILY = "1,2";
+            };
+            name = Release;
+        };
+    };
+    rootObject = A10000000000000000000001;
+}
