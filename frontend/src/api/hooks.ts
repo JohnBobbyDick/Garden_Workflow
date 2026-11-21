@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useUi } from '../store/ui'
 import { api, withWs } from './client'
 import type {
-  AIReportResponse, Catalog, Credential, Finding, Graph, Project, Run, User, ValidationIssue, Workflow,
+  AIReportResponse, Catalog, Credential, CustomNode, Finding, Graph, Project, Run, User, ValidationIssue, Workflow,
   WorkflowSummary, Workspace,
 } from './types'
 
@@ -19,6 +19,26 @@ export function useMe(enabled = true) {
 
 export function useCatalog() {
   return useQuery({ queryKey: ['nodes'], queryFn: () => api<Catalog>('/api/nodes'), staleTime: 5 * 60_000 })
+}
+
+export function useCustomNodes(workspaceId: string) {
+  return useQuery({
+    queryKey: ['customNodes', workspaceId],
+    queryFn: () => api<CustomNode[]>(withWs('/api/nodes/custom', workspaceId)),
+  })
+}
+
+export function useCreateCustomNode(workspaceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (definition: Omit<CustomNode, 'id'>) => api<CustomNode>(withWs('/api/nodes/custom', workspaceId),
+      { method: 'POST', json: definition }),
+    onSuccess: (node) => {
+      qc.setQueryData<CustomNode[]>(['customNodes', workspaceId], (nodes = []) =>
+        [...nodes.filter((n) => n.id !== node.id), node].sort((a, b) => a.name.localeCompare(b.name)))
+      void qc.invalidateQueries({ queryKey: ['customNodes', workspaceId] })
+    },
+  })
 }
 
 export function useWorkflows() {

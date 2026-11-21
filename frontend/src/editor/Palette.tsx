@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useCreateCustomNode, useCustomNodes, useMe } from '../api/hooks'
+import { toast } from '../store/toast'
+import { CustomNodeForm } from './CustomNodeForm'
 import type { Catalog, NodeSpec } from '../api/types'
-import { Input } from '../components/ui'
+import { Button, Input } from '../components/ui'
 import { Icon } from '../components/ui/Icon'
 import { pick } from '../i18n'
 import { useEditor } from './EditorContext'
@@ -28,11 +31,17 @@ function NodeChip({ n, onAdd, lang, full }: { n: NodeSpec; onAdd: (type: string)
   )
 }
 
-export function Palette({ categories, onAdd }: { categories: Catalog['categories']; onAdd: (type: string) => void }) {
+export function Palette({ categories, onAdd, workspaceId }: { workspaceId: string; categories: Catalog['categories']; onAdd: (type: string) => void }) {
   const { t } = useTranslation()
   const { catalog, lang } = useEditor()
   const [q, setQ] = useState('')
   const [all, setAll] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const library = useCustomNodes(workspaceId)
+  const save = useCreateCustomNode(workspaceId)
+  const role = useMe().data?.workspaces.find((ws) => ws.id === workspaceId)?.role
+  const custom = (library.data ?? []).filter((n) => n.name.toLowerCase().includes(q.trim().toLowerCase()))
+  const mapper = catalog.find((spec) => spec.type === 'logic.map_fields')
   const quick = QUICK.map((ty) => catalog.find((n) => n.type === ty)).filter((n): n is NodeSpec => !!n)
   const groups = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -43,6 +52,16 @@ export function Palette({ categories, onAdd }: { categories: Catalog['categories
     })).filter((g) => g.items.length)
   }, [catalog, categories, q])
   const showAll = all || q.trim() !== ''
+  if (creating) return <>
+    <CustomNodeForm saving={save.isPending} onCancel={() => setCreating(false)} onSave={(definition) => {
+      save.mutate(definition, { onSuccess: () => {
+        setCreating(false)
+        setQ('')
+        toast.success(t('customNodes.saved'))
+      } })
+    }} />
+    {save.error && <p role="alert" className="mt-2 text-sm text-danger">{save.error.message}</p>}
+  </>
 
   return (
     <div aria-label={t('editor.palette')}>
@@ -52,11 +71,22 @@ export function Palette({ categories, onAdd }: { categories: Catalog['categories
         <span className="pointer-events-none absolute left-2.5 top-2.5 text-muted"><Icon name="search" size={15} /></span>
         <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('editor.searchNodes')} className="pl-8" aria-label={t('editor.searchNodes')} />
       </div>
+      {(role === 'admin' || role === 'developer') && <Button size="sm" icon="plus" className="mb-3 w-full"
+        onClick={() => { save.reset(); setCreating(true) }}>{t('customNodes.create')}</Button>}
+      {library.isError && <p role="alert" className="mb-2 text-xs text-danger">{t('customNodes.failed')}{' '}
+        <button onClick={() => void library.refetch()}>{t('common.retry')}</button></p>}
+      {mapper && custom.length > 0 && <section className="mb-3">
+        <h3 className="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted">{t('customNodes.group')}</h3>
+        <div className="space-y-1.5">{custom.map((n) => (
+          <NodeChip key={n.id} n={{ ...mapper, type: `custom.${n.id}`, title: { ru: n.name, en: n.name } }}
+            onAdd={onAdd} lang={lang} />
+        ))}</div>
+      </section>}
       {!showAll && <div className="space-y-2">{quick.map((n) => <NodeChip key={n.type} n={n} onAdd={onAdd} lang={lang} />)}</div>}
       <button type="button" className="mt-3 flex items-center gap-1 text-[13px] font-bold text-primary hover:underline" aria-expanded={showAll}
         onClick={() => { setAll((a) => !a); setQ('') }}>
         <Icon name="chevron-right" size={13} className={showAll ? 'rotate-90' : ''} />
-        {showAll ? t('wf.fewerNodes') : t('wf.allNodes', { n: catalog.length })}
+        {showAll ? t('wf.fewerNodes') : t('wf.allNodes', { n: catalog.length + (library.data?.length ?? 0) })}
       </button>
       {showAll && (
         <div className="mt-2 max-h-[420px] overflow-y-auto pr-1">

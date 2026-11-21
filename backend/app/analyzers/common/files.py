@@ -68,7 +68,7 @@ def _gitignored(rel: str, is_dir: bool, patterns: list[str]) -> bool:
     return False
 
 
-def _glob_match(rel: str, pattern: str) -> bool:
+def matches_path_glob(rel: str, pattern: str) -> bool:
     if fnmatch.fnmatch(rel, pattern):
         return True
     if pattern.startswith("**/"):
@@ -92,9 +92,9 @@ def walk_project(root: str | Path, include: list[str] | None = None, exclude: li
             rel = rel_dir + fn
             if full.is_symlink() or _gitignored(rel, False, ignore):
                 continue
-            if include and not any(_glob_match(rel, p) for p in include):
+            if include and not any(matches_path_glob(rel, p) for p in include):
                 continue
-            if exclude and any(_glob_match(rel, p) for p in exclude):
+            if exclude and any(matches_path_glob(rel, p) for p in exclude):
                 continue
             try:
                 if full.stat().st_size > max_file_size:

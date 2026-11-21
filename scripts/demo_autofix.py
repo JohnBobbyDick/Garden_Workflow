@@ -1,4 +1,5 @@
-"""AI AutoFix demo on a running stack (§12А.3).
+
+    """AI AutoFix demo on a running stack (§12А.3).
 
 1. Temp git repository with training-project on ``main`` (fixtures are never modified), mock GitHub, demo user,
    webhook + write token + allowlist (``allow_write`` only for the demo repository on the mock).

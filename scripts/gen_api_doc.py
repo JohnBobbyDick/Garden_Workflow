@@ -42,6 +42,8 @@ RU = {
     "GET /api/projects/{project_id}": "проект", "PATCH /api/projects/{project_id}": "изменить проект",
     "DELETE /api/projects/{project_id}": "удалить проект",
     "POST /api/uploads": "загрузить архив (zip/tar.gz; шифруется, TTL `APP_UPLOAD_RETENTION_HOURS`)",
+    "GET /api/nodes/custom": "список пользовательских нод рабочего пространства",
+    "POST /api/nodes/custom": "создание именованной ноды преобразования JSON в рабочем пространстве",
     "GET /api/nodes": "каталог нод: порты, JSON Schema параметров, описания RU/EN",
     "GET /api/workflows": "сценарии", "POST /api/workflows": "создать сценарий (граф валидируется)",
     "POST /api/workflows/validate": "проверить черновик графа без сохранения",

@@ -255,7 +255,11 @@ export default function RunDetailsPage() {
         <div className="card p-3"><div className="text-xs text-muted">{t('common.total')}</div><div className="text-xl font-semibold">{r.summary.total ?? '—'}</div></div>
         {SEVERITIES.map((s) => <div key={s} className="card p-3"><SeverityBadge severity={s} /><div className="mt-1 text-xl font-semibold tabular-nums">{r.summary.by_severity?.[s] ?? 0}</div></div>)}
       </div>
-      <Tabs label={t('run.title')} value={tab} onChange={(v) => setParams({ tab: v })} tabs={[
+      <Tabs label={t('run.title')} value={tab} onChange={(tab) => {
+        const next = new URLSearchParams(params)
+        next.set('tab', tab)
+        setParams(next)
+      }} tabs={[
         { id: 'findings', label: t('run.findings'), count: findings.data?.findings.length },
         ...(r.score !== null && r.score !== undefined ? [{ id: 'score' as Tab, label: `Score ${r.score}` }] : []),
         { id: 'graph', label: t('run.graph') }, { id: 'ai', label: t('run.ai') },

@@ -79,3 +79,11 @@ class WorkflowChatMessage(IdMixin, CreatedMixin, Base):
     operations: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(16), default="proposed")  # proposed | applied | rejected | failed
     result_graph: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class CustomNode(IdMixin, Base):
+    __tablename__ = "custom_nodes"
+    __table_args__ = (UniqueConstraint("workspace_id", "name"),)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(100))
+    fields: Mapped[dict] = mapped_column(JSON)

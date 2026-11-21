@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api/client'
-import { useCatalog, useInvalidate, useProjects, useRun, useWorkflow, useWs } from '../api/hooks'
+import { useCatalog, useCustomNodes, useInvalidate, useProjects, useRun, useWorkflow, useWs } from '../api/hooks'
 import type { Catalog, Graph, ValidationIssue, Workflow } from '../api/types'
 import { StatusBadge } from '../components/domain'
 import { Button, ErrorState, Spinner } from '../components/ui'
@@ -58,6 +58,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   const invalidate = useInvalidate()
   const [params, setParams] = useSearchParams()
   const { inspectorCollapsed, toggleInspector, setLastWorkflow } = useWorkspaceUi()
+  const customNodes = useCustomNodes(workflow.workspace_id).data
   const project = useProjects().data?.find((p) => p.id === workflow.project_id)
   const [nodes, setNodes] = useState<FlowNode[]>([])
   const [edges, setEdges] = useState<FlowEdge[]>([])
@@ -68,6 +69,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   const [assistant, setAssistant] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [quick, setQuick] = useState<{ from?: string } | null>(null)
+  const closeQuick = useCallback(() => setQuick(null), [])
   const [, bump] = useState(0)
   const history = useRef(new History<Snapshot>(100))
   const state = useRef<Snapshot>({ nodes: [], edges: [] })
@@ -183,7 +185,9 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
     if (last.reason && Date.now() - last.at < 1500) toast.error(t(last.reason))
   }, [catalog.nodes, t])
 
-  const addNode = useCallback((type: string, at?: { x: number; y: number }, from?: string) => {
+  const addNode = useCallback((paletteType: string, at?: { x: number; y: number }, from?: string) => {
+    const custom = customNodes?.find((n) => `custom.${n.id}` === paletteType)
+    const type = custom ? 'logic.map_fields' : paletteType
     const spec = specOf(catalog.nodes, type)
     if (!spec) return
     const id = nextNodeId(type, state.current.nodes.map((n) => n.id))
@@ -196,7 +200,8 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
       pos = { x: Math.round(c.x - 120), y: Math.round(c.y - 40) }
     }
     const node: FlowNode = { id, type: 'aisw', position: pos, selected: true,
-      data: { nodeType: type, label: '', config: defaultsOf(spec.config_schema), disabled: false } }
+      data: { nodeType: type, label: custom?.name ?? '',
+        config: custom ? { fields: { ...custom.fields } } : defaultsOf(spec.config_schema), disabled: false } }
     change(() => {
       const nextNodes = [...state.current.nodes.map((n) => ({ ...n, selected: false })), node]
       setNodes(nextNodes)
@@ -210,7 +215,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
       const p = pos
       window.setTimeout(() => rf.setCenter(p.x + 120, p.y + 50, { zoom: rf.getZoom(), duration: 300 }), 30)
     }
-  }, [catalog.nodes, change, rf, t])
+  }, [catalog.nodes, customNodes, change, rf, t])
 
   const onDrop = useCallback((e: DragEvent) => {
     e.preventDefault()
@@ -476,7 +481,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
                 {t('canvas.emptyHint')}
               </div>
             )}
-            <QuickAdd open={!!quick && !runMode} onClose={() => setQuick(null)} categories={catalog.categories}
+            <QuickAdd workspaceId={workflow.workspace_id} open={!!quick && !runMode} onClose={closeQuick} categories={catalog.categories}
               fromLabel={quickFrom ? (quickFrom.data.label || specOf(catalog.nodes, quickFrom.data.nodeType)?.title[lang]) : undefined}
               onAdd={(type) => { addNode(type, undefined, quick?.from); setQuick(null) }} />
             {menu && (

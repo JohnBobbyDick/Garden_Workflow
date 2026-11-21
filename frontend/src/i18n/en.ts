@@ -4,6 +4,15 @@ type Shape<T> = { [K in keyof T]: T[K] extends string ? string : Shape<T[K]> }
 
 const en: Shape<typeof ru> = {
   app: { name: 'Garden Security', tagline: 'Visual automation of code security checks' },
+  customNodes: {
+    group: 'Workspace nodes', create: 'Create node', save: 'Save node', add: 'Add field',
+    output: 'Output field', path: 'Input path or condition',
+    hint: 'Choose fields from the input JSON and name them in the result. Workspace members can reuse this node.',
+    example: 'Use counts.HIGH for a value or =total > 0 for a condition. A path to a missing field, object or array returns null.',
+    invalid: 'Output names must be unique and begin with a letter. Use ASCII letters, digits and underscores.',
+    reserved: 'The names findings, constructor and prototype are reserved.',
+    failed: 'Could not load workspace nodes.', saved: 'Node saved to the palette',
+  },
   nav: {
     builder: 'Builder', pr: 'PR review', demo: 'Demo data', dashboard: 'Dashboard', projects: 'Projects', workflows: 'Workflows', runs: 'Runs', templates: 'Templates',
     integration: 'CI/CD', settings: 'Settings', logout: 'Sign out', skip: 'Skip to content',

@@ -6,17 +6,17 @@ import { Palette } from './Palette'
 
 /* Floating node palette over the canvas: «+» in the header, Tab, or «+» under a node. Nodes can be clicked (added in
    view / under the source node and connected) or dragged onto the canvas. */
-export function QuickAdd({ open, onClose, categories, onAdd, fromLabel }: {
-  open: boolean; onClose: () => void; categories: Catalog['categories']; onAdd: (type: string) => void; fromLabel?: string
+export function QuickAdd({ open, onClose, categories, onAdd, fromLabel, workspaceId }: {
+  workspaceId: string; open: boolean; onClose: () => void; categories: Catalog['categories']; onAdd: (type: string) => void; fromLabel?: string
 }) {
   const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
-    window.setTimeout(() => ref.current?.querySelector<HTMLInputElement>('input')?.focus(), 20)
+    const timer = window.setTimeout(() => ref.current?.querySelector<HTMLInputElement>('input')?.focus(), 20)
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    return () => { window.clearTimeout(timer); window.removeEventListener('keydown', onKey) }
   }, [open, onClose])
   if (!open) return null
   return (
@@ -29,7 +29,7 @@ export function QuickAdd({ open, onClose, categories, onAdd, fromLabel }: {
         </button>
       </div>
       <div className="min-h-0 overflow-y-auto pr-1">
-        <Palette categories={categories} onAdd={onAdd} />
+        <Palette workspaceId={workspaceId} categories={categories} onAdd={onAdd} />
       </div>
     </div>
   )

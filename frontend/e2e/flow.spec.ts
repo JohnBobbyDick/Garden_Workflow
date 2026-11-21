@@ -32,6 +32,9 @@ async function drop(page: Page, type: string, x: number, y: number) {
 async function connect(page: Page, from: string, out: string, to: string, inp: string) {
   const src = page.locator(`.react-flow__node[data-id="${from}"] .react-flow__handle.source[data-handleid="${out}"]`)
   const dst = page.locator(`.react-flow__node[data-id="${to}"] .react-flow__handle.target[data-handleid="${inp}"]`)
+  // Quick-add pans the canvas. Wait for both handles to settle before reading their coordinates.
+  await dst.hover({ trial: true })
+  await src.hover({ trial: true })
   const a = (await src.boundingBox())!
   const b = (await dst.boundingBox())!
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
@@ -208,4 +211,71 @@ test('settings → AI: proxy secret and connection diagnostics table; screenshot
   await page.goto(`/runs/${runUrl.split('run=')[1]}?full=1`)
   await page.waitForTimeout(1500)
   await page.screenshot({ path: `${SCREENS}/run-report-light-ru.png` })
+})
+
+test('workspace nodes: author a rule, reuse it after reload, run it on grouped findings', async ({ page }) => {
+  await register(page, 'custom')
+  const dlg = await newCheckDialog(page)
+  await dlg.getByRole('tab', { name: 'Учебный проект' }).click()
+  await dlg.getByRole('button', { name: /Пустой граф/ }).click()
+  await dlg.getByRole('button', { name: 'Создать и открыть' }).click()
+  await page.getByRole('button', { name: 'Ноды', exact: true }).click()
+  const palette = page.getByRole('dialog', { name: 'Добавить ноду' })
+  await palette.getByRole('button', { name: 'Создать ноду' }).click()
+  await palette.getByLabel('Название').fill('Нужно ревью')
+  await palette.getByLabel('Поле результата').fill('review')
+  await palette.getByLabel('Путь или условие').fill('=total > 0')
+  await palette.getByRole('button', { name: 'Сохранить ноду' }).click()
+  await expect(palette.getByRole('button', { name: 'Нужно ревью' })).toBeVisible()
+  await page.reload()
+  for (const [source, type] of [['src', 'scanner.secrets'], ['secrets_1', 'analysis.top_findings'],
+    ['top_findings_1', 'analysis.group_findings'], ['group_findings_1', 'Нужно ревью']]) {
+    await page.locator(`.react-flow__node[data-id="${source}"]`).click()
+    await page.getByRole('button', { name: 'Добавить ноду после этой' }).click()
+    await palette.getByLabel('Найти блок…').fill(type)
+    if (type === 'Нужно ревью') await palette.getByRole('button', { name: type }).click()
+    else await palette.locator(`[data-node-type="${type}"]`).click()
+  }
+  await expect(page.locator('.react-flow__node[data-id="map_fields_1"]')).toContainText('Нужно ревью')
+  await page.getByRole('button', { name: 'Запустить' }).click()
+  await waitRunEnd(page)
+  await expect(page.locator('.run-banner')).toContainText('Успешно')
+  await page.locator('.react-flow__node[data-id="map_fields_1"]').click()
+  await page.getByRole('tab', { name: 'Данные' }).click()
+  await expect(page.getByText(/"review":\s*true/).first()).toBeVisible()
+})
+
+test('review catalog: find ten nodes and export a sampled scan to CSV', async ({ page }) => {
+  await register(page, 'review')
+  const dlg = await newCheckDialog(page)
+  await dlg.getByRole('tab', { name: 'Учебный проект' }).click()
+  await dlg.getByRole('button', { name: /Пустой граф/ }).click()
+  await dlg.getByRole('button', { name: 'Создать и открыть' }).click()
+  await page.getByRole('button', { name: 'Ноды', exact: true }).click()
+  const palette = page.getByRole('dialog', { name: 'Добавить ноду' })
+  const search = palette.getByLabel('Найти блок…')
+  for (const type of ['logic.path_filter', 'logic.finding_delta', 'logic.check_fields', 'logic.join_json',
+    'logic.render_text', 'analysis.audit_sample', 'analysis.file_hotspots', 'analysis.dependency_fixes',
+    'analysis.severity_budget', 'output.findings_csv']) {
+    await search.fill(type)
+    await expect(palette.locator(`[data-node-type="${type}"]`)).toBeVisible()
+  }
+  await page.keyboard.press('Escape')
+  for (const [source, type] of [['src', 'scanner.secrets'], ['secrets_1', 'analysis.audit_sample'],
+    ['audit_sample_1', 'output.findings_csv']]) {
+    await page.locator(`.react-flow__node[data-id="${source}"]`).click()
+    await page.getByRole('button', { name: 'Добавить ноду после этой' }).click()
+    await search.fill(type)
+    await palette.locator(`[data-node-type="${type}"]`).click()
+  }
+  await page.getByRole('button', { name: 'Запустить' }).click()
+  await waitRunEnd(page)
+  await expect(page.locator('.run-banner')).toContainText('Успешно')
+  await page.getByRole('link', { name: 'Полный отчёт' }).click()
+  await page.getByRole('tab', { name: 'Артефакты и экспорт' }).click()
+  const row = page.getByRole('listitem').filter({ hasText: /findings-.*\.csv/ })
+  await expect(row).toBeVisible()
+  const download = page.waitForEvent('download')
+  await row.getByRole('button', { name: 'Скачать' }).click()
+  expect((await download).suggestedFilename()).toMatch(/^findings-.*\.csv$/)
 })

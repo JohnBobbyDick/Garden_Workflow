@@ -48,6 +48,12 @@ export interface NodeSpec {
   config_schema: JsonSchema
 }
 
+export interface CustomNode {
+  id: string
+  name: string
+  fields: Record<string, string>
+}
+
 export interface Catalog {
   nodes: NodeSpec[]
   port_types: string[]

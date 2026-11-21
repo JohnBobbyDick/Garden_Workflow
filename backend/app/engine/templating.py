@@ -27,5 +27,20 @@ def _fmt(v: Any) -> str:
     return str(v)
 
 
-def render_template(template: str, ctx: dict[str, Any]) -> str:
-    return _PLACEHOLDER.sub(lambda m: _fmt(resolve_path(ctx, m.group(1))), template)
+def render_template(template: str, ctx: dict[str, Any], *, max_length: int | None = None) -> str:
+    size = 0
+    end = 0
+
+    def substitute(match: re.Match[str]) -> str:
+        nonlocal size, end
+        value = _fmt(resolve_path(ctx, match.group(1)))
+        size += match.start() - end + len(value)
+        end = match.end()
+        if max_length is not None and size > max_length:
+            raise ValueError("Текст превышает лимит длины шаблона.")
+        return value
+
+    result = _PLACEHOLDER.sub(substitute, template)
+    if max_length is not None and len(result) > max_length:
+        raise ValueError("Текст превышает лимит длины шаблона.")
+    return result

@@ -26,11 +26,11 @@ from app.models.run import (
     WebhookDelivery,
 )
 from app.models.template import TEMPLATE_CATEGORIES, Template, TemplateFavorite, TemplateRating, TemplateReview
-from app.models.workflow import Project, Schedule, ScheduleSlot, Upload, Workflow, WorkflowChatMessage
+from app.models.workflow import CustomNode, Project, Schedule, ScheduleSlot, Upload, Workflow, WorkflowChatMessage
 
 __all__ = [
     "AIReport", "AISettings", "ApiToken", "Artifact", "AuditLog", "Autofix", "Base", "CiStatusReport", "Credential",
-    "FindingRecord", "Invitation", "Membership", "NODE_STATUSES", "NodeRun", "Project", "ROLES", "RUN_STATUSES",
+    "CustomNode", "FindingRecord", "Invitation", "Membership", "NODE_STATUSES", "NodeRun", "Project", "ROLES", "RUN_STATUSES",
     "RefreshToken", "RepoAllowlist", "Run", "RunEvent", "Schedule", "ScheduleSlot", "TEMPLATE_CATEGORIES", "Template",
     "TemplateFavorite", "TemplateRating", "TemplateReview", "Upload", "User", "WebhookDelivery", "Workflow",
     "WorkflowChatMessage", "Workspace", "new_id", "utcnow",
