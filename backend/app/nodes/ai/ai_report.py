@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.ai.pool import canonical_provider
 from app.ai.providers.base import build_provider
 from app.ai.report_service import generate_report
 from app.ai.validator import masked_file_reader
@@ -25,9 +26,9 @@ class AIReport(BaseNode):
     outputs = [Port("out", "report", title_ru="AI-отчёт", title_en="AI report")]
     config_schema = obj({
         "provider": prop("string", "Провайдер (пусто — из настроек workspace)", "Provider (empty — workspace settings)",
-                         enum=["", "openai_compat", "ollama"], default=""),
-        "base_url": prop("string", "Base URL провайдера", "Provider base URL"),
-        "model": prop("string", "Модель", "Model"),
+                         enum=["", "nvidia", "ollama"], default=""),
+        "base_url": prop("string", "Адрес сервера Ollama", "Ollama server URL"),
+        "model": prop("string", "Модель Ollama", "Ollama model"),
         "api_key": credential("API-ключ провайдера", "Provider API key", "llm_api_key"),
         "language": prop("string", "Язык отчёта", "Report language", "auto — язык интерфейса пользователя",
                          "auto — user's interface language", enum=["auto", "ru", "en"], default="auto"),
@@ -40,7 +41,10 @@ class AIReport(BaseNode):
 
     @classmethod
     def validate_config(cls, config):
-        if config.get("provider") and not (config.get("base_url") and config.get("model")):
+        provider = config.get("provider")
+        if provider and not canonical_provider(provider, config.get("base_url") or "", config.get("model") or ""):
+            return ["выберите NVIDIA Nemotron 3.5 Lightning или Ollama"]
+        if provider == "ollama" and not (config.get("base_url") and config.get("model")):
             return ["для переопределения провайдера укажите base_url и модель"]
         return []
 

@@ -34,7 +34,7 @@ export function HeaderButton({ icon, children, onClick, active, disabled, title,
 }) {
   return (
     <button type="button" onClick={onClick} disabled={disabled} title={title} aria-label={ariaLabel} aria-pressed={active}
-      className={clsx('inline-flex h-8 items-center gap-1.5 rounded-chip px-2 text-[13px] font-bold transition-colors disabled:opacity-40',
+      className={clsx('inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip px-2 text-[13px] font-bold transition-colors disabled:opacity-40',
         active ? 'bg-soft text-primary' : 'text-fg hover:bg-soft')}>
       <Icon name={icon} size={15} />{children}
     </button>
@@ -51,7 +51,7 @@ export function TriggerSwitch({ node, readOnly, onChange }: {
   const type = node.data.nodeType as TriggerKind
   const daily = String((node.data.config as { daily_at?: string }).daily_at ?? '')
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex max-w-full flex-wrap items-center gap-1">
       <label className="sr-only" htmlFor="trig">{t('wf.trigger')}</label>
       <select id="trig" value={type} disabled={readOnly}
         onChange={(e) => onChange(e.target.value as TriggerKind, e.target.value === 'trigger.schedule' ? { daily_at: daily || '14:00' } : {})}
@@ -83,7 +83,7 @@ export function OverflowMenu({ items }: { items: { key: string; icon: IconName; 
     <div ref={ref} className="relative">
       <HeaderButton icon="menu" onClick={() => setOpen((o) => !o)} active={open} ariaLabel={t('canvas.more')} title={t('canvas.more')} />
       {open && (
-        <div role="menu" className="card absolute right-0 top-10 z-30 w-60 py-1 text-sm shadow-pop">
+        <div role="menu" className="card fixed right-2 z-30 w-60 sm:absolute sm:right-0 sm:top-10 py-1 text-sm shadow-pop">
           {items.map((it) => (
             <button key={it.key} role="menuitem" type="button" onClick={() => { setOpen(false); it.onClick() }}
               className={clsx('flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-soft', it.danger && 'text-danger')}>

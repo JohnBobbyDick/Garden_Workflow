@@ -6,25 +6,15 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from app import models as m
-from app.ai.pool import get_llm_env, parse_proxy
+from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL, canonical_provider, get_llm_env, parse_proxy
 from app.ai.providers.base import ProviderConfig
 from app.config import get_settings
 from app.core.crypto import get_box
 from app.core.masking import Masker
 
 FREE_HINTS = [
-    "NVIDIA Build: provider=openai_compat, base_url=https://integrate.api.nvidia.com/v1, "
-    "модель nvidia/nemotron-3.5-lightning-30b-a3b",
-    "Ollama локально (бесплатно, код не покидает машину): provider=ollama, base_url=http://localhost:11434, "
-    "модель qwen2.5:7b или llama3.1:8b",
-    "OpenRouter (есть бесплатные модели с суффиксом :free): provider=openai_compat, "
-    "base_url=https://openrouter.ai/api/v1",
-    "Google Gemini через OpenAI-совместимый endpoint: provider=openai_compat, "
-    "base_url=https://generativelanguage.googleapis.com/v1beta/openai, модель gemini-2.0-flash",
-    "LM Studio / vLLM / llama.cpp server: provider=openai_compat, base_url=http://localhost:1234/v1 "
-    "(включите «разрешить локальный адрес»)",
-    "Google Gemini нативно (несколько ключей, прокси, модели-фолбэки): provider=gemini, "
-    "base_url=https://generativelanguage.googleapis.com/v1beta, модель gemini-2.5-flash",
+    "NVIDIA Build — облачная модель Nemotron 3.5 Lightning.",
+    "Ollama — сервер и модель задаются в настройках рабочего пространства.",
 ]
 
 
@@ -61,7 +51,7 @@ def _pool(s, workspace_id: str, extra: dict, main_key: str | None, masker: Maske
             _register_proxy(masker, url)
             proxies.append(url)
     return {"api_keys": ([main_key] if main_key else []) + extra_keys if extra_keys else [],
-            "proxies": proxies, "fallback_models": list(extra.get("fallback_models") or []),
+            "proxies": proxies,
             "rotation_retries": int(extra["max_retries"]) if extra.get("max_retries") else None}
 
 
@@ -75,17 +65,23 @@ def env_provider_config(masker: Masker) -> ProviderConfig | None:
     if env.provider == "ollama":
         allow.add(host_port(env.ollama_url))
         return ProviderConfig(provider="ollama", base_url=env.ollama_url, model=env.ollama_model, allow_hosts=allow)
-    keys = env.keys
+    return _platform_nvidia(masker)
+
+
+def _platform_nvidia(masker: Masker) -> ProviderConfig | None:
+    # Workspace and node selections can explicitly request NVIDIA even if the operator defaults to Ollama.
+    env = get_llm_env().model_copy(update={"llm_provider": "nvidia"})
+    if not env.configured:
+        return None
+    keys, proxies = env.keys, env.proxies
     masker.register(*keys)
-    for p in env.proxies:
-        _register_proxy(masker, p)
-        allow.add(host_port("http://" + p.split("://", 1)[1].rsplit("@", 1)[-1]))
-    provider, base_url = ("openai_compat", "https://integrate.api.nvidia.com/v1") if env.provider == "nvidia" else (
-        "gemini", env.gemini_base_url)
-    allow.add(host_port(base_url))
-    return ProviderConfig(provider=provider, base_url=base_url, model=env.models[0], api_key=keys[0],
-                          api_keys=keys, fallback_models=env.models[1:], proxies=env.proxies,
-                          rotation_retries=env.retries, allow_hosts=allow)
+    allow = set(get_settings().ssrf_allowed())
+    for proxy in proxies:
+        _register_proxy(masker, proxy)
+        allow.add(host_port("http://" + proxy.split("://", 1)[1].rsplit("@", 1)[-1]))
+    return ProviderConfig(provider="nvidia", base_url=NVIDIA_BASE_URL, model=NEMOTRON_LIGHTNING,
+                          api_key=keys[0], api_keys=keys, proxies=proxies, rotation_retries=env.retries,
+                          allow_hosts=allow)
 
 
 def env_default_out() -> dict:
@@ -98,27 +94,38 @@ def env_default_out() -> dict:
 
 def provider_config_for(s, workspace_id: str, override: dict[str, Any] | None, masker: Masker,  # noqa: ANN001
                         require_enabled: bool = True) -> ProviderConfig | None:
-    ws_settings = s.get(m.AISettings, workspace_id)
-    extra = dict(ws_settings.extra or {}) if ws_settings else {}
-    allow = set(get_settings().ssrf_allowed())
-    if extra.get("allow_host"):
-        allow.add(extra["allow_host"])
+    row = s.get(m.AISettings, workspace_id)
+    extra = dict(row.extra or {}) if row else {}
     if override and override.get("provider"):
-        return ProviderConfig(provider=override["provider"], base_url=override.get("base_url") or "",
-                              model=override.get("model") or "",
-                              api_key=_decrypt(s, workspace_id, override.get("api_key"), masker),
-                              headers=dict(extra.get("headers") or {}), timeout=float(extra.get("timeout") or 90),
-                              json_mode=extra.get("json_mode") or "auto", allow_hosts=allow)
-    if ws_settings is None:
-        return env_provider_config(masker)
-    if not ws_settings.enabled:
-        platform = env_provider_config(masker)
-        if platform is not None or require_enabled:
-            return platform
-    if not ws_settings.base_url or not ws_settings.model:
-        return env_provider_config(masker) if not require_enabled else None
-    key = _decrypt(s, workspace_id, ws_settings.credential_id, masker)
-    return ProviderConfig(provider=ws_settings.provider, base_url=ws_settings.base_url, model=ws_settings.model,
-                          api_key=key, headers=dict(extra.get("headers") or {}),
-                          timeout=float(extra.get("timeout") or 90), json_mode=extra.get("json_mode") or "auto",
-                          allow_hosts=allow, **_pool(s, workspace_id, extra, key, masker))
+        name = override["provider"]
+        url, model = override.get("base_url") or "", override.get("model") or ""
+        key_id = override.get("api_key")
+        # A node can inherit the administrator's host allowance, never another provider's headers or keys.
+        extra = {"allow_host": extra.get("allow_host")}
+    else:
+        if row is None:
+            return env_provider_config(masker)
+        name, url, model, key_id = row.provider, row.base_url, row.model, row.credential_id
+        if not canonical_provider(name, url, model):
+            return None  # Retired destinations require an explicit new workspace selection.
+        if not row.enabled:
+            platform = env_provider_config(masker)
+            if require_enabled or platform is not None:
+                return platform
+    provider = canonical_provider(name, url, model)
+    if not provider:
+        return None
+    if provider == "nvidia":
+        url, model = NVIDIA_BASE_URL, NEMOTRON_LIGHTNING
+        if not key_id and not extra.get("credential_ids"):
+            return _platform_nvidia(masker)
+    elif not url or not model:
+        return None
+    allow = set(get_settings().ssrf_allowed())
+    if provider == "ollama" and extra.get("allow_host"):
+        allow.add(extra["allow_host"])
+    key = _decrypt(s, workspace_id, key_id, masker)
+    pool = _pool(s, workspace_id, extra, key, masker) if provider == "nvidia" else {}
+    return ProviderConfig(provider=provider, base_url=url, model=model, api_key=key,
+                          headers=dict(extra.get("headers") or {}), timeout=float(extra.get("timeout") or 90),
+                          json_mode=extra.get("json_mode") or "auto", allow_hosts=allow, **pool)

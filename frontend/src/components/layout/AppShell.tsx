@@ -6,11 +6,11 @@ import { useEmbedded } from './embedded'
 
 /* Shared page chrome: theme/language toggles and the page container (padding-less inside workspace panels). */
 
-export function ThemeLangToggles() {
+export function ThemeLangToggles({ stacked = false }: { stacked?: boolean }) {
   const { t } = useTranslation()
   const { theme, toggleTheme, lang, setLang } = useUi()
   return (
-    <div className="flex items-center gap-1">
+    <div className={clsx("flex items-center gap-1", stacked && "flex-col")}>
       <button
         type="button" onClick={toggleTheme} className="rounded-chip p-2 text-muted hover:bg-soft hover:text-fg"
         aria-label={`${t('common.theme')}: ${theme === 'dark' ? t('common.dark') : t('common.light')}`}

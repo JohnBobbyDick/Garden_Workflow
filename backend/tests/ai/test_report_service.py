@@ -19,13 +19,13 @@ def findings():
 
 @pytest.fixture
 def llm():
-    srv, script, hp = make_server("openai")
+    srv, script, hp = make_server("ollama")
     yield script, hp
     srv.shutdown()
 
 
 def provider(hp):
-    return build_provider(ProviderConfig(provider="openai_compat", base_url=f"http://{hp}/v1", model="m",
+    return build_provider(ProviderConfig(provider="ollama", base_url=f"http://{hp}", model="m",
                                          timeout=5, backoff_base=0.01, allow_hosts={hp}))
 
 

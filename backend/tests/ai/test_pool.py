@@ -1,6 +1,6 @@
 """LLM pool configuration (LLM_PROXY.md §2–3.1): list splitting, proxy entries, retry formula, environment."""
 
-from app.ai.pool import LLMEnv, auto_retries, mask_proxy, parse_proxy, split_list
+from app.ai.pool import NEMOTRON_LIGHTNING, LLMEnv, auto_retries, mask_proxy, parse_proxy, split_list
 
 
 def test_split_list_separators_and_dupes():
@@ -27,28 +27,23 @@ def test_auto_retries_formula():
 
 
 def test_env_models_and_keys(monkeypatch):
-    monkeypatch.setenv("GEMINI_API_KEY", "k1,k2,k3")
-    monkeypatch.setenv("GEMINI_KEYS_COUNT", "2")
-    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
-    monkeypatch.setenv("GEMINI_PROXIES", "1.2.3.4:1080:u:p; 5.6.7.8:u:p")
-    monkeypatch.setenv("GEMINI_PROXY_PORT", "3128")
+    monkeypatch.setenv("NVIDIA_API_KEY", "k1,k2,k1")
+    monkeypatch.setenv("NVIDIA_MODEL", "unsupported")
+    monkeypatch.setenv("NVIDIA_PROXIES", "1.2.3.4:1080:u:p; 5.6.7.8:3128:u:p")
     env = LLMEnv(_env_file=None)
     assert env.keys == ["k1", "k2"]
-    assert env.models == ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
+    assert env.models == [NEMOTRON_LIGHTNING]
     assert env.proxies == ["auto://u:p@1.2.3.4:1080", "auto://u:p@5.6.7.8:3128"]
     assert env.retries == 4
-    assert env.enabled is False  # LLM_ENABLED defaults to false
+    assert env.enabled is False  # conftest disables the platform in every test session.
 
 
-def test_env_explicit_retries_and_defaults(monkeypatch):
-    for k in ("GEMINI_API_KEY", "GEMINI_PROXIES", "GEMINI_MODEL", "GEMINI_KEYS_COUNT", "GEMINI_PROXY_PORT"):
+def test_env_defaults_to_nvidia_and_requires_key(monkeypatch):
+    for k in ("LLM_PROVIDER", "LLM_ENABLED", "NVIDIA_API_KEY"):
         monkeypatch.delenv(k, raising=False)
-    monkeypatch.setenv("GEMINI_MAX_RETRIES", "2")
-    monkeypatch.setenv("LLM_ENABLED", "true")
     env = LLMEnv(_env_file=None)
-    assert env.retries == 2 and env.enabled is True and env.provider == "gemini"
-    assert env.gemini_base_url == "https://generativelanguage.googleapis.com/v1beta"
-    assert env.models == ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    assert env.enabled is True and env.provider == "nvidia" and not env.configured
+    assert env.models == [NEMOTRON_LIGHTNING]
     assert env.ollama_url == "http://localhost:11434"
 
 

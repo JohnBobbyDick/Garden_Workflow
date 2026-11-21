@@ -11,5 +11,7 @@ frontend/test-results
 frontend/playwright-report
 .superpowers
 .git
-.env
+**/.env
+**/.env.*
+!**/.env.example
 *.pdf

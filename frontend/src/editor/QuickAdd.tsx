@@ -21,7 +21,7 @@ export function QuickAdd({ open, onClose, categories, onAdd, fromLabel, workspac
   if (!open) return null
   return (
     <div ref={ref} role="dialog" aria-label={t('canvas.addNode')}
-      className="quickadd absolute left-3 top-3 z-20 flex max-h-[calc(100%-24px)] w-[300px] flex-col rounded-card border border-border bg-surface p-4 shadow-pop">
+      className="quickadd absolute left-3 top-3 z-20 flex max-h-[calc(100%-24px)] w-[300px] max-w-[calc(100%-24px)] flex-col rounded-card border border-border bg-surface p-4 shadow-pop">
       <div className="mb-1 flex items-start justify-between gap-2">
         {fromLabel ? <p className="text-[13px] text-muted">{t('canvas.addAfterNode', { name: fromLabel })}</p> : <span />}
         <button type="button" onClick={onClose} aria-label={t('common.close')} className="-mr-1 -mt-1 rounded-chip p-1.5 text-muted hover:bg-soft hover:text-fg">

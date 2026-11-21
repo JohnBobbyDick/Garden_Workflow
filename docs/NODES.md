@@ -80,7 +80,7 @@ class Shout(BaseNode):
 - **Источник кода**: `source.repo`
 - **Сканеры**: `scanner.diff`, `scanner.sast`, `scanner.sca`, `scanner.secrets`
 - **Логика**: `logic.check_fields`, `logic.compare`, `logic.finding_delta`, `logic.if_else`, `logic.join_json`, `logic.map_fields`, `logic.merge`, `logic.path_filter`, `logic.regex`, `logic.render_text`, `logic.set_value`, `logic.severity_filter`
-- **Анализ**: `analysis.audit_sample`, `analysis.dependency_fixes`, `analysis.file_hotspots`, `analysis.group_findings`, `analysis.security_score`, `analysis.severity_budget`, `analysis.top_findings`
+- **Анализ**: `analysis.ai_coverage`, `analysis.audit_sample`, `analysis.dependency_fixes`, `analysis.file_hotspots`, `analysis.group_findings`, `analysis.security_score`, `analysis.severity_budget`, `analysis.top_findings`
 - **AI**: `ai.autofix`, `ai.report`
 - **Вывод**: `output.ci_gate`, `output.findings_csv`, `output.report_export`
 - **Уведомления**: `notify.smtp`, `notify.telegram`, `notify.webhook`
@@ -390,6 +390,17 @@ match — есть ли совпадение; extract — извлечь сов�
 | `min_confidence` | number | 0.0 | Минимальная уверенность |
 
 ## Анализ
+
+### `analysis.ai_coverage` — Покрытие AI-отчёта
+
+Считает, для скольких находок валидатор принял объяснение модели. Поле needs_review истинно, если хотя бы одно объяснение сформировано детерминированно.
+
+| Порт | Направление | Тип | Обязательный | Несколько |
+|---|---|---|---|---|
+| `in` (Отчёт ai.report) | вход | `report` | да | нет |
+| `out` (Покрытие) | выход | `json` | — | — |
+
+Параметров нет.
 
 ### `analysis.audit_sample` — Выборка для ручной проверки
 

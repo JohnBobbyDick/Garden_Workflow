@@ -1,5 +1,4 @@
-
-    """AI AutoFix demo on a running stack (§12А.3).
+"""AI AutoFix demo on a running stack (§12А.3).
 
 1. Temp git repository with training-project on ``main`` (fixtures are never modified), mock GitHub, demo user,
    webhook + write token + allowlist (``allow_write`` only for the demo repository on the mock).
@@ -9,7 +8,7 @@
    diff-aware verdict PASS, 0 new findings, one finding fewer.
 4. Organizer training project (read-only): deterministic SCA AutoFix → only «Скачать .patch» (PR refused).
 
-There is no real LLM in this environment: the demo LLM below is a local OpenAI-compatible endpoint that builds its
+For reproducible offline testing, the demo LLM is a local Ollama-compatible endpoint that builds its
 answer from the masked context it receives (marked as such in the output). Validator, self-check by all analyzers,
 PR creation and the diff-aware re-check are the real product code.
 
@@ -46,7 +45,7 @@ WEBHOOK_SECRET = "demo-" + uuid.uuid4().hex
 
 
 def demo_llm(port: int) -> ThreadingHTTPServer:
-    """Local OpenAI-compatible demo endpoint: moves the masked string literal of the finding line to an env var."""
+    """Local Ollama demo endpoint: moves the masked string literal of the finding line to an env var."""
 
     class H(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -61,9 +60,13 @@ def demo_llm(port: int) -> ThreadingHTTPServer:
             self.wfile.write(raw)
 
         def do_GET(self):
-            self._send({"data": [{"id": "demo-llm"}]})
+            if self.path != "/api/tags":
+                return self.send_error(404)
+            self._send({"models": [{"name": "demo-llm"}]})
 
         def do_POST(self):
+            if self.path != "/api/chat":
+                return self.send_error(404)
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
             ctx = json.loads(body["messages"][1]["content"])
             f = ctx["finding"]
@@ -80,9 +83,8 @@ def demo_llm(port: int) -> ThreadingHTTPServer:
                                      "при отсутствии переменной приложение падает с понятной ошибкой. "
                                      "Скомпрометированный пароль нужно перевыпустить.",
                       "requires_config": [{"name": env, "description": "пароль импорта (из хранилища секретов)"}]}
-            self._send({"id": "demo", "model": "demo-llm",
-                        "choices": [{"index": 0, "message": {"role": "assistant", "content": json.dumps(answer)},
-                                     "finish_reason": "stop"}], "usage": {"prompt_tokens": 0, "completion_tokens": 0}})
+            self._send({"model": "demo-llm", "done": True,
+                        "message": {"role": "assistant", "content": json.dumps(answer)}})
 
     srv = ThreadingHTTPServer(("127.0.0.1", port), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
@@ -112,7 +114,7 @@ def main() -> int:
     srv, state = mock_scm.start(port=args.mock_port)
     llm = demo_llm(args.llm_port)
     mock = f"http://127.0.0.1:{srv.server_address[1]}"
-    print(f"[demo] mock GitHub {mock}; demo LLM http://127.0.0.1:{args.llm_port}/v1 (локальный, не настоящая модель)")
+    print(f"[demo] mock GitHub {mock}; эмулятор Ollama http://127.0.0.1:{args.llm_port}")
     c = httpx.Client(base_url=args.url, timeout=120)
     reg = c.post("/api/auth/register", json={"email": f"autofix-{uuid.uuid4().hex[:6]}@example.org",
                                              "password": "Demo-Passw0rd!", "display_name": "autofix demo"})
@@ -123,14 +125,13 @@ def main() -> int:
         "workspace_id": ws, "name": name, "kind": kind, "value": value}).json()["id"]
     whs = cred("github webhook", "webhook_secret", WEBHOOK_SECRET)
     wtok = cred("github write token", "repo_write_token", "ghp_" + secrets.token_hex(18))
-    lkey = cred("demo llm", "llm_api_key", "demo-" + secrets.token_hex(8))
     c.put("/api/settings/allowlist", headers=h, json={"workspace_id": ws, "entries": [
         {"url": "https://github.com/TBagirov/training"},
         {"url": REPO_URL, "allow_write": True, "provider": "github", "api_base": mock,
          "write_credential_id": wtok}]}).raise_for_status()
-    c.put("/api/settings/ai", headers=h, json={"workspace_id": ws, "enabled": True, "provider": "openai_compat",
-                                               "base_url": f"http://127.0.0.1:{args.llm_port}/v1", "model": "demo-llm",
-                                               "credential_id": lkey, "allow_local": True}).raise_for_status()
+    c.put("/api/settings/ai", headers=h, json={"workspace_id": ws, "enabled": True, "provider": "ollama",
+                                               "base_url": f"http://127.0.0.1:{args.llm_port}", "model": "demo-llm",
+                                               "allow_local": True}).raise_for_status()
 
     def graph(trigger: tuple, src: dict, diff: bool) -> dict:
         nodes = [trigger, ("src", "source.repo", src), ("sec", "scanner.secrets", {}), ("sca", "scanner.sca", {}),

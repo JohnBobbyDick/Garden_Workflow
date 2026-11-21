@@ -5,7 +5,6 @@ import pytest
 
 from app import models as m
 from app.config import get_settings
-from tests.ai.fake_llm import make_server
 from tests.api.conftest import drain
 from tests.api.test_ai_api import configure
 from tests.engine.test_worker_scheduler import full_graph
@@ -13,10 +12,9 @@ from tests.nodes.conftest import TRAINING
 
 
 @pytest.fixture
-def llm():
-    srv, script, hp = make_server("openai")
-    yield script, hp
-    srv.shutdown()
+def llm(nvidia_server):
+    script, hp = nvidia_server
+    return script, hp
 
 
 @pytest.fixture

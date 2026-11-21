@@ -144,3 +144,20 @@ def test_render_text_keeps_arbitrary_json_under_data_and_bounds_result():
     with pytest.raises(ValueError, match="лимит"):
         output(node, env, {"template": "{{data.text}}{{data.text}}"})
     assert output(node, {"in": stream(finding("a"))}, {"template": "{{findings.count}}"}).data["text"] == "1"
+
+
+@pytest.mark.parametrize(("ai", "accepted", "total", "review"), [
+    (True, 2, 2, False), (True, 1, 3, True), (False, 0, 2, True), (False, 0, 0, False),
+])
+def test_ai_coverage_counts_all_findings_including_deterministic_fill(ai, accepted, total, review):
+    report = Envelope.make("report", {"ai_generated": ai, "report": {"findings": [{} for _ in range(total)]},
+                                      "validation": {"metrics": {"valid_items": accepted} if ai else {}}}, "ai")
+    result = output("analysis.ai_coverage", {"in": report}).data
+    assert result == {"total": total, "explained_by_ai": accepted, "deterministic": total - accepted,
+                      "needs_review": review}
+
+
+def test_ai_coverage_requires_an_ai_report():
+    exported = Envelope.make("report", {"artifacts": []}, "csv")
+    with pytest.raises(ValueError, match="ai.report"):
+        output("analysis.ai_coverage", {"in": exported})

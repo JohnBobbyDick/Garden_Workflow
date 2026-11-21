@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -17,13 +17,15 @@ const ProjectsPage = lazy(() => import('./ProjectsPage'))
 type Tab = 'ai' | 'credentials' | 'allowlist' | 'members' | 'schedules' | 'projects' | 'preferences'
 const err = (e: unknown) => toast.error(e instanceof ApiError ? e.message : String(e))
 
-interface AISettings { enabled: boolean; provider: string; base_url: string; model: string; credential_id: string | null;
-  headers: Record<string, string>; timeout: number; json_mode: string; allow_local: boolean; providers: string[]; hints: string[]
+type Provider = 'nvidia' | 'ollama'
+interface AISettings { enabled: boolean; provider: Provider; base_url: string; model: string; credential_id: string | null;
+  headers: Record<string, string>; timeout: number; json_mode: string; allow_local: boolean; ollama_defaults: { base_url: string; model: string }; requires_reconfiguration?: boolean
   credential_ids: string[]; proxy_credential_ids: string[]; fallback_models: string[]; proxy_scheme: string
-  proxy_port: string | null; max_retries: number | null; env_default: { enabled: boolean; provider: string; model: string } }
+  proxy_port: string | null; max_retries: number | null; env_default: { enabled: boolean; provider: Provider | ''; model: string } }
 interface DiagRow { proxy: string; scheme: string | null; ok: boolean; ms: number; error: string | null }
 
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+const NVIDIA = { base_url: 'https://integrate.api.nvidia.com/v1', model: 'nvidia/nemotron-3.5-lightning-30b-a3b' }
+const PROVIDERS = { nvidia: 'NVIDIA Nemotron', ollama: 'Ollama' } as const
 const PROXY_SCHEMES = ['auto', 'http', 'https', 'socks5', 'socks5h']
 
 function toggle(list: string[], id: string): string[] {
@@ -36,7 +38,7 @@ function PoolSection({ form, set, admin }: { form: AISettings; set: <K extends k
   const creds = useCredentials()
   const invalidate = useInvalidate()
   const [proxy, setProxy] = useState({ name: '', value: '' })
-  const keys = (creds.data ?? []).filter((c) => c.kind !== 'proxy' && c.id !== form.credential_id)
+  const keys = (creds.data ?? []).filter((c) => c.kind === 'llm_api_key' && c.id !== form.credential_id)
   const proxies = (creds.data ?? []).filter((c) => c.kind === 'proxy')
   const addProxy = async () => {
     try {
@@ -47,13 +49,12 @@ function PoolSection({ form, set, admin }: { form: AISettings; set: <K extends k
     } catch (e) { err(e) }
   }
   return (
-    <fieldset disabled={!admin} className="mt-4 border-t border-border pt-4">
-      <legend className="mb-1 text-base font-bold">{t('settings.pool')}</legend>
+    <fieldset disabled={!admin} className="min-w-0 space-y-3 pt-3">
       <p className="mb-3 text-xs text-muted">{t('settings.poolHint')}</p>
       <div className="mb-3">
         <div className="label">{t('settings.extraKeys')}</div>
         {keys.length ? keys.map((c) => (
-          <label key={c.id} className="flex items-center gap-2 text-sm">
+          <label key={c.id} className="flex flex-wrap items-center gap-2 text-sm [overflow-wrap:anywhere]">
             <input type="checkbox" checked={form.credential_ids.includes(c.id)} onChange={() => set('credential_ids', toggle(form.credential_ids, c.id))} />
             {c.name} <span className="font-mono text-muted">{c.display}</span>
           </label>
@@ -62,19 +63,19 @@ function PoolSection({ form, set, admin }: { form: AISettings; set: <K extends k
       <div className="mb-3">
         <div className="label">{t('settings.proxies')}</div>
         {proxies.map((c) => (
-          <label key={c.id} className="flex items-center gap-2 text-sm">
+          <label key={c.id} className="flex flex-wrap items-center gap-2 text-sm [overflow-wrap:anywhere]">
             <input type="checkbox" checked={form.proxy_credential_ids.includes(c.id)} onChange={() => set('proxy_credential_ids', toggle(form.proxy_credential_ids, c.id))} />
             {c.name} <span className="font-mono text-muted">{c.display}</span>
           </label>
         ))}
-        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
-          <Input aria-label={t('settings.proxyName')} placeholder={t('settings.proxyName')} value={proxy.name} onChange={(e) => setProxy({ ...proxy, name: e.target.value })} />
-          <Input aria-label={t('settings.proxyValue')} type="password" autoComplete="off" placeholder="host:port:login:password" value={proxy.value} onChange={(e) => setProxy({ ...proxy, value: e.target.value })} />
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Input className="min-w-0 flex-[1_1_9rem]" aria-label={t('settings.proxyName')} placeholder={t('settings.proxyName')} value={proxy.name} onChange={(e) => setProxy({ ...proxy, name: e.target.value })} />
+          <Input className="min-w-0 flex-[2_1_12rem]" aria-label={t('settings.proxyValue')} type="password" autoComplete="off" placeholder="host:port:login:password" value={proxy.value} onChange={(e) => setProxy({ ...proxy, value: e.target.value })} />
           <Button icon="plus" disabled={!proxy.name || !proxy.value} onClick={addProxy}>{t('settings.addProxy')}</Button>
         </div>
         <p className="mt-1 text-xs text-muted">{t('settings.proxyFormats')}</p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-x-3 [grid-template-columns:repeat(auto-fit,minmax(min(9rem,100%),1fr))]">
         <Field label={t('settings.proxyScheme')} htmlFor="ai-ps">
           <Select id="ai-ps" value={form.proxy_scheme} onChange={(e) => set('proxy_scheme', e.target.value)}>{PROXY_SCHEMES.map((x) => <option key={x}>{x}</option>)}</Select>
         </Field>
@@ -84,10 +85,6 @@ function PoolSection({ form, set, admin }: { form: AISettings; set: <K extends k
             onChange={(e) => { const n = parseInt(e.target.value, 10); set('max_retries', Number.isFinite(n) ? Math.min(6, Math.max(1, n)) : null) }} />
         </Field>
       </div>
-      <Field label={t('settings.fallbackModels')} htmlFor="ai-fm" hint={t('settings.fallbackHint')}>
-        <Input id="ai-fm" value={form.fallback_models.join(', ')} placeholder="gemini-2.5-flash-lite"
-          onChange={(e) => set('fallback_models', e.target.value.split(/[,;\s]+/).filter(Boolean))} />
-      </Field>
     </fieldset>
   )
 }
@@ -95,13 +92,13 @@ function PoolSection({ form, set, admin }: { form: AISettings; set: <K extends k
 function DiagnoseTable({ rows }: { rows: DiagRow[] }) {
   const { t } = useTranslation()
   return (
-    <table className="table-base mb-3" aria-label={t('settings.diagnose')}>
+    <div className="mb-3 overflow-x-auto"><table className="table-base" aria-label={t('settings.diagnose')}>
       <thead><tr><th>{t('settings.diagProxy')}</th><th>{t('settings.proxyScheme')}</th><th>{t('settings.diagResult')}</th><th>{t('settings.diagTime')}</th><th>{t('settings.diagReason')}</th></tr></thead>
       <tbody>{rows.map((r, i) => (
         <tr key={i}><td className="font-mono">{r.proxy === 'direct' ? t('settings.direct') : r.proxy}</td><td>{r.scheme ?? '—'}</td>
           <td><Badge tone={r.ok ? 'success' : 'danger'}>{r.ok ? 'OK' : 'FAIL'}</Badge></td><td className="tabular-nums">{r.ms} {t('settings.ms')}</td>
           <td className="text-xs text-muted">{r.error ?? ''}</td></tr>))}</tbody>
-    </table>
+    </table></div>
   )
 }
 
@@ -109,7 +106,8 @@ function AiTab({ admin }: { admin: boolean }) {
   const { t } = useTranslation()
   const ws = useWs()
   const creds = useCredentials()
-  const q = useQuery({ queryKey: ['ai-settings', ws], queryFn: () => api<AISettings>(withWs('/api/settings/ai', ws)) })
+  const client = useQueryClient()
+  const q = useQuery({ queryKey: ['ai-settings', ws], refetchOnWindowFocus: false, queryFn: () => api<AISettings>(withWs('/api/settings/ai', ws)) })
   const [form, setForm] = useState<AISettings | null>(null)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState<'save' | 'test' | 'diag' | null>(null)
@@ -117,15 +115,45 @@ function AiTab({ admin }: { admin: boolean }) {
   useEffect(() => { if (q.data) setForm(q.data) }, [q.data])
   if (q.error) return <ErrorState error={q.error} />
   if (!form) return <Skeleton className="h-64" />
-  const set = <K extends keyof AISettings>(k: K, v: AISettings[K]) => setForm((f) => (f ? { ...f, [k]: v } : f))
+  const clearChecks = () => { setResult(null); setDiag(null) }
+  const set = <K extends keyof AISettings>(k: K, v: AISettings[K]) => {
+    clearChecks()
+    setForm((f) => (f ? { ...f, [k]: v } : f))
+  }
+  const { env_default: platform } = form
+  const selected = !form.enabled && platform.enabled && platform.provider ? platform.provider : form.provider
+  const choose = (provider: Provider) => {
+    if (provider === form.provider) {
+      set('enabled', true)
+      return
+    }
+    clearChecks()
+    const defaults = provider === 'nvidia' ? NVIDIA : form.ollama_defaults
+    setForm({ ...form, ...defaults, provider, enabled: true, allow_local: provider === 'ollama',
+      credential_id: null, credential_ids: [], proxy_credential_ids: [], fallback_models: [], headers: {},
+      proxy_scheme: 'auto', proxy_port: null, max_retries: null })
+  }
+  const persist = async () => {
+    const { enabled, provider, base_url, model, allow_local, credential_id, credential_ids,
+      proxy_credential_ids, proxy_scheme, proxy_port, max_retries, timeout, json_mode } = form
+    const saved = await api<AISettings>('/api/settings/ai', { method: 'PUT', json: {
+      workspace_id: ws, enabled, provider, timeout, json_mode,
+      ...(provider === 'nvidia' ? { ...NVIDIA, allow_local: false, credential_id, credential_ids, proxy_credential_ids,
+        proxy_scheme, proxy_port, max_retries } : { base_url: base_url.trim(), model: model.trim(), allow_local,
+        credential_id: null, credential_ids: [], proxy_credential_ids: [], proxy_scheme: 'auto', proxy_port: null, max_retries: null }),
+      headers: {}, fallback_models: [],
+    } })
+    client.setQueryData(['ai-settings', ws], saved)
+    setForm(saved)
+  }
   const save = async () => {
     setBusy('save')
-    try { await api('/api/settings/ai', { method: 'PUT', json: { ...form, workspace_id: ws } }); toast.success(t('settings.saved')) } catch (e) { err(e) } finally { setBusy(null) }
+    try { await persist(); toast.success(t('settings.saved')) } catch (e) { err(e) } finally { setBusy(null) }
   }
   const test = async () => {
     setBusy('test')
     try {
-      await api('/api/settings/ai', { method: 'PUT', json: { ...form, workspace_id: ws } })
+      await persist()
       const r = await api<{ ok: boolean; model?: string; latency_ms?: number; error?: string }>('/api/settings/ai/test', { method: 'POST', json: { workspace_id: ws } })
       setResult({ ok: r.ok, text: r.ok ? t('settings.testOk', { model: r.model, ms: r.latency_ms }) : t('settings.testFail', { error: r.error }) })
     } catch (e) { err(e) } finally { setBusy(null) }
@@ -133,50 +161,57 @@ function AiTab({ admin }: { admin: boolean }) {
   const runDiag = async () => {
     setBusy('diag')
     try {
-      if (admin) await api('/api/settings/ai', { method: 'PUT', json: { ...form, workspace_id: ws } })
+      if (admin) await persist()
       const r = await api<{ results: DiagRow[]; error: string | null }>('/api/settings/ai/diagnose', { method: 'POST', json: { workspace_id: ws } })
       setDiag({ rows: r.results, error: r.error })
     } catch (e) { err(e) } finally { setBusy(null) }
   }
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <Card title={t('settings.ai')} className="lg:col-span-2">
-        {form.env_default.enabled && !form.enabled && (
-          <p role="status" className="mb-3 rounded-field bg-soft px-3 py-2 text-sm text-primary">
-            {t('settings.envDefault', { provider: form.env_default.provider, model: form.env_default.model })}
-          </p>
-        )}
-        <fieldset disabled={!admin} className="space-y-1">
-          <div className="mb-3"><Switch checked={form.enabled} onChange={(v) => set('enabled', v)} label={t('settings.enabled')} /></div>
-          <Field label={t('settings.provider')} htmlFor="ai-p">
-            <Select id="ai-p" value={form.provider} onChange={(e) => {
-              const p = e.target.value
-              setForm((f) => (f ? { ...f, provider: p, base_url: p === 'gemini' && !f.base_url ? GEMINI_BASE : f.base_url,
-                model: p === 'gemini' && !f.model ? 'gemini-2.5-flash' : f.model } : f))
-            }}>{form.providers.map((p) => <option key={p}>{p}</option>)}</Select>
-          </Field>
-          <Field label={t('settings.baseUrl')} htmlFor="ai-u"><Input id="ai-u" value={form.base_url} placeholder="http://localhost:11434" onChange={(e) => set('base_url', e.target.value)} /></Field>
-          <Field label={t('settings.model')} htmlFor="ai-m"><Input id="ai-m" value={form.model} placeholder="qwen2.5:7b" onChange={(e) => set('model', e.target.value)} /></Field>
+    <Card title={t('settings.ai')} className="min-w-0">
+      {form.requires_reconfiguration && <p className="mb-3 text-sm text-warning">{t('settings.reconfigure')}</p>}
+      <fieldset disabled={!admin || !!busy} className="min-w-0 space-y-4">
+        <fieldset className="min-w-0">
+          <legend className="label">{t('settings.provider')}</legend>
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(PROVIDERS) as Provider[]).map((p) => (
+              <label key={p} className={`flex cursor-pointer items-center gap-2 rounded-field border px-3 py-2 text-sm ${selected === p ? 'border-primary bg-soft text-primary' : 'border-border'}`}>
+                <input type="radio" name="ai-provider" value={p} checked={selected === p} readOnly onClick={() => choose(p)} />
+                {PROVIDERS[p]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <Switch checked={form.enabled} onChange={(v) => v ? choose(selected) : set('enabled', false)} label={t('settings.workspaceProvider')} />
+        {!form.enabled && <p role="status" className="rounded-field bg-soft px-3 py-2 text-sm [overflow-wrap:anywhere]">
+          {platform.enabled ? t('settings.envDefault', { provider: PROVIDERS[selected], model: platform.model }) : t('settings.aiOff')}
+        </p>}
+        {form.enabled && (form.provider === 'ollama' ? <>
+          <Field label={t('settings.baseUrl')} htmlFor="ai-u"><Input id="ai-u" value={form.base_url} onChange={(e) => set('base_url', e.target.value)} /></Field>
+          <Field label={t('settings.model')} htmlFor="ai-m"><Input id="ai-m" value={form.model} onChange={(e) => set('model', e.target.value)} /></Field>
+          <Switch checked={form.allow_local} onChange={(v) => set('allow_local', v)} label={t('settings.allowLocal')} />
+        </> : <>
+          <p className="text-sm text-muted [overflow-wrap:anywhere]">{t('settings.model')} · <code>{NVIDIA.model}</code></p>
           <Field label={t('settings.apiKey')} htmlFor="ai-k">
             <Select id="ai-k" value={form.credential_id ?? ''} onChange={(e) => set('credential_id', e.target.value || null)}>
-              <option value="">—</option>
-              {(creds.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name} · {c.display}</option>)}
+              <option value="">{t('settings.platformKey')}</option>
+              {(creds.data ?? []).filter((c) => c.kind === 'llm_api_key').map((c) => <option key={c.id} value={c.id}>{c.name} · {c.display}</option>)}
             </Select>
           </Field>
-          <div className="mb-3"><Switch checked={form.allow_local} onChange={(v) => set('allow_local', v)} label={t('settings.allowLocal')} /></div>
-        </fieldset>
-        <PoolSection form={form} set={set} admin={admin} />
-        {result && <p role="status" className={result.ok ? 'mb-3 text-sm text-success' : 'mb-3 text-sm text-danger'}>{result.text}</p>}
-        {diag && (diag.error ? <p role="status" className="mb-3 text-sm text-danger">{diag.error}</p> : <DiagnoseTable rows={diag.rows} />)}
-        <div className="flex gap-2">
-          <Button variant="primary" icon="save" disabled={!admin} loading={busy === 'save'} onClick={save}>{t('common.save')}</Button>
-          <Button icon="sparkles" disabled={!admin} loading={busy === 'test'} onClick={test}>{t('settings.test')}</Button>
-          <Button icon="shield-check" loading={busy === 'diag'} onClick={runDiag}>{t('settings.diagnose')}</Button>
-          {!admin && <span className="self-center text-xs text-muted">{t('settings.adminOnly')}</span>}
-        </div>
-      </Card>
-      <Card title={t('settings.freeHints')}><ul className="space-y-2 text-sm text-muted">{form.hints.map((h) => <li key={h}>• {h}</li>)}</ul></Card>
-    </div>
+          <details className="min-w-0 border-t border-border pt-3">
+            <summary className="cursor-pointer text-sm font-bold">{t('settings.pool')}</summary>
+            <PoolSection form={form} set={set} admin={admin} />
+          </details>
+        </>)}
+      </fieldset>
+      {result && <p role="status" className={`mt-3 text-sm [overflow-wrap:anywhere] ${result.ok ? 'text-success' : 'text-danger'}`}>{result.text}</p>}
+      {diag && (diag.error ? <p role="status" className="mt-3 text-sm text-danger [overflow-wrap:anywhere]">{diag.error}</p> : <DiagnoseTable rows={diag.rows} />)}
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <Button variant="primary" icon="save" disabled={!admin || !!busy} loading={busy === 'save'} onClick={save}>{t('common.save')}</Button>
+        <Button icon="sparkles" disabled={!admin || !!busy} loading={busy === 'test'} onClick={test}>{t('settings.test')}</Button>
+        <Button icon="shield-check" disabled={!!busy} loading={busy === 'diag'} onClick={runDiag}>{t('settings.diagnose')}</Button>
+        {!admin && <span className="text-xs text-muted">{t('settings.adminOnly')}</span>}
+      </div>
+    </Card>
   )
 }
 
@@ -202,8 +237,8 @@ function CredentialsTab({ admin }: { admin: boolean }) {
     try { await api(`/api/credentials/${id}`, { method: 'DELETE' }); await invalidate('credentials') } catch (e) { err(e) }
   }
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <Card title={t('settings.credentials')} className="lg:col-span-2" padded={false}>
+    <div className="grid gap-4">
+      <Card title={t('settings.credentials')} className="min-w-0 overflow-x-auto" padded={false}>
         <p className="px-4 pt-3 text-xs text-muted">{t('settings.writeOnly')}</p>
         <table className="table-base"><thead><tr><th>{t('common.name')}</th><th>{t('settings.credentialKind')}</th><th>{t('settings.credentialValue')}</th><th>{t('common.created')}</th><th /></tr></thead>
           <tbody>{(creds.data ?? []).map((c) => (
@@ -242,7 +277,7 @@ function AllowlistTab({ admin }: { admin: boolean }) {
   }
   if (!q.data) return <Skeleton className="h-40" />
   return (
-    <Card title={t('settings.allowlist')} padded={false}>
+    <Card title={t('settings.allowlist')} className="min-w-0 overflow-x-auto" padded={false}>
       <table className="table-base"><thead><tr><th>URL</th><th>{t('settings.allowWrite')}</th><th /></tr></thead>
         <tbody>
           {q.data.platform.map((e) => <tr key={e.url}><td className="font-mono text-xs">{e.url}</td><td><Badge>{t('settings.platformRepo')}</Badge></td><td /></tr>)}
@@ -254,7 +289,7 @@ function AllowlistTab({ admin }: { admin: boolean }) {
           ))}
         </tbody></table>
       {admin && (
-        <div className="flex gap-2 p-4">
+        <div className="flex flex-wrap gap-2 p-4">
           <Input aria-label="URL" placeholder="https://github.com/org/training-copy" value={url} onChange={(e) => setUrl(e.target.value)} />
           <Button icon="plus" disabled={!url} onClick={() => { void save([...entries, { url, allow_write: false, provider: url.includes('gitlab') ? 'gitlab' : 'github', api_base: null }]); setUrl('') }}>{t('settings.addRepo')}</Button>
         </div>
@@ -280,7 +315,7 @@ function MembersTab({ admin }: { admin: boolean }) {
   const change = async (uid: string, r: string) => { try { await api(`/api/workspaces/${ws}/members/${uid}`, { method: 'PATCH', json: { role: r } }); void q.refetch() } catch (e) { err(e) } }
   const remove = async (uid: string) => { try { await api(`/api/workspaces/${ws}/members/${uid}`, { method: 'DELETE' }); void q.refetch() } catch (e) { err(e) } }
   return (
-    <Card title={t('settings.members')} padded={false}>
+    <Card title={t('settings.members')} className="min-w-0 overflow-x-auto" padded={false}>
       <table className="table-base"><thead><tr><th>E-mail</th><th>{t('settings.role')}</th><th /></tr></thead>
         <tbody>
           {(q.data?.members ?? []).map((m) => (
@@ -313,7 +348,7 @@ function SchedulesTab() {
   })
   const toggle = async (wfId: string, enabled: boolean) => { await api(`/api/workflows/${wfId}/schedule`, { method: 'PUT', json: { enabled } }); void q.refetch() }
   return (
-    <Card title={t('settings.schedules')} padded={false}>
+    <Card title={t('settings.schedules')} className="min-w-0 overflow-x-auto" padded={false}>
       {!q.data ? <Skeleton className="m-4 h-20" /> : !q.data.length ? <p className="p-4 text-sm text-muted">{t('common.empty')}</p> : (
         <table className="table-base"><thead><tr><th>{t('runs.workflow')}</th><th>Cron</th><th>{t('settings.timezone')}</th><th>{t('settings.nextRun')}</th><th>{t('settings.enabledShort')}</th></tr></thead>
           <tbody>{q.data.map((s) => (
@@ -350,11 +385,11 @@ export default function SettingsPage() {
   return (
     <Page wide>
       <PageHeader title={t('settings.title')} />
-      <Tabs label={t('settings.title')} value={tab} onChange={(v) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', v); return n })}
+      <Tabs compact label={t('settings.title')} value={tab} onChange={(v) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', v); return n })}
         tabs={(['ai', 'credentials', 'allowlist', 'members', 'schedules', 'projects', 'preferences'] as Tab[])
         .map((id) => ({ id, label: t(`settings.${id}`) }))} />
       <div className="mt-4">
-        {tab === 'ai' && <AiTab admin={admin} />}
+        {tab === 'ai' && <AiTab key={ws} admin={admin} />}
         {tab === 'credentials' && <CredentialsTab admin={admin} />}
         {tab === 'allowlist' && <AllowlistTab admin={admin} />}
         {tab === 'members' && <MembersTab admin={admin} />}

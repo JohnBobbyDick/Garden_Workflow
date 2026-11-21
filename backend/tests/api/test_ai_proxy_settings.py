@@ -8,28 +8,15 @@ import threading
 import pytest
 
 from app.ai import settings_service
-from app.ai.pool import LLMEnv
+from app.ai.pool import NEMOTRON_LIGHTNING, LLMEnv
 from app.config import get_settings
-from tests.ai.fake_llm import make_server
 from tests.ai.test_report_service import good_answer
 from tests.api.conftest import drain
 from tests.api.test_ai_api import ai_graph
 
-KEY1 = "AIzaCanaryKeyNumberOne-000111"
-KEY2 = "AIzaCanaryKeyNumberTwo-000222"
+KEY1 = "nvapi-CanaryKeyNumberOne-000111"
+KEY2 = "nvapi-CanaryKeyNumberTwo-000222"
 PROXY_PASSWORD = "Pr0xyCanary:Secret#9"
-
-
-def gemini_answer(body):
-    text = body["contents"][-1]["parts"][0]["text"]
-    return good_answer({"messages": [{"role": "user", "content": text}]})
-
-
-@pytest.fixture
-def gemini():
-    srv, script, hp = make_server("gemini")
-    yield script, hp
-    srv.shutdown()
 
 
 def cred(client, user, name, kind, value) -> str:
@@ -40,7 +27,7 @@ def cred(client, user, name, kind, value) -> str:
 
 
 class FakeHttpProxy:
-    """A real local HTTP proxy that answers every proxied request itself with a Gemini-shaped reply."""
+    """A real local HTTP proxy that answers every proxied request itself with a chat completion."""
 
     def __init__(self) -> None:
         self.requests: list[bytes] = []
@@ -54,7 +41,7 @@ class FakeHttpProxy:
                            if line.lower().startswith(b"content-length")), 0)
             if length:
                 await reader.readexactly(length)
-            body = json.dumps({"candidates": [{"content": {"parts": [{"text": '{"ok": true}'}]}}]}).encode()
+            body = json.dumps({"choices": [{"message": {"content": '{"ok": true}'}}]}).encode()
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
                          + str(len(body)).encode() + b"\r\n\r\n" + body)
             await writer.drain()
@@ -86,63 +73,59 @@ def allow_local(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_put_and_get_pool_settings_roundtrip(client, alice, gemini):
-    _, hp = gemini
+def test_put_and_get_pool_settings_roundtrip(client, alice, nvidia_server):
     k1, k2 = cred(client, alice, "k1", "llm_api_key", KEY1), cred(client, alice, "k2", "llm_api_key", KEY2)
     px = cred(client, alice, "proxy", "proxy", f"203.0.113.10:1080:user:{PROXY_PASSWORD}")
     r = client.put("/api/settings/ai", json={
-        "workspace_id": alice.workspace_id, "enabled": True, "provider": "gemini",
-        "base_url": f"http://{hp}/v1beta", "model": "gemini-2.5-flash", "credential_id": k1,
-        "credential_ids": [k2], "proxy_credential_ids": [px], "fallback_models": ["gemini-2.5-flash-lite"],
+        "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia",
+        "model": NEMOTRON_LIGHTNING, "credential_id": k1,
+        "credential_ids": [k2], "proxy_credential_ids": [px], 
         "proxy_scheme": "socks5", "proxy_port": "1080", "max_retries": 4, "allow_local": True}, headers=alice.headers)
     assert r.status_code == 200, r.text
     got = client.get("/api/settings/ai", headers=alice.headers).json()
     assert got["credential_ids"] == [k2] and got["proxy_credential_ids"] == [px]
-    assert got["fallback_models"] == ["gemini-2.5-flash-lite"] and got["proxy_scheme"] == "socks5"
-    assert got["max_retries"] == 4 and "gemini" in got["providers"]
+    assert got["fallback_models"] == [] and got["proxy_scheme"] == "socks5"
+    assert got["max_retries"] == 4 and "nvidia" in got["providers"]
     assert KEY1 not in r.text + json.dumps(got) and "Pr0xyCanary" not in r.text + json.dumps(got)
 
 
-def test_put_rejects_foreign_or_wrong_kind_proxy(client, alice, gemini):
-    _, hp = gemini
+def test_put_rejects_foreign_or_wrong_kind_proxy(client, alice, nvidia_server):
     k = cred(client, alice, "k", "llm_api_key", KEY1)
     r = client.put("/api/settings/ai", json={
-        "workspace_id": alice.workspace_id, "enabled": True, "provider": "gemini", "base_url": f"http://{hp}/v1beta",
-        "model": "m", "credential_id": k, "proxy_credential_ids": [k]}, headers=alice.headers)
-    assert r.status_code == 400
+        "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia", 
+        "model": NEMOTRON_LIGHTNING, "credential_id": k, "proxy_credential_ids": [k]}, headers=alice.headers)
+    assert r.status_code == 400 and "прокси" in r.text
 
 
-def test_pool_config_built_from_vault(client, alice, db, gemini):
-    _, hp = gemini
+def test_pool_config_built_from_vault(client, alice, db, nvidia_server):
     k1, k2 = cred(client, alice, "k1", "llm_api_key", KEY1), cred(client, alice, "k2", "llm_api_key", KEY2)
     px = cred(client, alice, "proxy", "proxy", f"203.0.113.10:user:{PROXY_PASSWORD}")
     client.put("/api/settings/ai", json={
-        "workspace_id": alice.workspace_id, "enabled": True, "provider": "gemini", "base_url": f"http://{hp}/v1beta",
-        "model": "gemini-2.5-flash", "credential_id": k1, "credential_ids": [k2], "proxy_credential_ids": [px],
+        "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia", 
+        "model": NEMOTRON_LIGHTNING, "credential_id": k1, "credential_ids": [k2], "proxy_credential_ids": [px],
         "proxy_scheme": "http", "proxy_port": "3128", "max_retries": 3}, headers=alice.headers)
     from app.core.masking import Masker
     with db.session() as s:
         cfg = settings_service.provider_config_for(s, alice.workspace_id, None, Masker())
-    assert cfg.provider == "gemini" and cfg.keys == [KEY1, KEY2]
+    assert cfg.provider == "nvidia" and cfg.keys == [KEY1, KEY2]
     assert cfg.proxies == ["http://user:Pr0xyCanary%3ASecret%239@203.0.113.10:3128"]
     assert cfg.rotation_retries == 3 and cfg.fallback_models == []
 
 
-def test_env_default_used_when_workspace_unconfigured(client, db, alice, gemini, monkeypatch):
-    script, hp = gemini
-    script.dynamic = gemini_answer
-    env = LLMEnv(_env_file=None, llm_enabled=True, llm_provider="gemini", gemini_api_key=KEY1,
-                 gemini_base_url=f"http://{hp}/v1beta", gemini_model="gemini-2.5-flash", gemini_fallback_models="")
+def test_env_default_used_when_workspace_unconfigured(client, db, alice, nvidia_server, monkeypatch):
+    script, hp = nvidia_server
+    script.dynamic = good_answer
+    env = LLMEnv(_env_file=None, llm_enabled=True, llm_provider="nvidia", nvidia_api_key=KEY1)
     monkeypatch.setattr(settings_service, "get_llm_env", lambda: env)
     assert client.get("/api/settings/ai", headers=alice.headers).json()["env_default"] == {
-        "enabled": True, "provider": "gemini", "model": "gemini-2.5-flash"}
+        "enabled": True, "provider": "nvidia", "model": NEMOTRON_LIGHTNING}
     wid = client.post("/api/workflows", json={"name": "ai", "graph": ai_graph(), "workspace_id": alice.workspace_id},
                       headers=alice.headers).json()["id"]
     rid = client.post(f"/api/workflows/{wid}/run", headers=alice.headers).json()["id"]
     drain(db)
     ai = client.get(f"/api/runs/{rid}/ai-report", headers=alice.headers).json()
-    assert ai["ai_generated"] is True and ai["provider"] == "gemini"
-    assert script.requests[-1]["headers"]["x-goog-api-key"] == KEY1
+    assert ai["ai_generated"] is True and ai["provider"] == "nvidia"
+    assert script.requests[-1]["headers"]["Authorization"] == f"Bearer {KEY1}"
     assert KEY1 not in json.dumps(ai)
 
 
@@ -153,20 +136,19 @@ def test_env_disabled_means_no_provider(db, alice, monkeypatch):
         assert settings_service.provider_config_for(s, alice.workspace_id, None, Masker()) is None
 
 
-def test_nvidia_environment_pool_is_independent_of_gemini(monkeypatch):
+def test_nvidia_environment_pool_uses_fixed_model(monkeypatch):
     from app.core.masking import Masker
 
-    env = LLMEnv(_env_file=None, llm_enabled=True, llm_provider="nvidia", gemini_api_key=KEY1,
-                 gemini_proxies="legacy:8080:user:pw", nvidia_api_key="nvapi-test-one,nvapi-test-two",
-                 nvidia_model="nvidia/test-model", nvidia_proxies="example.org:3128:user:pw")
+    env = LLMEnv(_env_file=None, llm_enabled=True, llm_provider="nvidia", nvidia_api_key="nvapi-test-one,nvapi-test-two",
+                 nvidia_proxies="example.org:3128:user:pw")
     monkeypatch.setattr(settings_service, "get_llm_env", lambda: env)
     masker = Masker()
     cfg = settings_service.env_provider_config(masker)
-    assert cfg.provider == "openai_compat" and cfg.base_url == "https://integrate.api.nvidia.com/v1"
-    assert cfg.keys == ["nvapi-test-one", "nvapi-test-two"] and cfg.models == ["nvidia/test-model"]
+    assert cfg.provider == "nvidia" and cfg.base_url == "https://integrate.api.nvidia.com/v1"
+    assert cfg.keys == ["nvapi-test-one", "nvapi-test-two"] and cfg.models == [NEMOTRON_LIGHTNING]
     assert cfg.proxies == ["auto://user:pw@example.org:3128"]
     assert "nvapi-test" not in masker.mask("nvapi-test-one nvapi-test-two")
-    assert settings_service.env_default_out() == {"enabled": True, "provider": "nvidia", "model": "nvidia/test-model"}
+    assert settings_service.env_default_out() == {"enabled": True, "provider": "nvidia", "model": NEMOTRON_LIGHTNING}
 
     env.nvidia_api_key = ""
     assert settings_service.env_provider_config(masker) is None
@@ -177,18 +159,18 @@ def test_connection_test_uses_platform_when_workspace_override_is_off(client, al
     from app.core.masking import Masker
 
     r = client.put("/api/settings/ai", headers=alice.headers, json={
-        "workspace_id": alice.workspace_id, "enabled": False, "provider": "gemini",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta", "model": "old-model"})
+        "workspace_id": alice.workspace_id, "enabled": False, "provider": "ollama",
+        "base_url": "http://localhost:11434", "model": "local"})
     assert r.status_code == 200
     env = LLMEnv(_env_file=None, llm_enabled=True, llm_provider="nvidia", nvidia_api_key="nvapi-test-key")
     monkeypatch.setattr(settings_service, "get_llm_env", lambda: env)
     with db.session() as s:
         cfg = settings_service.provider_config_for(s, alice.workspace_id, None, Masker(), require_enabled=False)
-    assert cfg.provider == "openai_compat" and cfg.keys == ["nvapi-test-key"]
+    assert cfg.provider == "nvidia" and cfg.keys == ["nvapi-test-key"]
 
 
-def test_diagnose_reports_per_proxy_without_secrets(client, alice, gemini, allow_local, caplog):
-    script, hp = gemini
+def test_diagnose_reports_per_proxy_without_secrets(client, alice, nvidia_server, allow_local, caplog):
+    script, hp = nvidia_server
     script.default = {"status": 200, "content": {"ok": True}, "delay": 0, "body": None, "headers": {}}
     live = FakeHttpProxy()
     try:
@@ -197,8 +179,8 @@ def test_diagnose_reports_per_proxy_without_secrets(client, alice, gemini, allow
         good = cred(client, alice, "good", "proxy", f"http://user:{PROXY_PASSWORD.replace(':', '%3A').replace('#', '%23')}@127.0.0.1:{live.port}")
         dead = cred(client, alice, "dead", "proxy", f"127.0.0.1:9:user:{PROXY_PASSWORD}")
         client.put("/api/settings/ai", json={
-            "workspace_id": alice.workspace_id, "enabled": True, "provider": "gemini",
-            "base_url": f"http://{hp}/v1beta", "model": "gemini-2.5-flash", "credential_id": k,
+            "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia",
+            "model": NEMOTRON_LIGHTNING, "credential_id": k,
             "proxy_credential_ids": [good, dead], "proxy_scheme": "auto", "allow_local": True}, headers=alice.headers)
         caplog.set_level(logging.INFO)
         r = client.post("/api/settings/ai/diagnose", json={"workspace_id": alice.workspace_id},
@@ -213,7 +195,7 @@ def test_diagnose_reports_per_proxy_without_secrets(client, alice, gemini, allow
         assert not any(x["ok"] for x in dead_rows) and all(x["error"] for x in dead_rows)
         blob = r.text + caplog.text
         assert KEY1 not in blob and "Pr0xyCanary" not in blob and "Secret%239" not in blob
-        assert live.requests and b"generateContent" in live.requests[0]
+        assert live.requests and b"chat/completions" in live.requests[0]
     finally:
         live.close()
 

@@ -2,7 +2,6 @@ import json
 
 import pytest
 
-from tests.ai.fake_llm import make_server
 from tests.api.test_ai_api import configure
 
 PDF_PROMPT = "Каждый день в 14:00 проверяй код из репозитория на наличие секретов и отправляй отчет на почту"
@@ -30,10 +29,9 @@ TZ_GRAPH = g([("t", "trigger.schedule", {"cron": "0 14 * * *"}), ("src", "source
 
 
 @pytest.fixture
-def llm():
-    srv, script, hp = make_server("openai")
-    yield script, hp
-    srv.shutdown()
+def llm(nvidia_server):
+    script, hp = nvidia_server
+    return script, hp
 
 
 def gen(client, user, prompt, **kw):
