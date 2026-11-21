@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app import models as m
@@ -272,14 +272,7 @@ def ai_chat_history(workflow_id: str, user: m.User = Depends(current_user), s: S
 @router.post("/ai/workflows/{workflow_id}/chat")
 async def ai_chat(workflow_id: str, body: ChatIn, user: m.User = Depends(current_user),
                   s: Session = Depends(get_session)) -> dict:
-    from app.ai.workflow_gen import (
-        OpError,
-        apply_operations,
-        blocking_issues,
-        graph_diff,
-        propose_operations,
-        strip_secrets,
-    )
+    from app.ai.workflow_gen import graph_diff, propose_operations
     from app.nodes.base import get_registry
 
     wf = load_scoped(s, m.Workflow, workflow_id, user, "developer", "сценарий")
@@ -287,28 +280,21 @@ async def ai_chat(workflow_id: str, body: ChatIn, user: m.User = Depends(current
     provider = _provider_or_400(s, wf.workspace_id, masker)
     reg = get_registry()
     try:
-        ops, explanation, _usage = await propose_operations(provider, wf.graph, body.message, reg, masker)
+        result, ops, explanation = await propose_operations(provider, wf.graph, body.message, reg,
+                                                           _cred_checker(s, wf.workspace_id), masker)
     except LLMError as exc:
         raise ApiError(502, "ai_error", masker.mask(str(exc))) from exc
-    except ValueError as exc:
-        raise ApiError(502, "ai_bad_answer", masker.mask(str(exc))) from exc
-    checker = _cred_checker(s, wf.workspace_id)
-    try:
-        new_graph = apply_operations(wf.graph, ops, reg)
-        needs = strip_secrets(new_graph, reg, checker)
-        issues, blocking = blocking_issues(new_graph, reg, checker, needs)
-        valid = not blocking
-    except OpError as exc:
-        new_graph, needs, issues, blocking, valid = wf.graph, [], [{"code": "bad_operation", "message": str(exc),
-                                                                     "node_id": None, "field": None}], [], False
-    status = "proposed" if valid else "failed"
-    user_msg = m.WorkflowChatMessage(workflow_id=wf.id, user_id=user.id, role="user", content=body.message, status=status)
-    bot = m.WorkflowChatMessage(workflow_id=wf.id, role="assistant", content=explanation, operations=ops, status=status,
-                                result_graph=new_graph if valid else None)
+    status = "proposed" if result.valid else "failed"
+    user_msg = m.WorkflowChatMessage(workflow_id=wf.id, user_id=user.id, role="user", content=masker.mask(body.message),
+                                     status=status)
+    bot = m.WorkflowChatMessage(workflow_id=wf.id, role="assistant", content=masker.mask(explanation),
+                                operations=masker.mask_obj(ops), status=status, base_version=wf.version,
+                                result_graph=result.graph if result.valid else None)
+    diff = graph_diff(wf.graph, result.graph) if result.valid else {}
     s.add_all([user_msg, bot])
     s.commit()
-    return {**chat_out(bot), "diff": graph_diff(wf.graph, new_graph) if valid else {}, "valid": valid,
-            "issues": blocking or issues if not valid else issues, "needs_input": needs, "graph": new_graph,
+    return {**chat_out(bot), "diff": diff, "valid": result.valid, "attempts": result.attempts,
+            "issues": result.issues, "needs_input": result.needs_input, "graph": result.graph,
             "user_message_id": user_msg.id}
 
 
@@ -332,8 +318,25 @@ def ai_chat_apply(workflow_id: str, msg_id: str, user: m.User = Depends(current_
     msg, prev = _proposal(s, wf, msg_id)
     if msg.status != "proposed" or not msg.result_graph:
         raise ApiError(409, "not_applicable", "это предложение нельзя применить")
-    wf.graph = msg.result_graph
-    wf.version += 1
+    from copy import deepcopy
+
+    from app.ai.workflow_gen import blocking_issues, strip_secrets
+    from app.nodes.base import get_registry
+
+    stale = ApiError(409, "proposal_stale", "Сценарий или его настройки изменились. Обновите предложение.")
+    if wf.version != msg.base_version:
+        raise stale
+    candidate = deepcopy(msg.result_graph)
+    checker = _cred_checker(s, wf.workspace_id)
+    registry = get_registry()
+    needs = strip_secrets(candidate, registry, checker)
+    _, blocking = blocking_issues(candidate, registry, checker, needs)
+    if candidate != msg.result_graph or blocking:
+        raise stale
+    written = s.execute(update(m.Workflow).where(m.Workflow.id == wf.id, m.Workflow.version == msg.base_version)
+                        .values(graph=candidate, version=m.Workflow.version + 1))
+    if written.rowcount != 1:
+        raise stale
     sync_schedules(s, wf)
     msg.status = "applied"
     if prev is not None:

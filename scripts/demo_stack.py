@@ -18,6 +18,7 @@ import time
 import uuid
 
 import httpx
+from demo_auth import demo_session
 
 
 def main() -> int:
@@ -31,10 +32,7 @@ def main() -> int:
                                                      "/app/fixtures/organizer-training/training-project"))
     args = ap.parse_args()
     c = httpx.Client(base_url=args.url, timeout=60)
-    email = f"demo-{uuid.uuid4().hex[:6]}@example.org"
-    reg = c.post("/api/auth/register", json={"email": email, "password": "Demo-Passw0rd!", "display_name": "demo"})
-    reg.raise_for_status()
-    h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    email, h = demo_session(c, "demo")
     ws = c.get("/api/auth/me", headers=h).json()["workspaces"][0]["id"]
     print(f"[demo] user {email}, workspace {ws}")
     pid = c.post("/api/projects", headers=h, json={"workspace_id": ws, "name": "training-project",

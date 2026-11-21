@@ -1,15 +1,9 @@
-import { expect, test, type Page } from '@playwright/test'
+import { register } from './register'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const SCREENS = resolve(import.meta.dirname, '../../docs/screens')
-
-async function register(page: Page, prefix: string) {
-  await page.goto('/register')
-  await page.getByLabel('E-mail').fill(`${prefix}-${Date.now()}@example.org`)
-  await page.getByLabel('Пароль').fill('E2e-Strong-Passw0rd')
-  await page.getByRole('button', { name: 'Создать аккаунт' }).click()
-}
+const SCREENS = process.env.AISW_SCREEN_DIR ?? resolve(import.meta.dirname, '../../docs/screens')
 
 async function newCheckDialog(page: Page) {
   const dlg = page.getByRole('dialog', { name: 'Новая проверка' })
@@ -18,6 +12,17 @@ async function newCheckDialog(page: Page) {
   if (!auto) await page.getByRole('button', { name: 'Новая проверка' }).first().click()
   await expect(dlg).toBeVisible()
   return dlg
+}
+
+async function moveNode(page: Page, node: Locator) {
+  await node.hover()
+  const before = await node.evaluate(el => (el as HTMLElement).style.transform)
+  const box = (await node.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 64, box.y + box.height / 2 + 32, { steps: 10 })
+  await page.mouse.up()
+  await expect.poll(() => node.evaluate(el => (el as HTMLElement).style.transform)).not.toBe(before)
 }
 
 async function waitRunEnd(page: Page) {
@@ -56,6 +61,19 @@ test('jury path: first visit → «Новая проверка» → учебн�
   await expect(page.locator('.node-success').first()).toBeVisible()
   await expect(page.locator('.react-flow__edge.edge-done').first()).toBeAttached()
 
+  const node = page.locator('.react-flow__node[data-id="src"]')
+  await node.click()
+  await expect(page.getByRole('button', { name: 'Раскладка', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'AI', exact: true })).toBeVisible()
+  for (const name of ['Логи', 'Данные', 'Настройки']) await page.getByRole('tab', { name, exact: name !== 'Логи' }).click()
+  const saved = page.waitForResponse(r => r.request().method() === 'PUT' && /\/api\/workflows\/[^/]+$/.test(r.url()))
+  await moveNode(page, node)
+  expect((await saved).ok()).toBeTruthy()
+  const after = await node.evaluate(el => (el as HTMLElement).style.transform)
+  await page.reload()
+  await expect(node).toBeVisible()
+  await expect.poll(() => node.evaluate(el => (el as HTMLElement).style.transform)).toBe(after)
+
   const results = page.getByRole('complementary', { name: 'Панель свойств и результатов' })
   await expect(results.getByRole('tab', { name: /Находки/ })).toContainText('15')
   await results.getByRole('button', { name: /Уязвимая зависимость org\.apache\.commons:commons-text/ }).click()
@@ -67,6 +85,8 @@ test('jury path: first visit → «Новая проверка» → учебн�
 
   // links from notifications / CI / report.html and the old editor address keep working
   const [, wf, run] = page.url().match(/\/c\/([0-9a-f]{32})\?run=([0-9a-f]{32})/)!
+  await page.goto(`/runs/${run}?full=1&tab=graph`)
+  await moveNode(page, page.locator('.react-flow__node[data-id="src"]'))
   await page.goto(`/runs/${run}`)
   await expect(page).toHaveURL(new RegExp(`/c/${wf}\\?run=${run}`))
   await page.goto(`/workflows/${wf}`)
@@ -82,6 +102,7 @@ test('constructor: blank graph → nodes by drag, «+» under a node and Tab →
   await expect(page.locator('.react-flow__node[data-id="src"]')).toBeVisible()
 
   // quick-add palette: drag three scanners and a merge onto the canvas (right of the floating palette)
+  await page.locator('.react-flow__node[data-id="src"]').click()
   await page.getByRole('button', { name: 'Ноды', exact: true }).click()
   const pane = (await page.locator('.react-flow__pane').boundingBox())!
   const src = (await page.locator('.react-flow__node[data-id="src"]').boundingBox())!
@@ -140,6 +161,7 @@ test('templates and CI/CD in panels: publish → find → rate → use for your 
   const panel = page.getByRole('dialog', { name: 'Шаблоны' })
   await panel.getByLabel('scope').selectOption('mine')
   await panel.getByRole('button', { name: /Мой шаблон секретов/ }).click()
+  await moveNode(page, page.locator('[role=dialog] .react-flow__node').first())
   await page.getByRole('button', { name: 'Ваша оценка 5' }).click()
   await page.getByLabel('Оставить отзыв').fill('Работает')
   await page.getByRole('button', { name: 'Добавить' }).click()
@@ -226,6 +248,7 @@ test('workspace nodes: author a rule, reuse it after reload, run it on grouped f
   await dlg.getByRole('tab', { name: 'Учебный проект' }).click()
   await dlg.getByRole('button', { name: /Пустой граф/ }).click()
   await dlg.getByRole('button', { name: 'Создать и открыть' }).click()
+  await page.locator('.react-flow__node[data-id="src"]').click()
   await page.getByRole('button', { name: 'Ноды', exact: true }).click()
   const palette = page.getByRole('dialog', { name: 'Добавить ноду' })
   await palette.getByRole('button', { name: 'Создать ноду' }).click()
@@ -258,6 +281,7 @@ test('review catalog: find review nodes and export a sampled scan to CSV', async
   await dlg.getByRole('tab', { name: 'Учебный проект' }).click()
   await dlg.getByRole('button', { name: /Пустой граф/ }).click()
   await dlg.getByRole('button', { name: 'Создать и открыть' }).click()
+  await page.locator('.react-flow__node[data-id="src"]').click()
   await page.getByRole('button', { name: 'Ноды', exact: true }).click()
   const palette = page.getByRole('dialog', { name: 'Добавить ноду' })
   const search = palette.getByLabel('Найти блок…')

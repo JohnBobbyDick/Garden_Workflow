@@ -160,6 +160,13 @@ export function autoLayout(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
   })
 }
 
+export function graphToCanvas(graph: Graph) {
+  const flow = graphToFlow(graph)
+  const positions = new Set(flow.nodes.map(n => `${n.position.x},${n.position.y}`))
+  if (positions.size < flow.nodes.length) flow.nodes = autoLayout(flow.nodes, flow.edges)
+  return flow
+}
+
 export function nextNodeId(type: string, existing: Iterable<string>): string {
   const base = type.split('.').pop()!.replace(/[^a-z0-9]/gi, '_')
   const taken = new Set(existing)

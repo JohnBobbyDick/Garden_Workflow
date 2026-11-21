@@ -24,7 +24,7 @@ import { useCompactWorkspace } from '../workspace/useCompactWorkspace'
 import { HeaderButton, InlineName, OverflowMenu, sourceLabel, TriggerSwitch, type TriggerKind } from './CanvasHeader'
 import { EditorContext } from './EditorContext'
 import {
-  autoLayout, canConnect, copyFragment, edgeId, findConnection, flowToGraph, graphToFlow, nextNodeId, pasteFragment, placeAfter,
+  autoLayout, canConnect, copyFragment, edgeId, findConnection, flowToGraph, graphToCanvas, graphToFlow, nextNodeId, pasteFragment, placeAfter,
   specOf, type FlowEdge, type FlowNode, type Fragment,
 } from './graphModel'
 import { History } from './history'
@@ -85,7 +85,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   const runId = params.get('run')
   useEffect(() => setMobilePanel(!!runId), [runId, workflow.id])
   const runMode = runId !== null
-  const live = useRunEvents(runId)
+  const live = useRunEvents(runId ?? workflow.last_run?.id ?? null)
   const shownRun = useRun(runId ?? workflow.last_run?.id ?? undefined, true)
   state.current = { nodes, edges }
 
@@ -114,9 +114,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
 
   // initial load: graphs created by API / AI / starters may have no positions → lay them out (top to bottom)
   useEffect(() => {
-    const flow = graphToFlow(workflow.graph)
-    const distinct = new Set(flow.nodes.map((n) => `${n.position.x},${n.position.y}`))
-    if (flow.nodes.length > 1 && distinct.size < flow.nodes.length) flow.nodes = autoLayout(flow.nodes, flow.edges)
+    const flow = graphToCanvas(workflow.graph)
     setNodes(flow.nodes)
     setEdges(flow.edges)
     setDirty(false)
@@ -301,6 +299,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
       const r = await api<{ id: string }>(`/api/workflows/${workflow.id}/run`, { method: 'POST', json: {} })
       setMenu(null)
       setQuick(null)
+      setAssistant(false)
       setNodes((ns) => ns.map((n) => ({ ...n, selected: false })))
       showRun(r.id)
       void invalidate('workflows')
@@ -362,8 +361,8 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey
-      if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); if (!runMode) void autosave.flush(); return }
-      if (isTyping(e) || runMode) return
+      if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); void autosave.flush(); return }
+      if (isTyping(e)) return
       const k = e.key.toLowerCase()
       if (e.key === 'Tab' && !mod && !e.shiftKey && !document.querySelector('[role=dialog]')) { e.preventDefault(); setQuick((q) => (q ? null : {})) }
       else if (mod && k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
@@ -375,7 +374,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [autosave, copy, duplicate, paste, redo, runMode, undo])
+  }, [autosave, copy, duplicate, paste, redo, undo])
 
   const issueMap = useMemo(() => {
     const m: Record<string, string[]> = {}
@@ -384,8 +383,8 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   }, [issues])
   const displayNodes = useMemo(() => nodes.map((n) => {
     const ln = live.nodes[n.id]
-    return { ...n, draggable: !runMode, data: { ...n.data, issues: runMode ? undefined : issueMap[n.id],
-      status: runMode ? (ln?.status ?? 'pending') : undefined, durationMs: ln?.durationMs, summary: ln?.summary,
+    return { ...n, data: { ...n.data, issues: issueMap[n.id],
+      status: runMode ? ln?.status : undefined, durationMs: ln?.durationMs, summary: ln?.summary,
       error: runMode ? ln?.error : undefined, reason: runMode ? ln?.reason : undefined, finaleDelay: finale[n.id] } }
   }), [nodes, live.nodes, runMode, issueMap, finale])
   const displayEdges = useMemo(() => edges.map((e) => {
@@ -411,46 +410,42 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
       <div className="flex h-full flex-col">
         <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-1 border-b border-border bg-surface px-2 py-1.5 sm:gap-2 sm:px-3 xl:flex-nowrap">
           <InlineName value={workflow.name} onSave={rename} />
-          <button type="button" onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.set('source', '1'); return n })} disabled={runMode}
+          <button type="button" onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.set('source', '1'); return n })}
             title={t('canvas.changeSource')} className="flex h-8 min-w-0 max-w-[280px] items-center gap-1.5 rounded-chip border border-border px-2.5 text-[13px] hover:bg-soft disabled:opacity-60">
             <Icon name={src.icon} size={14} className="shrink-0 text-muted" /><span className="truncate">{src.text}</span>
           </button>
-          <TriggerSwitch node={trigNode} readOnly={runMode} onChange={replaceTrigger} />
+          <TriggerSwitch node={trigNode} readOnly={false} onChange={replaceTrigger} />
           <div className="hidden flex-1 xl:block" />
-          {!runMode && (
-            <span className="hidden text-[12px] text-muted lg:inline" aria-live="polite">
-              {autosave.pending || dirty ? t('canvas.saving') : t('editor.saved')}
-            </span>
-          )}
-          {!runMode && (
-            <>
-              <HeaderButton icon="undo" onClick={undo} disabled={!history.current.canUndo} title="Ctrl+Z" ariaLabel={t('editor.undo')} />
-              <HeaderButton icon="redo" onClick={redo} disabled={!history.current.canRedo} title="Ctrl+Y" ariaLabel={t('editor.redo')} />
-              <HeaderButton icon="layout" onClick={layout}>{t('canvas.layout')}</HeaderButton>
-              <HeaderButton icon="plus" onClick={() => { setMobilePanel(false); setQuick((q) => (q ? null : {})) }} active={!!quick} title="Tab">{t('canvas.nodes')}</HeaderButton>
-              <HeaderButton icon="sparkles" onClick={() => {
-                if (inspectorCollapsed) {
-                  if (compact) setMobilePanel(true)
-                  else setInspectorCollapsed(false)
-                  setAssistant(true)
-                } else setAssistant(!assistant)
-              }} active={assistant}>AI</HeaderButton>
-              <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
-              <OverflowMenu items={[
-                { key: 'validate', icon: 'shield-check', label: t('editor.validate'), onClick: () => void validate() },
-                { key: 'import', icon: 'upload', label: t('editor.importJson'), onClick: () => fileRef.current?.click() },
-                { key: 'export', icon: 'download', label: t('editor.export'), onClick: exportJson },
-                { key: 'publish', icon: 'template', label: t('templates.publish'), onClick: () => void autosave.flush().then((ok) => ok && setPublishing(true)) },
-                { key: 'ci', icon: 'ci', label: t('ws.panel.ci'), onClick: () => nav({ search: '?panel=ci' }) },
-                { key: 'delete', icon: 'trash', label: t('canvas.deleteCheck'), onClick: () => void deleteCheck(), danger: true },
-              ]} />
-            </>
-          )}
+          <span className="hidden text-[12px] text-muted lg:inline" aria-live="polite">
+            {autosave.pending || dirty ? t('canvas.saving') : t('editor.saved')}
+          </span>
+          <HeaderButton icon="undo" onClick={undo} disabled={!history.current.canUndo} title="Ctrl+Z" ariaLabel={t('editor.undo')} />
+          <HeaderButton icon="redo" onClick={redo} disabled={!history.current.canRedo} title="Ctrl+Y" ariaLabel={t('editor.redo')} />
+          {(selected.length > 0 || !nodes.length) && <>
+            <HeaderButton icon="layout" onClick={layout}>{t('canvas.layout')}</HeaderButton>
+            <HeaderButton icon="plus" onClick={() => { setMobilePanel(false); setQuick((q) => (q ? null : {})) }} active={!!quick} title="Tab">{t('canvas.nodes')}</HeaderButton>
+            <HeaderButton icon="sparkles" onClick={() => {
+              if (inspectorCollapsed) {
+                if (compact) setMobilePanel(true)
+                else setInspectorCollapsed(false)
+                setAssistant(true)
+              } else setAssistant(!assistant)
+            }} active={assistant}>AI</HeaderButton>
+          </>}
+          <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
+          <OverflowMenu items={[
+            { key: 'validate', icon: 'shield-check', label: t('editor.validate'), onClick: () => void validate() },
+            { key: 'import', icon: 'upload', label: t('editor.importJson'), onClick: () => fileRef.current?.click() },
+            { key: 'export', icon: 'download', label: t('editor.export'), onClick: exportJson },
+            { key: 'publish', icon: 'template', label: t('templates.publish'), onClick: () => void autosave.flush().then((ok) => ok && setPublishing(true)) },
+            { key: 'ci', icon: 'ci', label: t('ws.panel.ci'), onClick: () => nav({ search: '?panel=ci' }) },
+            { key: 'delete', icon: 'trash', label: t('canvas.deleteCheck'), onClick: () => void deleteCheck(), danger: true },
+          ]} />
           <Button variant="primary" icon="play" loading={busy === 'run'} disabled={running} onClick={run}>{t('editor.run')}</Button>
           <HeaderButton icon="chevron-right" onClick={toggleInspector} ariaLabel={inspectorCollapsed ? t('canvas.showInspector') : t('canvas.hideInspector')}
             title={inspectorCollapsed ? t('canvas.showInspector') : t('canvas.hideInspector')} />
         </header>
-        {globalIssues.length > 0 && !runMode && (
+        {globalIssues.length > 0 && (
           <div role="alert" className="border-b border-danger/30 bg-danger-soft px-4 py-1.5 text-[13px] text-danger">{globalIssues.map((i) => i.message).join(' · ')}</div>
         )}
         <div className="relative flex min-h-0 flex-1">
@@ -460,12 +455,16 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
               nodes={displayNodes} edges={displayEdges} nodeTypes={nodeTypes}
               onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onConnectEnd={onConnectEnd}
               isValidConnection={isValidConnection} onNodeDragStart={() => record()}
-              onBeforeDelete={async () => !runMode}
-              onNodeClick={() => { if (compact) { setAssistant(false); setMobilePanel(true) } }}
-              onNodeContextMenu={(e, n) => { e.preventDefault(); if (!runMode) setMenu({ x: e.clientX, y: e.clientY, id: n.id }) }}
+              onNodeClick={() => {
+                setAssistant(false)
+                setQuick(null)
+                if (compact) setMobilePanel(true)
+                else setInspectorCollapsed(false)
+              }}
+              onNodeContextMenu={(e, n) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: n.id }) }}
               onPaneClick={() => { setMenu(null); setQuick(null) }}
-              nodesConnectable={!runMode} elementsSelectable
-              deleteKeyCode={runMode ? null : ['Delete', 'Backspace']} multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
+              nodesConnectable elementsSelectable
+              deleteKeyCode={['Delete', 'Backspace']} multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
               panOnDrag={[1, 2]} selectionOnDrag panActivationKeyCode="Space" panOnScroll={false}
               snapToGrid snapGrid={[16, 16]} fitView minZoom={0.2} maxZoom={2}
               defaultEdgeOptions={{ type: 'smoothstep' }}
@@ -486,7 +485,6 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
                 {live.status ? <StatusBadge status={live.status} /> : <Spinner size={14} />}
                 {totalMs !== null && <span className="text-muted">{t('editor.totalTime')}: {fmtDuration(totalMs, lang)}</span>}
                 {live.error && <span className="max-w-[320px] truncate text-danger" title={live.error}>{live.error}</span>}
-                <button type="button" onClick={() => showRun(null)} className="font-bold text-primary hover:underline">{t('editor.backToEdit')}</button>
               </div>
             )}
             {nodes.length <= 2 && !runMode && !quick && (
@@ -494,7 +492,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
                 {t('canvas.emptyHint')}
               </div>
             )}
-            <QuickAdd workspaceId={workflow.workspace_id} open={!!quick && !runMode} onClose={closeQuick} categories={catalog.categories}
+            <QuickAdd workspaceId={workflow.workspace_id} open={!!quick} onClose={closeQuick} categories={catalog.categories}
               fromLabel={quickFrom ? (quickFrom.data.label || specOf(catalog.nodes, quickFrom.data.nodeType)?.title[lang]) : undefined}
               onAdd={(type) => { addNode(type, undefined, quick?.from); setQuick(null) }} />
             {menu && (
@@ -516,21 +514,24 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
           </div>
           {!inspectorCollapsed && (
             <aside className="w-[380px] max-w-full shrink-0 max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-10 max-lg:shadow-pop border-l border-border bg-surface" aria-label={t('canvas.inspector')}>
-              {assistant && !runMode ? (
+              {assistant ? (
                 <div className="h-full overflow-y-auto">
-                  <AiAssistant workflowId={workflow.id} dirty={dirty} onSaveFirst={autosave.flush} onApplied={(g) => {
-                    const flow = graphToFlow(g)
-                    const distinct = new Set(flow.nodes.map((n) => `${n.position.x},${n.position.y}`))
-                    change(() => { setNodes(distinct.size < flow.nodes.length ? autoLayout(flow.nodes, flow.edges) : flow.nodes); setEdges(flow.edges) })
+                  <AiAssistant key={workflow.id} workflowId={workflow.id} dirty={dirty} onSaveFirst={autosave.flush} onApplied={(g) => {
+                    const flow = graphToCanvas(g)
+                    record()
+                    setNodes(flow.nodes)
+                    setEdges(flow.edges)
+                    setDirty(false)
+                    void invalidate('workflow', 'workflows')
                     window.setTimeout(() => rf.fitView({ padding: 0.2, duration: 300 }), 80)
                   }} />
                 </div>
               ) : (
                 <Inspector node={one} spec={one ? specOf(catalog.nodes, one.data.nodeType) : undefined}
-                  issues={one ? issues.filter((i) => i.node_id === one.id) : []} runMode={runMode}
+                  issues={one ? issues.filter((i) => i.node_id === one.id) : []}
                   live={one ? live.nodes[one.id] : undefined} run={shownRun.data}
                   onChange={(patch) => one && updateNode(one.id, patch)} onDelete={() => one && remove([one.id])}
-                  onToggle={() => one && toggleDisabled(one.id)} onCloseRun={() => showRun(null)} />
+                  onToggle={() => one && toggleDisabled(one.id)} onCloseRun={toggleInspector} />
               )}
             </aside>
           )}

@@ -285,12 +285,12 @@ def graph_diff(old: dict, new: dict) -> dict:
     ne = {key(e) for e in new.get("edges", [])}
     return {"added_nodes": [i for i in nn if i not in on], "removed_nodes": [i for i in on if i not in nn],
             "changed_nodes": [i for i in nn if i in on and (nn[i].get("config") != on[i].get("config")
-                                                           or nn[i]["type"] != on[i]["type"])],
+                                                           or nn[i]["type"] != on[i]["type"] or nn[i].get("label") != on[i].get("label"))],
             "added_edges": [list(k) for k in ne - oe], "removed_edges": [list(k) for k in oe - ne]}
 
 
 async def propose_operations(provider: LLMProvider, graph: dict, message: str, registry: NodeRegistry,
-                             masker: Masker) -> tuple[list[dict], str, dict]:
+                             credential_exists: Callable[[str], bool], masker: Masker) -> tuple[GenResult, list, str]:
     usage: dict[str, int] = {}
     messages = [{"role": "system", "content": system_prompt(
                     registry, "Пользователь редактирует существующий сценарий. Верни JSON {explanation, operations}: "
@@ -300,5 +300,26 @@ async def propose_operations(provider: LLMProvider, graph: dict, message: str, r
                                                                     for n in graph.get("nodes", [])],
                                                           "edges": graph.get("edges", [])}, ensure_ascii=False)
                                             + f"\n\nЗапрос: {message}"}]
-    data, _ = await _ask(provider, messages, OPS_SCHEMA, usage, masker)
-    return data["operations"], data.get("explanation", ""), usage
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        data = None
+        try:
+            data, _ = await _ask(provider, messages, OPS_SCHEMA, usage, masker)
+            ops = data["operations"]
+            candidate = apply_operations(graph, ops, registry)
+            needs = strip_secrets(candidate, registry, credential_exists)
+            issues, blocking = blocking_issues(candidate, registry, credential_exists, needs)
+            if not blocking:
+                if not any(graph_diff(graph, candidate).values()):
+                    raise OpError("операции не изменяют граф")
+                return GenResult(candidate, issues, needs, attempt, True, usage), ops, data.get("explanation", "")
+        except (AIFormatError, OpError) as exc:
+            blocking = [{"code": "invalid_json" if isinstance(exc, AIFormatError) else "bad_operation",
+                         "message": masker.mask(str(exc)), "node_id": None, "field": None}]
+        feedback = json.dumps(blocking, ensure_ascii=False)
+        if attempt < MAX_ATTEMPTS:
+            if data is not None:
+                messages.append({"role": "assistant", "content": json.dumps(data, ensure_ascii=False)[:6000]})
+            messages.append({"role": "user", "content": "Исправь ошибки и верни весь список операций для исходного графа.\n"
+                                                         + feedback[:3000]})
+    return (GenResult(graph, blocking, [], MAX_ATTEMPTS, False, usage), [],
+            "Не удалось подготовить применимые изменения за три попытки.")

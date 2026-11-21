@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { NodeSpec, ValidationIssue } from '../api/types'
 import { StatusBadge } from '../components/domain'
@@ -74,13 +74,13 @@ function Preview({ p, name }: { p: PortPreview; name: string }) {
   )
 }
 
-export function RunNodePanel({ node, live }: { node: FlowNode; live: NodeLive | undefined }) {
+export function RunNodePanel({ node, live, children }: { node: FlowNode; live: NodeLive | undefined; children: ReactNode }) {
   const { t } = useTranslation()
   const { lang } = useEditor()
-  const [tab, setTab] = useState<'logs' | 'data'>('logs')
+  const [tab, setTab] = useState<'settings' | 'logs' | 'data'>('settings')
   return (
     <div className="flex h-full flex-col">
-      <div className="p-4 pb-2">
+      {tab !== 'settings' && <div className="p-4 pb-2">
         <div className="mb-1 font-mono text-xs text-muted">{node.data.nodeType} · {node.id}</div>
         <div className="flex items-center gap-2">
           <h2 className="text-base font-semibold">{node.data.label || node.id}</h2>
@@ -89,11 +89,11 @@ export function RunNodePanel({ node, live }: { node: FlowNode; live: NodeLive | 
         </div>
         {live?.error && <p role="alert" className="mt-2 rounded-field bg-danger/10 p-2 text-xs text-danger">{live.error}</p>}
         {live?.reason && <p className="mt-2 text-xs text-muted">{live.reason}</p>}
-      </div>
-      <div className="px-4"><Tabs label="node" value={tab} onChange={setTab} tabs={[
-        { id: 'logs', label: t('editor.logs'), count: live?.logs.length ?? 0 }, { id: 'data', label: t('editor.data') }]} /></div>
-      <div className="flex-1 overflow-y-auto p-4">
-        {tab === 'logs' ? (live?.logs.length ? (
+      </div>}
+      <div className="px-4 pt-2"><Tabs label={node.data.label || node.id} value={tab} onChange={setTab} tabs={[
+        { id: 'settings', label: t('nav.settings') }, { id: 'logs', label: t('editor.logs'), count: live?.logs.length ?? 0 }, { id: 'data', label: t('editor.data') }]} /></div>
+      <div className={clsx("flex-1 overflow-y-auto", tab !== 'settings' && "p-4")}>
+        {tab === 'settings' ? children : tab === 'logs' ? (live?.logs.length ? (
           <ul className="space-y-1 font-mono text-[11px]">
             {live.logs.map((l, i) => (
               <li key={i} className={clsx(l.level === 'warning' && 'text-warning', l.level === 'error' && 'text-danger')}>

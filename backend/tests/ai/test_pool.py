@@ -50,3 +50,15 @@ def test_env_defaults_to_nvidia_and_requires_key(monkeypatch):
 def test_mask_proxy_hides_credentials():
     assert mask_proxy("socks5://u:secret@h:1080") == "socks5://h:1080"
     assert mask_proxy("auto://u:secret@h") == "auto://h"
+
+
+def test_legacy_proxy_names_feed_nvidia_rotation(monkeypatch):
+    for name in ("GEMINI_PROXIES", "GEMENI_PROXIES"):
+        with monkeypatch.context() as patch:
+            patch.setenv("NVIDIA_PROXIES", "")
+            patch.setenv(name, "a:8080:user:pass,b:8081:user:pass")
+            env = LLMEnv(_env_file=None)
+            assert env.proxies == ["auto://user:pass@a:8080", "auto://user:pass@b:8081"]
+            assert env.retries == 4
+            patch.setenv("NVIDIA_PROXIES", "preferred:8082:user:pass")
+            assert LLMEnv(_env_file=None).proxies == ["auto://user:pass@preferred:8082"]

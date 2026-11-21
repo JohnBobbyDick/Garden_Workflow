@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from app import models as m
-from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL, canonical_provider, get_llm_env, parse_proxy
+from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL, LLMEnv, canonical_provider, get_llm_env, parse_proxy
 from app.ai.providers.base import ProviderConfig
 from app.config import get_settings
 from app.core.crypto import get_box
@@ -68,17 +68,23 @@ def env_provider_config(masker: Masker) -> ProviderConfig | None:
     return _platform_nvidia(masker)
 
 
+def _platform_proxies(env: LLMEnv, masker: Masker, allow: set[str]) -> list[str]:
+    proxies = env.proxies
+    for proxy in proxies:
+        _register_proxy(masker, proxy)
+        allow.add(host_port(proxy))
+    return proxies
+
+
 def _platform_nvidia(masker: Masker) -> ProviderConfig | None:
     # Workspace and node selections can explicitly request NVIDIA even if the operator defaults to Ollama.
     env = get_llm_env().model_copy(update={"llm_provider": "nvidia"})
     if not env.configured:
         return None
-    keys, proxies = env.keys, env.proxies
+    keys = env.keys
     masker.register(*keys)
     allow = set(get_settings().ssrf_allowed())
-    for proxy in proxies:
-        _register_proxy(masker, proxy)
-        allow.add(host_port("http://" + proxy.split("://", 1)[1].rsplit("@", 1)[-1]))
+    proxies = _platform_proxies(env, masker, allow)
     return ProviderConfig(provider="nvidia", base_url=NVIDIA_BASE_URL, model=NEMOTRON_LIGHTNING,
                           api_key=keys[0], api_keys=keys, proxies=proxies, rotation_retries=env.retries,
                           allow_hosts=allow)
@@ -126,6 +132,9 @@ def provider_config_for(s, workspace_id: str, override: dict[str, Any] | None, m
         allow.add(extra["allow_host"])
     key = _decrypt(s, workspace_id, key_id, masker)
     pool = _pool(s, workspace_id, extra, key, masker) if provider == "nvidia" else {}
+    if provider == "nvidia" and not pool["proxies"]:
+        env = get_llm_env().model_copy(update={"llm_provider": "nvidia"})
+        pool["proxies"] = _platform_proxies(env, masker, allow)
     return ProviderConfig(provider=provider, base_url=url, model=model, api_key=key,
                           headers=dict(extra.get("headers") or {}), timeout=float(extra.get("timeout") or 90),
                           json_mode=extra.get("json_mode") or "auto", allow_hosts=allow, **pool)

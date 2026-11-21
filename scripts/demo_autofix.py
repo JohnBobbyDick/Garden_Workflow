@@ -35,6 +35,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import httpx
+from demo_auth import demo_session
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -116,10 +117,7 @@ def main() -> int:
     mock = f"http://127.0.0.1:{srv.server_address[1]}"
     print(f"[demo] mock GitHub {mock}; эмулятор Ollama http://127.0.0.1:{args.llm_port}")
     c = httpx.Client(base_url=args.url, timeout=120)
-    reg = c.post("/api/auth/register", json={"email": f"autofix-{uuid.uuid4().hex[:6]}@example.org",
-                                             "password": "Demo-Passw0rd!", "display_name": "autofix demo"})
-    reg.raise_for_status()
-    h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    _, h = demo_session(c, "autofix demo")
     ws = c.get("/api/auth/me", headers=h).json()["workspaces"][0]["id"]
     cred = lambda name, kind, value: c.post("/api/credentials", headers=h, json={  # noqa: E731
         "workspace_id": ws, "name": name, "kind": kind, "value": value}).json()["id"]

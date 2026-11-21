@@ -13,7 +13,7 @@ CACHE_TTL = 600
 ORDER = ("http", "socks5", "https")
 SNIFF_TIMEOUT = 3.0
 _SOCKS_HELLO = b"\x05\x01\x00"
-_CONNECT = b"CONNECT generativelanguage.googleapis.com:443 HTTP/1.1\r\nHost: generativelanguage.googleapis.com:443\r\n\r\n"
+_CONNECT = b"CONNECT integrate.api.nvidia.com:443 HTTP/1.1\r\nHost: integrate.api.nvidia.com:443\r\n\r\n"
 
 _cache: dict[str, tuple[str, float]] = {}
 _real_now = time.monotonic

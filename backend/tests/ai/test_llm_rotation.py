@@ -42,17 +42,18 @@ async def test_rotates_keys_and_models_until_success():
     assert {calls[0][1], calls[1][1]} == {"k1", "k2"}  # unused keys first
 
 
-async def test_proxies_rotate_and_auto_scheme_resolved(monkeypatch):
+async def test_proxies_alternate_across_retry_rounds():
     seen = []
 
     async def attempt(model, key, proxy):
         seen.append(proxy)
         raise LLMError("proxy down")
 
-    p = Fake(cfg(api_key="k", proxies=["http://a:1", "http://b:2"], rotation_retries=2))
+    p = Fake(cfg(api_key="k", proxies=["http://a:1", "http://b:2"], rotation_retries=4))
     with pytest.raises(LLMError):
         await p._rotate(attempt)
-    assert sorted(seen) == ["http://a:1", "http://b:2"]
+    assert set(seen) == {"http://a:1", "http://b:2"}
+    assert seen[:2] == seen[2:]
 
 
 async def test_validate_failure_counts_as_failed_attempt():

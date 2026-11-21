@@ -8,7 +8,7 @@ import { Icon } from '../components/ui/Icon'
 import { toast } from '../store/toast'
 
 interface ChatMsg { id: string; role: 'user' | 'assistant'; content: string; status: string }
-interface Proposal { id: string; content: string; valid: boolean; status: string; issues: ValidationIssue[]; graph: Graph
+interface Proposal { id: string; content: string; valid: boolean; needs_input: { node_id: string; field: string }[]; status: string; issues: ValidationIssue[]; graph: Graph
   diff: { added_nodes?: string[]; removed_nodes?: string[]; changed_nodes?: string[]; added_edges?: string[][]; removed_edges?: string[][] } }
 
 export function AiAssistant({ workflowId, dirty, onSaveFirst, onApplied }: {
@@ -19,26 +19,43 @@ export function AiAssistant({ workflowId, dirty, onSaveFirst, onApplied }: {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [proposal, setProposal] = useState<Proposal | null>(null)
+  const [original, setOriginal] = useState('')
+  const requestProposal = async (message: string) => {
+    const p = await api<Proposal>(`/api/ai/workflows/${workflowId}/chat`, { method: 'POST', json: { message } })
+    setOriginal(message)
+    setProposal(p)
+    void history.refetch()
+  }
   const send = async () => {
-    if (dirty && !(await onSaveFirst())) return
+    if (busy || !text.trim()) return
     setBusy(true)
     try {
-      const p = await api<Proposal>(`/api/ai/workflows/${workflowId}/chat`, { method: 'POST', json: { message: text } })
-      setProposal(p)
+      if (dirty && !(await onSaveFirst())) return
+      await requestProposal(text)
       setText('')
-      void history.refetch()
     } catch (e) {
       toast.error(e instanceof ApiError && e.code === 'ai_not_configured' ? t('assistant.notConfigured') : (e as Error).message)
     } finally { setBusy(false) }
   }
   const decide = async (apply: boolean) => {
-    if (!proposal) return
+    if (!proposal || busy) return
+    setBusy(true)
     try {
-      const r = await api<{ graph: Graph }>(`/api/ai/workflows/${workflowId}/chat/${proposal.id}/${apply ? 'apply' : 'reject'}`, { method: 'POST' })
-      if (apply) { onApplied(r.graph); toast.success(t('assistant.applied')) }
+      if (apply && !(await onSaveFirst())) return
+      try {
+        const r = await api<{ graph: Graph }>(`/api/ai/workflows/${workflowId}/chat/${proposal.id}/${apply ? 'apply' : 'reject'}`, { method: 'POST' })
+        if (apply) { onApplied(r.graph); toast.success(t('assistant.applied')) }
+      } catch (e) {
+        if (!(e instanceof ApiError && apply && e.code === 'proposal_stale')) throw e
+        setProposal(null)
+        toast.info(t('assistant.refreshProposal'))
+        await requestProposal(original)
+        return
+      }
       setProposal(null)
       void history.refetch()
     } catch (e) { toast.error((e as Error).message) }
+    finally { setBusy(false) }
   }
   const d = proposal?.diff ?? {}
   return (
@@ -66,10 +83,13 @@ export function AiAssistant({ workflowId, dirty, onSaveFirst, onApplied }: {
               <ul role="alert" className="mb-3 space-y-1 text-xs text-danger"><li>{t('assistant.invalidProposal')}</li>
                 {proposal.issues.map((i, k) => <li key={k}>• {i.message}</li>)}</ul>
             )}
-            <div className="flex gap-2">
-              <Button size="sm" variant="primary" disabled={!proposal.valid} onClick={() => decide(true)}>{t('assistant.apply')}</Button>
-              <Button size="sm" onClick={() => decide(false)}>{t('assistant.reject')}</Button>
-            </div>
+            {proposal.valid && !!proposal.needs_input.length && <p className="mb-2 text-xs text-warning">
+              {t('editor.needsInput')} · {proposal.needs_input.map(n => `${n.node_id}.${n.field}`).join(', ')}
+            </p>}
+            {proposal.valid && <div className="flex gap-2">
+              <Button size="sm" variant="primary" disabled={busy} onClick={() => decide(true)}>{t('assistant.apply')}</Button>
+              <Button size="sm" disabled={busy} onClick={() => decide(false)}>{t('assistant.reject')}</Button>
+            </div>}
           </div>
         )}
       </div>

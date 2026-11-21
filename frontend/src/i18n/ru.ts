@@ -66,6 +66,7 @@ const ru = {
     project: 'Проект', import: 'Импорт JSON',
   },
   editor: {
+    findTelegramChat: 'Найти личный чат',
     palette: 'Блоки', searchNodes: 'Найти блок…', save: 'Сохранить', saved: 'Сохранено', unsaved: 'Есть несохранённые изменения',
     draftRestored: 'Восстановлен черновик', validate: 'Проверить граф', valid: 'Граф корректен', invalid: 'Найдено ошибок: {{n}}',
     run: 'Запустить', running: 'Выполняется…', undo: 'Отменить', redo: 'Повторить', layout: 'Авто-раскладка',
@@ -256,6 +257,7 @@ const ru = {
     cliHint: 'CLI: python aisw_ci.py --url $AISW_URL --workflow <id> (код возврата 1 при Critical)', revoked: 'отозван',
   },
   assistant: {
+    refreshProposal: 'Граф изменился. Готовим новое предложение.',
     title: 'AI-ассистент', generate: 'Создать с AI', prompt: 'Опишите сценарий своими словами', examples: 'Примеры',
     generating: 'Генерирую…', needsInput: 'Требуют заполнения: {{n}}', failed: 'Не удалось построить корректный граф',
     chatPlaceholder: 'Например: «добавь отправку на email» или «запускай только по будням»', send: 'Отправить',

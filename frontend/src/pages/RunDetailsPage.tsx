@@ -13,7 +13,7 @@ import { RunScoreTab } from '../components/score'
 import { Badge, Button, Card, CopyButton, DiffView, EmptyState, ErrorState, Input, PageHeader, Select, Skeleton, Tabs } from '../components/ui'
 import { Icon } from '../components/ui/Icon'
 import { EditorContext } from '../editor/EditorContext'
-import { graphToFlow } from '../editor/graphModel'
+import { graphToCanvas, type FlowNode, type FlowEdge } from '../editor/graphModel'
 import { NodeCard } from '../editor/NodeCard'
 import { useRunEvents } from '../editor/useRunEvents'
 import { useLang } from '../i18n'
@@ -30,11 +30,12 @@ function where(f: Finding) {
 function RunGraph({ run, live }: { run: Run; live: ReturnType<typeof useRunEvents> }) {
   const catalog = useCatalog()
   const lang = useLang()
-  const flow = useMemo(() => graphToFlow(run.graph_snapshot ?? { schema_version: 1, nodes: [], edges: [] }), [run.graph_snapshot])
+  const flow = useMemo(() => graphToCanvas(run.graph_snapshot ?? { schema_version: 1, nodes: [], edges: [] }), [run.graph_snapshot])
+  const [layoutNodes, setLayoutNodes] = useState(flow.nodes)
   const status = Object.fromEntries((run.nodes ?? []).map((n) => [n.node_id, n]))
-  const nodes = flow.nodes.map((n) => {
+  const nodes = layoutNodes.map((n) => {
     const ln = live.nodes[n.id]
-    return { ...n, draggable: false, data: { ...n.data, status: ln?.status ?? status[n.id]?.status ?? 'pending',
+    return { ...n, data: { ...n.data, status: ln?.status ?? status[n.id]?.status ?? 'pending',
       durationMs: ln?.durationMs ?? status[n.id]?.duration_ms, summary: ln?.summary ?? status[n.id]?.output_summary?.summary } }
   })
   const edges = flow.edges.map((e) => {
@@ -47,7 +48,8 @@ function RunGraph({ run, live }: { run: Run; live: ReturnType<typeof useRunEvent
     <EditorContext.Provider value={{ catalog: catalog.data?.nodes ?? [], lang, runMode: true }}>
       <div className="h-[520px] overflow-hidden rounded-card border border-border">
         <ReactFlowProvider>
-          <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView nodesConnectable={false} nodesDraggable={false} elementsSelectable={false}>
+          <ReactFlow<FlowNode, FlowEdge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView nodesConnectable={false} elementsSelectable={false} deleteKeyCode={null}
+            onNodesChange={changes => setLayoutNodes(current => changes.applyTo(current))}>
             <Background variant={BackgroundVariant.Dots} gap={16} size={1.2} color="rgb(var(--border))" />
             <Controls showInteractive={false} />
           </ReactFlow>
@@ -266,7 +268,7 @@ export default function RunDetailsPage() {
         { id: 'logs', label: t('run.logs'), count: logs.length }, { id: 'artifacts', label: t('run.artifacts') },
       ]} />
       <div className="mt-4">
-        {tab === 'graph' && <RunGraph run={r} live={live} />}
+        {tab === 'graph' && r.graph_snapshot && <RunGraph key={r.id} run={r} live={live} />}
         {tab === 'findings' && (findings.isLoading || !done ? <Skeleton className="h-48" /> : <FindingsTable runId={r.id} findings={findings.data?.findings ?? []} />)}
         {tab === 'score' && (done ? <RunScoreTab runId={r.id} /> : <Skeleton className="h-48" />)}
         {tab === 'ai' && (done ? <AiReport runId={r.id} findings={findings.data?.findings ?? []} /> : <Skeleton className="h-48" />)}

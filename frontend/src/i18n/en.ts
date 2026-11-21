@@ -70,6 +70,7 @@ const en: Shape<typeof ru> = {
     project: 'Project', import: 'Import JSON',
   },
   editor: {
+    findTelegramChat: 'Find private chat',
     palette: 'Blocks', searchNodes: 'Find a block…', save: 'Save', saved: 'Saved', unsaved: 'Unsaved changes',
     draftRestored: 'Draft restored', validate: 'Validate graph', valid: 'Graph is valid', invalid: 'Errors found: {{n}}',
     run: 'Run', running: 'Running…', undo: 'Undo', redo: 'Redo', layout: 'Auto layout',
@@ -260,6 +261,7 @@ const en: Shape<typeof ru> = {
     cliHint: 'CLI: python aisw_ci.py --url $AISW_URL --workflow <id> (exit code 1 on Critical)', revoked: 'revoked',
   },
   assistant: {
+    refreshProposal: 'The graph changed. Preparing a new proposal.',
     title: 'AI assistant', generate: 'Create with AI', prompt: 'Describe the workflow in your own words', examples: 'Examples',
     generating: 'Generating…', needsInput: 'Need your input: {{n}}', failed: 'Could not build a valid graph',
     chatPlaceholder: 'E.g. "add an e-mail notification" or "run only on weekdays"', send: 'Send',

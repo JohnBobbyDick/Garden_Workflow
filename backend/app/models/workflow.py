@@ -78,6 +78,7 @@ class WorkflowChatMessage(IdMixin, CreatedMixin, Base):
     content: Mapped[str] = mapped_column(Text, default="")
     operations: Mapped[list] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(16), default="proposed")  # proposed | applied | rejected | failed
+    base_version: Mapped[int | None] = mapped_column(nullable=True)
     result_graph: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 

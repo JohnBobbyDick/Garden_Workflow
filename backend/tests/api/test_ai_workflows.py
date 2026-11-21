@@ -179,7 +179,8 @@ def test_chat_connects_report_to_smtp_when_model_copies_field_descriptions(clien
     config = next(node["config"] for node in updated["graph"]["nodes"] if node["id"] == "mail")
     assert (config["subject"], config["port"], config["security"]) == ("Результаты проверки", 465, "tls")
 
-    script.reply({"operations": [{"op": "update_node", "node_id": "mail", "config": {"port": {"value": 25}}}]})
+    for _ in range(3):
+        script.reply({"operations": [{"op": "update_node", "node_id": "mail", "config": {"port": {"value": 25}}}]})
     invalid = client.post(chat_url, json={"message": "Измени порт"}, headers=alice.headers).json()
     assert invalid["status"] == "failed"
     assert any(issue["field"] == "port" for issue in invalid["issues"])
@@ -224,8 +225,30 @@ def test_chat_set_schedule_and_invalid_ops(client, alice, llm):
     p = client.post(f"/api/ai/workflows/{wid}/chat", json={"message": "запускай только по будням"},
                     headers=alice.headers).json()
     assert p["valid"] is True and p["diff"]["changed_nodes"] == ["t"]
-    script.reply({"explanation": "x", "operations": [{"op": "connect", "source": "sec", "source_port": "out",
+    for _ in range(3):
+        script.reply({"explanation": "x", "operations": [{"op": "connect", "source": "sec", "source_port": "out",
                                                       "target": "src", "target_port": "in"}]})
     bad = client.post(f"/api/ai/workflows/{wid}/chat", json={"message": "сломай"}, headers=alice.headers).json()
     assert bad["valid"] is False and bad["status"] == "failed" and bad["issues"]
     assert client.post(f"/api/ai/workflows/{wid}/chat/{bad['id']}/apply", headers=alice.headers).status_code == 409
+
+
+def test_chat_retries_bad_operations_then_guards_against_stale_apply(client, alice, llm):
+    script, hp = llm
+    configure(client, alice, hp)
+    script.reply(PDF_GRAPH)
+    wf = gen(client, alice, PDF_PROMPT, create=True).json()
+    url = f"/api/workflows/{wf['workflow_id']}"
+    chat = f"/api/ai/workflows/{wf['workflow_id']}/chat"
+    script.reply("not json").reply({"operations": [{"op": "remove_node", "node_id": "absent"}]}).reply(
+        {"operations": [{"op": "update_node", "node_id": "mail", "label": "Почта команды"}]})
+    proposal = client.post(chat, headers=alice.headers, json={"message": "Переименуй почту"}).json()
+    assert proposal["valid"] and proposal["attempts"] == 3
+    assert "absent" in script.requests[-1]["body"]["messages"][-1]["content"]
+    assert proposal["diff"]["changed_nodes"] == ["mail"]
+    current = client.get(url, headers=alice.headers).json()["graph"]
+    current["nodes"][0]["label"] = "Ручное изменение"
+    assert client.put(url, headers=alice.headers, json={"graph": current}).status_code == 200
+    stale = client.post(f"{chat}/{proposal['id']}/apply", headers=alice.headers)
+    assert stale.status_code == 409 and stale.json()["error"]["code"] == "proposal_stale"
+    assert client.get(url, headers=alice.headers).json()["graph"]["nodes"][0]["label"] == "Ручное изменение"

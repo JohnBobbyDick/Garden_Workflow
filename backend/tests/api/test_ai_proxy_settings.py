@@ -222,3 +222,38 @@ def test_proxy_credential_display_shows_host_only(client, alice):
     cred(client, alice, "p2", "proxy", "203.0.113.5:1080:user:Secret:pw")
     row = next(c for c in client.get("/api/credentials", headers=alice.headers).json() if c["name"] == "p2")
     assert row["display"] == "203.0.113.5:1080" and "pw" not in row["display"]
+
+
+async def test_workspace_nvidia_key_retries_via_second_environment_proxy(client, alice, db, monkeypatch):
+    import httpx
+
+    from app.ai import proxy_scheme
+    from app.ai.providers import base
+    from app.core.masking import Masker
+
+    env = LLMEnv(_env_file=None, llm_enabled=True, gemini_proxies="a:8001:user:pw,b:8002:user:pw")
+    monkeypatch.setattr(settings_service, "get_llm_env", lambda: env)
+    key = cred(client, alice, "workspace", "llm_api_key", KEY1)
+    saved = client.put("/api/settings/ai", headers=alice.headers, json={
+        "enabled": True, "provider": "nvidia", "credential_id": key})
+    assert saved.status_code == 200
+    with db.session() as session:
+        cfg = settings_service.provider_config_for(session, alice.workspace_id, None, Masker())
+    cfg.pause_first = 0
+    attempts = []
+
+    async def protocol(*args):
+        return "http"
+
+    async def request(method, url, **kwargs):
+        assert kwargs["headers"]["Authorization"] == f"Bearer {KEY1}"
+        attempts.append(kwargs["proxy"])
+        if len(attempts) == 1:
+            raise httpx.ProxyError("connection refused")
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    monkeypatch.setattr(proxy_scheme, "sniff", protocol)
+    monkeypatch.setattr(base, "safe_request", request)
+    result = await base.build_provider(cfg).chat([{"role": "user", "content": "ok"}])
+    assert result.content == "ok"
+    assert sorted(attempts) == ["http://user:pw@a:8001", "http://user:pw@b:8002"]

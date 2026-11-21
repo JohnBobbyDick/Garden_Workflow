@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from app.config import get_settings
 from app.core.ssrf import safe_request
@@ -30,7 +31,12 @@ class NotifyTelegram(BaseNode):
     outputs = [Port("out", "json", title_ru="Статус", title_en="Status")]
     config_schema = obj({
         "bot_token": credential("Токен бота", "Bot token", "telegram"),
-        "chat_id": prop("string", "Chat ID", "Chat ID", minLength=1, **{"x-required-user-input": True}),
+        "chat_id": prop("string", "Получатель Telegram", "Telegram recipient",
+                        "Укажите @username канала или ID чата. Для личного чата отправьте боту /start, "
+                        "введите свой @username и нажмите «Найти личный чат».",
+                        "Enter a channel @username or a chat ID. For a private chat, send /start to the bot, "
+                        "enter your @username and select Find private chat.",
+                        minLength=1, **{"x-widget": "telegram-chat", "x-required-user-input": True}),
         "template": prop("string", "Шаблон сообщения", "Message template",
                          "Подстановки: {{findings.count}}, {{severity.critical}}, {{score.value}}, {{run.url}}…",
                          "Placeholders: {{findings.count}}, {{severity.critical}}, {{score.value}}, {{run.url}}…",
@@ -44,18 +50,21 @@ class NotifyTelegram(BaseNode):
         base = f"{settings.telegram_api_base.rstrip('/')}/bot{token}"
         allow = settings.ssrf_allowed()
         content = build_content(ctx, inputs, config.get("template"))
+        recipient = config["chat_id"].strip()
+        if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,31}", recipient):
+            recipient = "@" + recipient
         sent = 0
         try:
             for chunk in split_message(content.text, TELEGRAM_LIMIT):
                 resp = await safe_request("POST", f"{base}/sendMessage", allow_hosts=allow,
-                                          json={"chat_id": config["chat_id"], "text": chunk,
+                                          json={"chat_id": recipient, "text": chunk,
                                                 "disable_web_page_preview": True})
                 self._check(resp)
                 sent += 1
             if config.get("send_document", True):
                 files = {"document": ("report.md", content.markdown.encode("utf-8"), "text/markdown")}
                 resp = await safe_request("POST", f"{base}/sendDocument", allow_hosts=allow,
-                                          data={"chat_id": config["chat_id"],
+                                          data={"chat_id": recipient,
                                                 "caption": content.text.splitlines()[0][:1024]}, files=files)
                 self._check(resp)
         except Exception as exc:

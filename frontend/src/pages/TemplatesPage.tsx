@@ -45,7 +45,7 @@ function Preview({ graph }: { graph: Graph }) {
     <EditorContext.Provider value={{ catalog: catalog.data?.nodes ?? [], lang, runMode: false }}>
       <div className="h-72 overflow-hidden rounded-field border border-border">
         <ReactFlowProvider>
-          <ReactFlow nodes={flow.nodes} edges={flow.edges} nodeTypes={nodeTypes} fitView nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}>
+          <ReactFlow defaultNodes={flow.nodes} edges={flow.edges} nodeTypes={nodeTypes} fitView deleteKeyCode={null} nodesConnectable={false} elementsSelectable={false}>
             <Background variant={BackgroundVariant.Dots} gap={16} size={1.2} color="rgb(var(--border))" />
           </ReactFlow>
         </ReactFlowProvider>
@@ -90,7 +90,7 @@ function TemplateDetail({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
           <p className="text-sm">{tpl.description}</p>
           <div className="flex flex-wrap gap-1">{tpl.tags.map((g) => <Badge key={g}>#{g}</Badge>)}</div>
-          {tpl.graph && <Preview graph={tpl.graph} />}
+          {tpl.graph && <Preview key={tpl.id} graph={tpl.graph} />}
           <div className="text-xs text-muted">{t('templates.nodes')}: {tpl.node_types.join(', ')}</div>
           <Card title={t('templates.params')}>
             <p className="mb-3 text-xs text-muted">{t('templates.paramsHint')}</p>

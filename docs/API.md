@@ -38,7 +38,8 @@
 | `GET` | `/api/auth/me` | текущий пользователь и его workspace |
 | `PATCH` | `/api/auth/me` | имя, язык, тема |
 | `POST` | `/api/auth/refresh` | ротация refresh-токена |
-| `POST` | `/api/auth/register` | регистрация; создаёт личный workspace, возвращает access/refresh |
+| `POST` | `/api/auth/register` | проверяет одноразовый код и создаёт аккаунт с личным workspace, возвращает access/refresh |
+| `POST` | `/api/auth/registration-code` | отправляет на e-mail одноразовый код регистрации на 10 минут |
 
 ### Рабочие пространства и участники
 
@@ -63,6 +64,7 @@
 | `POST` | `/api/credentials` | сохранить секрет (AES-256-GCM) |
 | `DELETE` | `/api/credentials/{credential_id}` | удалить секрет |
 | `PUT` | `/api/credentials/{credential_id}` | заменить значение/имя |
+| `POST` | `/api/credentials/{credential_id}/telegram-chat` | находит ID личного чата по имени в недавних сообщениях бота |
 
 ### Настройки (allowlist)
 
@@ -217,4 +219,4 @@
 | `POST` | `/api/checks` | «Новая проверка» одним запросом: источник (ссылка / архив / учебный проект) + старт (готовый сценарий, шаблон, пустой граф или текст для AI); незаполненные параметры уведомлений возвращаются в needs_input |
 | `GET` | `/api/checks/starters` | готовые сценарии для «С чего начать?»: полная проверка, только секреты, проверка PR |
 
-Всего операций: 104.
+Всего операций: 106.

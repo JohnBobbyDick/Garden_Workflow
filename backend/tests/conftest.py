@@ -43,3 +43,25 @@ def nvidia_server(monkeypatch):
         yield script, hp
     finally:
         srv.shutdown()
+
+
+@pytest.fixture
+def smtp_server(monkeypatch):
+    import socket
+
+    from aiosmtpd.controller import Controller
+
+    from app.config import get_settings
+    from tests.nodes.test_notify_nodes import MailSink
+
+    handler = MailSink()
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    ctl = Controller(handler, hostname="127.0.0.1", port=port, auth_require_tls=False, server_hostname="localhost")
+    ctl.start()
+    monkeypatch.setenv("APP_SSRF_ALLOW_HOSTS", f"127.0.0.1:{port}")
+    get_settings.cache_clear()
+    yield port, handler
+    ctl.stop()
+    get_settings.cache_clear()

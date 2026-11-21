@@ -25,6 +25,7 @@ import zipfile
 from pathlib import Path
 
 import httpx
+from demo_auth import demo_session
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
@@ -102,10 +103,7 @@ def main() -> int:  # noqa: C901, PLR0915 - a linear demo script
         return httpx.get(f"{args.mock}/_received", timeout=10).json()
 
     # ---- 1. registration → workspace → AI + Telegram/SMTP ---------------------------------------------------------
-    email = f"demo-{uuid.uuid4().hex[:6]}@example.org"
-    reg = c.post("/api/auth/register", json={"email": email, "password": "Demo-Passw0rd!", "display_name": "Demo"})
-    reg.raise_for_status()
-    h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    email, h = demo_session(c, "Demo")
     ws = c.post("/api/workspaces", headers=h, json={"name": "Команда безопасности", "timezone": "Europe/Moscow"})
     check("1 workspace", ws.status_code in (200, 201), f"пользователь {email}, создан workspace «{ws.json().get('name')}»")
     ws = ws.json()["id"]

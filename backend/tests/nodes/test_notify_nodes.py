@@ -9,7 +9,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 import pytest
-from aiosmtpd.controller import Controller
 
 from app.analyzers.runner import analyze_project
 from app.config import get_settings
@@ -57,16 +56,17 @@ def findings():
     return analyze_project(TRAINING).findings
 
 
-def test_telegram_sends_summary_with_report_and_document(http_server, services, findings):
+@pytest.mark.parametrize(("recipient", "expected"), [("-100123", "-100123"), ("team_channel", "@team_channel")])
+def test_telegram_sends_summary_with_report_and_document(http_server, services, findings, recipient, expected):
     hostport, reqs = http_server
     services.credentials["tg"] = BOT_TOKEN
     masker = Masker()
     out, sink = run_node("notify.telegram", {"in": [findings_envelope(findings, "m")]},
-                         {"bot_token": "tg", "chat_id": "-100123"}, services, masker=masker)
+                         {"bot_token": "tg", "chat_id": recipient}, services, masker=masker)
     paths = [r["path"] for r in reqs]
     assert f"/bot{BOT_TOKEN}/sendMessage" in paths and f"/bot{BOT_TOKEN}/sendDocument" in paths
     msg = json.loads(next(r["body"] for r in reqs if r["path"].endswith("sendMessage")))
-    assert msg["chat_id"] == "-100123"
+    assert msg["chat_id"] == expected
     assert "15" in msg["text"] and "CRITICAL" in msg["text"]
     assert "build.gradle.kts" in msg["text"] or ".kt" in msg["text"]  # top findings listed
     doc = next(r for r in reqs if r["path"].endswith("sendDocument"))
@@ -135,22 +135,6 @@ class MailSink:
     async def handle_DATA(self, server, session, envelope):
         self.messages.append(envelope)
         return "250 OK"
-
-
-@pytest.fixture
-def smtp_server(monkeypatch):
-    import socket
-    handler = MailSink()
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    ctl = Controller(handler, hostname="127.0.0.1", port=port, auth_require_tls=False, server_hostname="localhost")
-    ctl.start()
-    monkeypatch.setenv("APP_SSRF_ALLOW_HOSTS", f"127.0.0.1:{port}")
-    get_settings.cache_clear()
-    yield port, handler
-    ctl.stop()
-    get_settings.cache_clear()
 
 
 def test_smtp_sends_html_letter_with_attachments(smtp_server, services, findings):

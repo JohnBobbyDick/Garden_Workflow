@@ -175,7 +175,8 @@ class LLMProvider(ABC):
         n = cfg.rotation_retries or auto_retries(len(cfg.keys) or 1, cfg.proxies)
         scrub = self._scrubber()
         used_keys: set[int] = set()
-        used_proxies: set[int] = set()
+        proxy_order = list(cfg.proxies)
+        random.shuffle(proxy_order)
         tried: dict[str, set[str]] = {}
         reason = "нет попыток"
 
@@ -194,7 +195,7 @@ class LLMProvider(ABC):
                 await asyncio.sleep(pause)
             model = models[min(i, len(models) - 1)]
             key = keys[pick(keys, used_keys)]
-            raw_proxy = cfg.proxies[pick(cfg.proxies, used_proxies)] if cfg.proxies else None
+            raw_proxy = proxy_order[i % len(proxy_order)] if proxy_order else None
             proxy = await resolve(raw_proxy, tried.setdefault(raw_proxy, set())) if raw_proxy else None
             shown = mask_proxy(proxy) if proxy else "direct"
             logger.info("LLM attempt %d/%d: model=%s key=...%s proxy=%s", i + 1, n, model, (key or "")[-4:], shown)

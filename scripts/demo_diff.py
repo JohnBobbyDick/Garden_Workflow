@@ -31,6 +31,7 @@ import uuid
 from pathlib import Path
 
 import httpx
+from demo_auth import demo_session
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -80,10 +81,7 @@ def main() -> int:
     mock = f"http://127.0.0.1:{srv.server_address[1]}"
     print(f"[demo] mock GitHub on {mock}")
     c = httpx.Client(base_url=args.url, timeout=60)
-    email = f"diff-demo-{uuid.uuid4().hex[:6]}@example.org"
-    reg = c.post("/api/auth/register", json={"email": email, "password": "Demo-Passw0rd!", "display_name": "diff demo"})
-    reg.raise_for_status()
-    h = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    _, h = demo_session(c, "diff demo")
     ws = c.get("/api/auth/me", headers=h).json()["workspaces"][0]["id"]
     whs = c.post("/api/credentials", headers=h, json={"workspace_id": ws, "name": "github webhook",
                                                      "kind": "webhook_secret", "value": WEBHOOK_SECRET}).json()["id"]

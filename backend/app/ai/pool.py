@@ -68,6 +68,8 @@ class LLMEnv(BaseSettings):
     llm_provider: str = "nvidia"
     nvidia_api_key: str = ""
     nvidia_proxies: str = ""
+    gemeni_proxies: str = ""
+    gemini_proxies: str = ""
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:3b"
 
@@ -97,7 +99,10 @@ class LLMEnv(BaseSettings):
 
     @property
     def proxies(self) -> list[str]:
-        return [p for entry in split_list(self.nvidia_proxies) if (p := parse_proxy(entry))] if self.provider == "nvidia" else []
+        if self.provider != "nvidia":
+            return []
+        raw = self.nvidia_proxies or self.gemeni_proxies or self.gemini_proxies
+        return [p for entry in split_list(raw) if (p := parse_proxy(entry))]
 
     @property
     def retries(self) -> int:

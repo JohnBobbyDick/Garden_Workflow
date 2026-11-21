@@ -62,7 +62,7 @@ function NodeCardImpl({ id, data, selected }: NodeProps<FlowNode>) {
         </div>
         {data.status === 'running' && <Spinner size={14} className="mt-0.5 text-primary" />}
         {glyph && <span className={clsx('text-[15px] font-bold leading-4', glyph.cls)} aria-hidden="true">{glyph.ch}</span>}
-        {!data.status && !runMode && missing.length > 0 && (
+        {missing.length > 0 && (
           <span className="font-bold leading-4 text-primary" title={`${t('editor.needsInput')}: ${missing.join(', ')}`}
             aria-label={`${t('editor.needsInput')}: ${missing.join(', ')}`}>!</span>
         )}
@@ -88,7 +88,7 @@ function NodeCardImpl({ id, data, selected }: NodeProps<FlowNode>) {
           {data.durationMs !== undefined && data.durationMs !== null && <span className="tabular-nums">{fmtDuration(data.durationMs, lang)}</span>}
         </div>
       )}
-      {selected && !runMode && onQuickAdd && !!spec?.outputs.length && (
+      {selected && onQuickAdd && !!spec?.outputs.length && (
         <NodeToolbar position={Position.Bottom} offset={6}>
           <button type="button" onClick={() => onQuickAdd(id)} title={t('canvas.addAfter')} aria-label={t('canvas.addAfter')}
             className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-fg shadow-pop hover:scale-110 transition-transform">

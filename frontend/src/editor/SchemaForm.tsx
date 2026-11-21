@@ -1,7 +1,7 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { apiFetch } from '../api/client'
+import { api, apiFetch } from '../api/client'
 import { useCredentials, useWs } from '../api/hooks'
 import type { JsonSchema, Lang } from '../api/types'
 import { Badge, Button, Input, Select, Switch, Textarea } from '../components/ui'
@@ -212,6 +212,34 @@ function Widget({ f, value, set, lang, id, invalid, readOnly }: {
   }
 }
 
+function TelegramLookup({ token, username, onFound }: { token: string; username: string; onFound: (id: string) => void }) {
+  const { t } = useTranslation()
+  const [busy, setBusy] = useState(false)
+  const request = useRef<AbortController | null>(null)
+  const apply = useRef(onFound)
+  apply.current = onFound
+  useEffect(() => () => request.current?.abort(), [])
+  const lookup = async () => {
+    const controller = new AbortController()
+    request.current = controller
+    setBusy(true)
+    try {
+      const chat = await api<{ chat_id: string }>(`/api/credentials/${token}/telegram-chat`, {
+        method: 'POST', json: { username }, signal: controller.signal,
+      })
+      if (!controller.signal.aborted) apply.current(chat.chat_id)
+    } catch (e) {
+      if (!controller.signal.aborted) toast.error((e as Error).message)
+    } finally {
+      if (!controller.signal.aborted) setBusy(false)
+    }
+  }
+  return <Button type="button" size="sm" className="mt-2" loading={busy}
+    disabled={!token || !/^@?[A-Za-z][A-Za-z0-9_]{0,31}$/.test(username)} onClick={lookup}>
+    {t('editor.findTelegramChat')}
+  </Button>
+}
+
 export function SchemaForm({ schema, value, onChange, lang, serverErrors = {}, readOnly }: Props) {
   const { t } = useTranslation()
   const base = useId()
@@ -234,6 +262,9 @@ export function SchemaForm({ schema, value, onChange, lang, serverErrors = {}, r
             )}
             <Widget f={f} value={v} lang={lang} id={id} invalid={!!err} readOnly={readOnly}
               set={(nv) => onChange({ ...value, [f.key]: nv })} />
+            {!readOnly && schema.properties?.[f.key]?.['x-widget'] === 'telegram-chat' &&
+              <TelegramLookup key={JSON.stringify([value.bot_token, v])} token={String(value.bot_token ?? '')}
+                username={String(v ?? '').trim()} onFound={id => onChange({ ...value, [f.key]: id })} />}
             {err ? <p className="mt-1 text-xs text-danger" role="alert">{err}</p>
               : f.description ? <p className="mt-1 text-xs text-muted">{f.description}</p> : null}
           </div>
