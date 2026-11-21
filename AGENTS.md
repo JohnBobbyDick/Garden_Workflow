@@ -33,7 +33,7 @@
 - `backend/app/nodes/**` — ноды-плагины: **одна нода = один файл** с `@register_node`, автообнаружение пакета.
   `docs/NODES.md` генерируется: `make nodes-doc`.
 - `backend/app/core/` — crypto (AES-256-GCM, версии ключа), masking, ssrf, repo_guard, security (JWT/argon2), audit, errors.
-- `backend/app/ai/` — провайдеры (`openai_compat`, `ollama`; новый = класс с `@register_provider`), промпты, схемы,
+- `backend/app/ai/` — провайдеры NVIDIA Nemotron (`nvidia`) и Ollama (`ollama`), промпты, схемы,
   валидатор достоверности, детерминированный fallback.
 - `backend/app/api/` — REST под `/api`, единый формат ошибок `{"error":{"code","message","details"}}`.
 - `frontend/src/` — React 18 + TS + Vite + Tailwind + `@xyflow/react` **v13** + Zustand + TanStack Query + i18next.
@@ -65,7 +65,7 @@
   Для проверенного кода (AutoFix `new_snippet`, «+»-строки патча) использовать `Masker.mask_known()`.
 - Фикстура `scm` (tests/ci) делает `get_settings.cache_clear()` — запрашивать её **до** фикстур, которые патчат
   `get_settings()` (например `project_dir`), иначе патч теряется.
-- Реальной LLM в окружении нет (Ollama/LM Studio не установлены) — AI проверен контрактными тестами на локальных HTTP-серверах.
+- Живой прогон Nemotron на синтетической находке описан в разделе 8 `docs/REPORT.md`. Автотесты используют локальные HTTP-серверы.
 - Docker: на этой машине порт 8080 занят посторонним traefik — для Compose `FRONTEND_PORT=8088` (+`APP_PUBLIC_URL`,
   `APP_CORS_ORIGINS`). Compose-backend занимает :8000 — перед `npx playwright test` делать `docker compose down`.
 - Свежий клон: каталог SQLite создаёт `app.db.ensure_sqlite_dir` (и в `alembic/env.py`) — не убирать.
@@ -78,13 +78,17 @@
   - старые адреса редиректит `workspace/routes.ts::legacyRedirect`; `/runs/:id` обязан работать.
 - Анимации выполнения — только CSS в `frontend/src/editor/neon.css`. Не анимировать CSS `transform` у SVG-групп
   React Flow (`.react-flow__edge-textwrapper`): это сбивает позицию подписи.
-- Внешние LLM: пул ключей, прокси и моделей в `app/ai/providers/base.py::_rotate`, провайдер `gemini`. Окружение
-  (`LLM_ENABLED`, `GEMINI_*`) задаёт провайдер платформы по умолчанию. `tests/conftest.py` принудительно ставит
-  `LLM_ENABLED=false`.
+- Провайдер платформы по умолчанию — NVIDIA Nemotron (`NVIDIA_API_KEY`). Локальный вариант — `LLM_PROVIDER=ollama`,
+  `OLLAMA_URL` и `OLLAMA_MODEL`. Тесты отключают провайдер платформы через `LLM_ENABLED=false`.
 - E2E: ноду из палитры перетаскивать через поиск «Найти блок…»; перенос ноды на холсте — `page.mouse` со `steps`.
   В headless-браузере здесь `requestAnimationFrame` на паузе — FPS так не измерить.
 - Windows: подпроцесс в тестах — `sys.executable` (не `python3`, это заглушка Store) и окружение родителя
   (без `SYSTEMROOT` не инициализируется SSL).
+- `path` находки — от корня **проекта**, не репозитория (замечание ментора: `src/main/…`, не `training-project/src/…`).
+  Корень определяет `app/analyzers/common/project_root.py` в ноде `source.repo`, если `subdir` пуст; найденный корень
+  пишется в `run.source.subdir` (+`subdir_detected`) — по нему же AutoFix и PR пересобирают исходники.
+  Точность (`tests/eval`) мерить и при корне = весь репозиторий: `tests/api/test_project_root_detection.py`.
+- Оценка полезности AI на всём наборе: `python -m app.ai.eval_report` (нужен ключ модели; без него — код 2).
 
 ## Процесс
 Работа по фазам из `todo.md` с гейтами (тесты зелёные + ручная проверка на запущенном стеке), TDD (тест → красный →

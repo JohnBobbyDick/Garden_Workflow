@@ -60,18 +60,22 @@ def top_findings(findings: list[Finding], n: int = 5) -> list[Finding]:
 def build_content(ctx: NodeContext, inputs: dict[str, Any], template: str | None = None) -> NotificationContent:
     lang = ctx.run.language if ctx.run.language in TEXT else "ru"
     envs = flatten_inputs(inputs)
-    findings = findings_of([e for e in envs if "findings" in e.data])
-    if not findings and ctx.state.get("findings_all"):
-        findings = ctx.state["findings_all"]
-    c = build_context(inputs, ctx.run, ctx.state)
+    exports = ctx.state.get("reports_by_node", {})
+    export = next((e for e in reversed(envs) if e.type == "report" and e.meta.node_id in exports), None)
+    report = exports[export.meta.node_id] if export else None
+    finding_inputs = [e for e in envs if "findings" in e.data]
+    if report is None and not finding_inputs:
+        report = ctx.state.get("report")
+    findings = report["findings"] if report else findings_of(finding_inputs)
+    c = build_context(inputs, ctx.run, ctx.state, findings=findings)
     tt = TEXT[lang]
     head = render_template(template or tt["default"], c).strip()
     lines = [tt["title"], "", head, ""]
-    official = [f for f in findings if f.confidence >= OFFICIAL_MIN_CONFIDENCE]
+    official = findings if report else [f for f in findings if f.confidence >= OFFICIAL_MIN_CONFIDENCE]
     if official:
         lines.append(tt["top"])
         lines += [f"• {finding_line(f)}" for f in top_findings(official)]
-    else:
+    elif not findings:
         lines.append(tt["none"])
     if c["score"]["value"] is not None:
         delta = c["score"]["delta"]
@@ -81,10 +85,9 @@ def build_content(ctx: NodeContext, inputs: dict[str, Any], template: str | None
     if c["gate"]:
         lines.append(f"{tt['gate']}: {c['gate']}")
     ai = ctx.state.get("ai") or {}
-    if ai.get("summary"):
+    if ai.get("summary") and ai["summary"] not in head:
         lines += ["", f"{tt['ai'] if ai.get('ai_generated', True) else tt['det']}: {ai['summary']}"]
     lines += ["", f"{tt['link']}: {ctx.run.run_url}"]
-    report = ctx.state.get("report")
     if report and report.get("markdown"):
         md, html = report["markdown"], report["html"]
     else:

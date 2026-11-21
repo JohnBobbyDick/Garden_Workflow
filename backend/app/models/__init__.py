@@ -8,6 +8,7 @@ from app.models.identity import (
     Invitation,
     Membership,
     RefreshToken,
+    RegistrationCode,
     RepoAllowlist,
     User,
     Workspace,
@@ -31,7 +32,7 @@ from app.models.workflow import CustomNode, Project, Schedule, ScheduleSlot, Upl
 __all__ = [
     "AIReport", "AISettings", "ApiToken", "Artifact", "AuditLog", "Autofix", "Base", "CiStatusReport", "Credential",
     "CustomNode", "FindingRecord", "Invitation", "Membership", "NODE_STATUSES", "NodeRun", "Project", "ROLES", "RUN_STATUSES",
-    "RefreshToken", "RepoAllowlist", "Run", "RunEvent", "Schedule", "ScheduleSlot", "TEMPLATE_CATEGORIES", "Template",
+    "RefreshToken", "RegistrationCode", "RepoAllowlist", "Run", "RunEvent", "Schedule", "ScheduleSlot", "TEMPLATE_CATEGORIES", "Template",
     "TemplateFavorite", "TemplateRating", "TemplateReview", "Upload", "User", "WebhookDelivery", "Workflow",
     "WorkflowChatMessage", "Workspace", "new_id", "utcnow",
 ]

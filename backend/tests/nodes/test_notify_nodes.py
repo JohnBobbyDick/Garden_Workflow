@@ -7,6 +7,7 @@ from email import message_from_bytes
 from email.policy import default as default_policy
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import httpx
 import pytest
 from aiosmtpd.controller import Controller
 
@@ -14,6 +15,7 @@ from app.analyzers.runner import analyze_project
 from app.config import get_settings
 from app.core.masking import Masker
 from app.engine.data import findings_envelope
+from app.nodes.output import notify_telegram
 from tests.nodes.conftest import TRAINING, run_node
 
 BOT_TOKEN = "123456789:AAFakeTokenForLocalMockServer_abcdefgh"
@@ -71,6 +73,34 @@ def test_telegram_sends_summary_with_report_and_document(http_server, services, 
     assert b"report.md" in doc["body"] and "# Отчёт анализа безопасности".encode() in doc["body"]
     assert services.notifications[-1]["status"] == "delivered"
     assert BOT_TOKEN not in repr(sink.events) and BOT_TOKEN not in repr(out["out"].data)
+
+
+def test_telegram_chat_not_found_explains_how_to_fix_destination():
+    response = httpx.Response(400, json={"ok": False, "description": "Bad Request: chat not found"})
+    with pytest.raises(notify_telegram.TelegramError, match=r"chat not found.*Chat ID.*/start"):
+        notify_telegram.NotifyTelegram._check(response)
+
+
+@pytest.mark.parametrize(("threshold", "confidence", "count"), [(0.8, 0.9, 1), (0.8, 0.5, 0), (0.4, 0.5, 1)])
+def test_telegram_summary_matches_connected_markdown_report(http_server, services, findings, threshold, confidence, count):
+    _, requests = http_server
+    services.credentials["tg"] = BOT_TOKEN
+    finding = next(f for f in findings if f.category == "SAST").model_copy(update={"confidence": confidence})
+    state = {"score": {"value": 31, "delta": 0}, "ai": {"summary": "Объяснение анализатора"}}
+    report, _ = run_node("output.report_export", {"in": findings_envelope([finding], "scan")},
+                         {"min_confidence": threshold}, services, state=state)
+    run_node("notify.telegram", {"in": [report["out"]]},
+             {"bot_token": "tg", "chat_id": "1",
+              "template": "Итого {{findings.count}}, score={{score.value}}. {{ai.summary}}"},
+             services, state=state)
+    message = json.loads(next(r["body"] for r in requests if r["path"].endswith("/sendMessage")))["text"]
+    assert f"Итого {count}, score=31" in message
+    assert message.count("Объяснение анализатора") == 1
+    assert ("Находок нет" in message) == (count == 0)
+    assert (finding.cls in message) == (count == 1)
+    document = next(r["body"] for r in requests if r["path"].endswith("/sendDocument"))
+    assert services.artifacts["report.md"][0] in document
+    assert f"Всего находок: {count}".encode() in document
 
 
 def test_telegram_long_message_is_split_by_4096(http_server, services, findings):

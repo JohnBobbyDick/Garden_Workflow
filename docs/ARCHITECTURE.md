@@ -120,7 +120,7 @@ JSON Schema) и документация (`make nodes-doc` → [NODES.md](NODES.
 | `app/analyzers/` | Собственные анализаторы: `secrets`, `sca` (Gradle DSL, lockfile, catalog, CVSS), `sast` (tree-sitter-kotlin, taint, граф вызовов, Spring Security), `diff` (hunks, blame, классификация new/existing), общая модель `Finding`. |
 | `app/engine/` | Граф, валидатор, исполнитель, события и SSE, очередь, воркер, планировщик, безопасные выражения и шаблоны. |
 | `app/nodes/` | Ноды-плагины. |
-| `app/ai/` | Провайдеры (`openai_compat`, `ollama`; новый провайдер — класс с `@register_provider`), промпты, схемы, валидатор достоверности, детерминированный fallback, генерация сценариев. См. [AI.md](AI.md). |
+| `app/ai/` | Провайдеры NVIDIA Nemotron и Ollama, промпты, схемы, валидатор достоверности, детерминированный fallback, генерация сценариев. См. [AI.md](AI.md). |
 | `app/scoring/` | Security Score, тренд, Priority Fix List, AI-план спринта. |
 | `app/autofix/` | Контекст, валидатор, SCA-bump, восстановление исходников, PR/MR. |
 | `app/ci/` | Статусы и комментарии в PR/MR, генератор YAML. См. [CI_CD.md](CI_CD.md). |

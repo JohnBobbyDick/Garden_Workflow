@@ -50,10 +50,18 @@ RULES = """Правила графа:
 - ровно один триггер (category=trigger) в начале; рёбра соединяют выход (source_port) с входом (target_port);
 - тип выхода должен совпадать с типом входа или один из них — any; вход без multiple принимает одну связь;
 - без циклов; у logic.if_else подключите хотя бы одну ветку (true/false);
-- поля с credential_ref (токены, пароли, секреты) ОСТАВЛЯЙТЕ ПУСТЫМИ — пользователь выберет секрет из хранилища;
+- в config возвращайте только конкретные JSON-значения из config_fields выбранного типа ноды.
+  Пропускайте поля с подходящим default и неизвестные параметры подключения. Для SMTP без реквизитов верните config: {}.
+- пропускайте поля с credential_ref — пользователь выберет секрет из хранилища;
+  для SMTP это только password; host, username, from_addr и to вводятся в настройках ноды;
+  для Telegram это только bot_token; chat_id задаёт пользователь. В update_node указывайте только изменяемые поля;
   никогда не пишите значения секретов, chat_id, адреса почты или URL репозиториев, которых нет в запросе;
 - расписание — cron из 5 полей (например «0 14 * * *» — каждый день в 14:00);
 - source.repo по умолчанию mode=project; несколько сканеров объединяйте через logic.merge;
+- готовый отчёт передавайте из output.report_export.out на вход in выбранной ноды уведомления;
+  notify.telegram отправляет сводку и report.md при send_document=true (по умолчанию);
+- в шаблонах уведомлений используйте {{findings.count}}, {{score.value}}, {{score.delta}}, {{ai.summary}}, {{run.url}};
+  ссылки вида {{имя_ноды.out.поле}} не поддерживаются. Если нужна оценка, подключите выход оценки к уведомлению;
 - условие IF пишите на языке выражений: findings.count, severity.max, category, new_findings.count, verdict, score.value,
   score.delta, сравнения и and/or/not, например «severity.max >= HIGH»."""
 
@@ -77,7 +85,7 @@ def catalog_for_prompt(registry: NodeRegistry) -> list[dict]:
                     "inputs": [{"name": p.name, "type": p.type, "required": p.required, "multiple": p.multiple}
                                for p in cls.inputs],
                     "outputs": [{"name": p.name, "type": p.type} for p in cls.outputs],
-                    "branch_outputs": list(cls.branch_outputs), "config": cfg,
+                    "branch_outputs": list(cls.branch_outputs), "config_fields": cfg,
                     "required_config": cls.config_schema.get("required", [])})
     return out
 
@@ -97,11 +105,34 @@ class GenResult:
     usage: dict[str, int] = field(default_factory=dict)
 
 
-def normalize_graph(raw: dict) -> dict:
+def _config_values(node_type: str, config: dict, registry: NodeRegistry, existing: dict | None = None) -> dict:
+    """Merge concrete AI values and retain only fields supported by the destination node."""
+    cls = registry.get(node_type)
+    schema = cls.config_schema if cls else {}
+    properties = schema.get("properties", {})
+    values = dict(existing or {})
+    for key, value in config.items():
+        prop = properties.get(key, {})
+        # Models often express omitted connection details as empty values in a repair.
+        if (key in schema.get("required", ()) and (prop.get("credential_ref") or prop.get("x-required-user-input"))
+                and value in (None, "", []) and values.get(key)):
+            continue
+        if (isinstance(value, dict) and "type" in value and value["type"] == prop.get("type")
+                and prop.get("type") in ("string", "integer", "number", "boolean", "array")
+                and value.keys() <= {"type", "title", "default", "enum", "credential_ref"}):
+            continue
+        values[key] = value
+    if schema.get("additionalProperties") is False:
+        return {key: value for key, value in values.items() if key in properties}
+    return values
+
+
+def normalize_graph(raw: dict, registry: NodeRegistry) -> dict:
     nodes, edges = [], []
     for i, n in enumerate(raw.get("nodes", [])):
         nodes.append({"id": str(n.get("id") or f"n{i + 1}")[:64], "type": str(n.get("type", "")),
-                      "position": n.get("position") or {"x": 0, "y": 0}, "config": dict(n.get("config") or {}),
+                      "position": n.get("position") or {"x": 0, "y": 0},
+                      "config": _config_values(n.get("type", ""), n.get("config") or {}, registry),
                       **({"label": n["label"]} if n.get("label") else {})})
     for i, e in enumerate(raw.get("edges", [])):
         edges.append({"id": str(e.get("id") or f"e{i + 1}")[:64], "source": str(e.get("source")),
@@ -177,7 +208,7 @@ async def generate_graph(provider: LLMProvider, prompt: str, registry: NodeRegis
             issues = [{"code": "invalid_json", "message": str(exc), "node_id": None, "field": None}]
             messages += [{"role": "user", "content": f"Ответ не прошёл проверку формата: {exc}. Верни JSON {{nodes, edges}}."}]
             continue
-        graph = normalize_graph(raw)
+        graph = normalize_graph(raw, registry)
         needs = strip_secrets(graph, registry, credential_exists)
         issues, blocking = blocking_issues(graph, registry, credential_exists, needs)
         if not blocking:
@@ -204,7 +235,8 @@ def apply_operations(graph: dict, ops: list[dict], registry: NodeRegistry) -> di
                 raise OpError(f"нода {nid} уже существует")
             if registry.get(op.get("type", "")) is None:
                 raise OpError(f"неизвестный тип ноды {op.get('type')}")
-            node = {"id": nid, "type": op["type"], "position": {"x": 0, "y": 0}, "config": dict(op.get("config") or {})}
+            node = {"id": nid, "type": op["type"], "position": {"x": 0, "y": 0},
+                    "config": _config_values(op["type"], op.get("config") or {}, registry)}
             if op.get("label"):
                 node["label"] = op["label"]
             g["nodes"].append(node)
@@ -213,9 +245,9 @@ def apply_operations(graph: dict, ops: list[dict], registry: NodeRegistry) -> di
             node = nodes.get(op.get("node_id", ""))
             if node is None:
                 raise OpError(f"нода {op.get('node_id')} не найдена")
-            node["config"] = {**node.get("config", {}), **(op.get("config") or {})}
             if op.get("type"):
                 node["type"] = op["type"]
+            node["config"] = _config_values(node["type"], op.get("config") or {}, registry, node.get("config"))
             if op.get("label"):
                 node["label"] = op["label"]
         elif kind == "remove_node":

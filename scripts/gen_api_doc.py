@@ -21,7 +21,8 @@ TAG_TITLES = {
 
 RU = {
     "GET /api/healthz": "проверка живости (используется healthcheck Compose)",
-    "POST /api/auth/register": "регистрация; создаёт личный workspace, возвращает access/refresh",
+    "POST /api/auth/registration-code": "отправляет на e-mail одноразовый код регистрации на 10 минут",
+    "POST /api/auth/register": "проверяет одноразовый код и создаёт аккаунт с личным workspace, возвращает access/refresh",
     "POST /api/auth/login": "вход (rate limit по IP+e-mail)", "POST /api/auth/refresh": "ротация refresh-токена",
     "POST /api/auth/logout": "выход, отзыв refresh-токена", "GET /api/auth/me": "текущий пользователь и его workspace",
     "PATCH /api/auth/me": "имя, язык, тема", "GET /api/workspaces": "workspace пользователя",

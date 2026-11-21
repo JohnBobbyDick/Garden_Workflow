@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path, PurePosixPath
 
 from app.analyzers.common.files import count_loc, walk_project
+from app.analyzers.common.project_root import detect_project_root
 from app.config import get_settings
 from app.core.repo_guard import ExtractLimits, RepoGuardError, check_ref, check_scan_path, clone_repo, safe_extract
 from app.nodes.base import BaseNode, Envelope, Port, register_node
@@ -48,8 +49,10 @@ class RepoSource(BaseNode):
         "path": prop("string", "Путь (внутри APP_SCAN_ROOTS)", "Path (inside APP_SCAN_ROOTS)"),
         "upload_id": prop("string", "Загруженный архив", "Uploaded archive", **{"x-widget": "upload"}),
         "subdir": prop("string", "Подкаталог проекта", "Project subdirectory",
-                       "Корень проверки внутри репозитория, например training-project",
-                       "Scan root inside the repository, e.g. training-project"),
+                       "Корень проекта внутри репозитория, например training-project. Пусто — определяется "
+                       "автоматически по settings.gradle(.kts)/build.gradle(.kts); пути находок считаются от него",
+                       "Project root inside the repository, e.g. training-project. Empty — detected from "
+                       "settings.gradle(.kts)/build.gradle(.kts); finding paths are relative to it"),
         "access_token": credential("Токен доступа (приватный репозиторий)", "Access token (private repo)",
                                    "repo_token"),
     })
@@ -111,11 +114,22 @@ class RepoSource(BaseNode):
                 info["token_ref"] = spec["access_token"]  # credential id, never the value
         else:
             raise RepoGuardError(f"неизвестный режим источника {mode!r}")
-        if spec.get("subdir"):
-            info["subdir"] = spec["subdir"]
+        subdir = spec.get("subdir") or None
+        if subdir:
+            info["subdir"] = subdir
+        else:
+            # paths must be relative to the checked project, not to the repository holding it (organizer format)
+            detected, candidates = await asyncio.to_thread(detect_project_root, root)
+            if detected:
+                subdir = detected
+                info.update(subdir=detected, subdir_detected=True)
+                ctx.log("info", f"корень проекта определён автоматически: {detected} (пути находок — от него)")
+            elif len(candidates) > 1:
+                ctx.log("warning", "в источнике несколько Gradle-проектов: " + ", ".join(candidates[:10])
+                        + " — проверяется весь каталог; чтобы пути считались от одного проекта, укажите «Подкаталог»")
         if ctx.has_services:
             ctx.services.update_run(source={**info})
-        root = _subdir(root, spec.get("subdir"))
+        root = _subdir(root, subdir)
         files = await asyncio.to_thread(walk_project, root)
         loc = count_loc(files)
         ctx.log("info", f"источник {mode}: {len(files)} файлов, {loc} строк")

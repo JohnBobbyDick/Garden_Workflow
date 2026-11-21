@@ -19,17 +19,10 @@ x-backend-env: &backend-env
   APP_TELEGRAM_API_BASE: ${APP_TELEGRAM_API_BASE:-https://api.telegram.org}
   APP_DATA_DIR: /data
   # platform-default external LLM (LLM_PROXY.md); empty = workspace AI settings only
-  LLM_ENABLED: ${LLM_ENABLED:-false}
-  LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
-  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-  GEMINI_KEYS_COUNT: ${GEMINI_KEYS_COUNT:-}
-  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-  GEMINI_FALLBACK_MODELS: ${GEMINI_FALLBACK_MODELS:-gemini-2.5-flash,gemini-2.5-flash-lite}
-  GEMINI_MAX_RETRIES: ${GEMINI_MAX_RETRIES:-}
-  GEMINI_PROXIES: ${GEMINI_PROXIES:-}
-  GEMINI_PROXY_SCHEME: ${GEMINI_PROXY_SCHEME:-auto}
-  GEMINI_PROXY_PORT: ${GEMINI_PROXY_PORT:-}
-  GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta}
+  LLM_ENABLED: ${LLM_ENABLED:-true}
+  LLM_PROVIDER: ${LLM_PROVIDER:-nvidia}
+  NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+  NVIDIA_PROXIES: ${NVIDIA_PROXIES:-}
   OLLAMA_URL: ${OLLAMA_URL:-http://ollama:11434}
   OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
 
@@ -53,7 +46,14 @@ services:
     build: { context: ., dockerfile: backend/Dockerfile }
     image: aisw-backend:local
     command: ["api"]  # alembic upgrade head → uvicorn
-    environment: *backend-env
+    environment:
+      <<: *backend-env
+      APP_SMTP_HOST: ${APP_SMTP_HOST:-}
+      APP_SMTP_PORT: ${APP_SMTP_PORT:-587}
+      APP_SMTP_SECURITY: ${APP_SMTP_SECURITY:-starttls}
+      APP_SMTP_FROM: ${APP_SMTP_FROM:-}
+      APP_SMTP_USERNAME: ${APP_SMTP_USERNAME:-}
+      APP_SMTP_PASSWORD: ${APP_SMTP_PASSWORD:-}
     volumes:
       - aisw-data:/data
     depends_on:

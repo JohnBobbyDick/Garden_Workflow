@@ -29,6 +29,8 @@ const en: Shape<typeof ru> = {
   },
   auth: {
     login: 'Sign in', register: 'Sign up', email: 'E-mail', password: 'Password', displayName: 'Name',
+    code: 'Email code', codeSent: 'The code was sent to {{email}} and is valid for 10 minutes.',
+    sendCode: 'Send code', resendCode: 'Resend code', changeEmail: 'Change email',
     submitLogin: 'Sign in', submitRegister: 'Create account', noAccount: 'No account yet?', haveAccount: 'Already registered?',
     passwordHint: 'At least 10 characters', welcome: 'Code security without enterprise scanners',
     features: {
@@ -116,6 +118,10 @@ const en: Shape<typeof ru> = {
     addNode: 'Add node', addAfter: 'Add a node after this one', addAfterNode: 'After “{{name}}” — the new node connects itself',
   },
   results: {
+    belowThreshold: 'Below the confidence threshold: {{n}} (not exported)',
+    belowThresholdHint: 'Shown for manual review. submission.json, report.md and report.html contain only findings with confidence from {{p}}.',
+    projectRoot: 'Project root', projectRootAuto: 'detected automatically',
+    projectRootHint: 'Finding paths are relative to this folder, as the organizers’ format requires',
     run: 'Run', waiting: 'The check is still running — findings appear when it ends.', backToList: 'All findings',
     dataHint: 'What each node passed on (data previews are in the node panel during a run).',
     compare: 'Compare', fullReport: 'Full report', tabs: 'Run results',
@@ -186,13 +192,14 @@ const en: Shape<typeof ru> = {
     severityChanged: 'Severity changed', compareTitle: 'Run comparison', base: 'Base', head: 'Head',
   },
   settings: {
-    pool: 'Keys, proxies and retries', poolHint: 'For external APIs (e.g. Gemini): attempts rotate keys, proxies and fallback models. Secrets are stored encrypted.',
+    pool: 'Keys, proxies and retries', poolHint: 'A retry to NVIDIA can use a different key or proxy.',
     extraKeys: 'Additional keys', noExtraKeys: 'Add more keys in the “Secrets” tab (kind llm_api_key)',
     proxies: 'Proxies', proxyName: 'Proxy name', proxyValue: 'Proxy', addProxy: 'Add proxy',
     proxyFormats: 'Formats: host:port:login:password · host:login:password (port below) · socks5://login:password@host:1080',
     proxyScheme: 'Protocol', proxyPort: 'Default port', retries: 'Attempts', retriesHint: 'Empty — auto (3–6)',
-    fallbackModels: 'Fallback models', fallbackHint: 'Comma separated; used on later attempts',
-    envDefault: 'No own settings — the platform provider from the environment is used: {{provider}} · {{model}}',
+    workspaceProvider: 'Use workspace settings', platformKey: 'Platform key (if configured)',
+    envDefault: 'Platform provider · {{provider}} · {{model}}', aiOff: 'AI is off. Choose a provider to configure it for this workspace.',
+    reconfigure: 'The previous provider is no longer available. Select a provider and save the settings.',
     diagnose: 'Diagnostics', diagProxy: 'Proxy', diagResult: 'Result', diagTime: 'Time', diagReason: 'Reason',
     direct: 'direct', ms: 'ms',
     title: 'Settings', ai: 'AI provider', credentials: 'Secrets', allowlist: 'Repository allowlist', members: 'Members',

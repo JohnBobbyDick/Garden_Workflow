@@ -2,7 +2,6 @@ import json
 
 import pytest
 
-from tests.ai.fake_llm import make_server
 from tests.api.test_ai_api import configure
 
 PDF_PROMPT = "Каждый день в 14:00 проверяй код из репозитория на наличие секретов и отправляй отчет на почту"
@@ -30,10 +29,9 @@ TZ_GRAPH = g([("t", "trigger.schedule", {"cron": "0 14 * * *"}), ("src", "source
 
 
 @pytest.fixture
-def llm():
-    srv, script, hp = make_server("openai")
-    yield script, hp
-    srv.shutdown()
+def llm(nvidia_server):
+    script, hp = nvidia_server
+    return script, hp
 
 
 def gen(client, user, prompt, **kw):
@@ -138,6 +136,83 @@ def test_chat_add_email_preview_apply_and_history(client, alice, llm):
     assert hist[0]["content"] == TZ_PROMPT  # the generation prompt opens the history
     assert [(h["role"], h["status"]) for h in hist[1:]] == [("user", "applied"), ("assistant", "applied"),
                                                          ("user", "rejected"), ("assistant", "rejected")]
+
+
+def test_chat_connects_report_to_smtp_when_model_copies_field_descriptions(client, alice, llm):
+    script, hp = llm
+    configure(client, alice, hp)
+    script.reply({"nodes": PDF_GRAPH["nodes"][:-1], "edges": PDF_GRAPH["edges"][:-1]})
+    wid = gen(client, alice, "Проверка с отчётом", create=True).json()["workflow_id"]
+    chat_url = f"/api/ai/workflows/{wid}/chat"
+    config = {
+        "host": {"type": "string", "title": "SMTP-сервер"},
+        "port": {"type": "integer", "default": 25, "title": "Порт"},
+        "security": {"type": "string", "enum": ["starttls", "tls", "none"], "default": "starttls"},
+        "username": {"type": "string", "credential_ref": True, "title": "Пользователь"},
+        "password": {"type": "string", "credential_ref": True, "title": "Пароль"},
+        "from_addr": {"type": "string", "credential_ref": True, "title": "От кого"},
+        "to": {"type": "array", "title": "Кому"},
+        "template": {"type": "string", "title": "Шаблон текста"},
+        "subject": "Результаты проверки",
+    }
+    script.reply({"operations": [
+        {"op": "add_node", "node_id": "mail", "type": "notify.smtp", "config": config},
+        {"op": "connect", "source": "exp", "target": "mail"},
+    ]})
+    proposal = client.post(chat_url, json={"message": "Отправь отчёт на email"}, headers=alice.headers).json()
+    assert proposal["status"] == "proposed", proposal["issues"]
+    assert proposal["diff"]["added_edges"] == [["exp", "out", "mail", "in"]]
+    mail_inputs = {item["field"]: item["kind"] for item in proposal["needs_input"] if item["node_id"] == "mail"}
+    assert mail_inputs == {"host": "value", "from_addr": "value", "to": "value", "password": "credential"}
+    saved = client.post(f"{chat_url}/{proposal['id']}/apply", headers=alice.headers).json()["graph"]
+    mail = next(node for node in saved["nodes"] if node["id"] == "mail")
+    assert mail["config"]["subject"] == "Результаты проверки"
+    assert mail["config"].get("port", 587) == 587
+    assert mail["config"].get("security", "starttls") == "starttls"
+    assert not any(isinstance(value, dict) for value in mail["config"].values())
+
+    # Repeating catalog metadata during an edit must preserve the user's subject.
+    script.reply({"operations": [{"op": "update_node", "node_id": "mail", "config": {
+        "subject": {"type": "string", "title": "Тема"}, "port": 465, "security": "tls"}}]})
+    updated = client.post(chat_url, json={"message": "Используй TLS"}, headers=alice.headers).json()
+    assert updated["valid"]
+    config = next(node["config"] for node in updated["graph"]["nodes"] if node["id"] == "mail")
+    assert (config["subject"], config["port"], config["security"]) == ("Результаты проверки", 465, "tls")
+
+    script.reply({"operations": [{"op": "update_node", "node_id": "mail", "config": {"port": {"value": 25}}}]})
+    invalid = client.post(chat_url, json={"message": "Измени порт"}, headers=alice.headers).json()
+    assert invalid["status"] == "failed"
+    assert any(issue["field"] == "port" for issue in invalid["issues"])
+
+
+def test_chat_repairs_telegram_config_and_preserves_delivery_settings(client, alice, llm):
+    script, hp = llm
+    configure(client, alice, hp)
+    token = client.post("/api/credentials", headers=alice.headers, json={
+        "workspace_id": alice.workspace_id, "kind": "telegram", "name": "Telegram", "value": "test-bot-token",
+    }).json()["id"]
+    telegram = {"bot_token": token, "chat_id": "-100123", "template": "Итоги проверки", "send_document": False}
+    graph = {"nodes": [*PDF_GRAPH["nodes"][:-1], {"id": "mail", "type": "notify.telegram",
+                      "config": {**telegram, "from_addr": "team@example.org", "subject": "Проверка"}}],
+             "edges": [{**edge, "id": f"e{i}"} for i, edge in enumerate(PDF_GRAPH["edges"])]}
+    created = client.post("/api/workflows", headers=alice.headers, json={
+        "workspace_id": alice.workspace_id, "name": "Отчёт в Telegram", "graph": graph,
+    })
+    assert created.status_code == 201, created.text
+    wf = created.json()
+    url = f"/api/workflows/{wf['id']}"
+    assert not client.post(f"{url}/validate", headers=alice.headers).json()["valid"]
+    script.reply({"operations": [{"op": "update_node", "node_id": "mail", "config": {
+        "bot_token": "", "chat_id": "", "send_document": True, "to": ["team@example.org"],
+    }}]})
+    chat = f"/api/ai/workflows/{wf['id']}/chat"
+    proposal = client.post(chat, headers=alice.headers, json={"message": "Исправь Telegram, приложи .md"}).json()
+    assert proposal["status"] == "proposed", proposal["issues"]
+    assert proposal["diff"]["changed_nodes"] == ["mail"]
+    applied = client.post(f"{chat}/{proposal['id']}/apply", headers=alice.headers).json()["graph"]
+    assert applied["edges"] == wf["graph"]["edges"]
+    assert next(n["config"] for n in applied["nodes"] if n["id"] == "mail") == {**telegram, "send_document": True}
+    assert client.post(f"{url}/validate", headers=alice.headers).json()["valid"]
 
 
 def test_chat_set_schedule_and_invalid_ops(client, alice, llm):

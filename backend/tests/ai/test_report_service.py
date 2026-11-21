@@ -19,13 +19,13 @@ def findings():
 
 @pytest.fixture
 def llm():
-    srv, script, hp = make_server("openai")
+    srv, script, hp = make_server("ollama")
     yield script, hp
     srv.shutdown()
 
 
 def provider(hp):
-    return build_provider(ProviderConfig(provider="openai_compat", base_url=f"http://{hp}/v1", model="m",
+    return build_provider(ProviderConfig(provider="ollama", base_url=f"http://{hp}", model="m",
                                          timeout=5, backoff_base=0.01, allow_hosts={hp}))
 
 
@@ -132,6 +132,10 @@ def test_batching_splits_large_input(findings, llm):
     script.dynamic = good_answer
     out = run(findings, provider(hp), batch_chars=3000)
     assert len(script.requests) > 1 and len(out.report["findings"]) == 15
+    first = out.report["priority_order"][0]
+    explanation = next(item["explanation"] for item in out.report["findings"] if item["finding_id"] == first)
+    assert explanation in out.report["summary"]
+    assert "Найдено несколько серьёзных проблем." not in out.report["summary"]
 
 
 def test_findings_missing_from_answer_are_filled_deterministically(findings, llm):

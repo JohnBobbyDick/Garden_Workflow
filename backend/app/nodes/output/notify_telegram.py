@@ -74,4 +74,7 @@ class NotifyTelegram(BaseNode):
         except (ValueError, json.JSONDecodeError):
             payload = {}
         if resp.status_code != 200 or not payload.get("ok"):
-            raise TelegramError(f"Telegram API {resp.status_code}: {payload.get('description') or resp.text[:200]}")
+            detail = str(payload.get("description") or resp.text[:200])
+            if resp.status_code == 400 and "chat not found" in detail.lower():
+                detail += ". Проверьте Chat ID. Для личного чата отправьте боту /start, для группы добавьте в неё бота."
+            raise TelegramError(f"Telegram API {resp.status_code}: {detail}")

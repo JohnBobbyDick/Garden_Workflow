@@ -11,7 +11,7 @@ os.environ["APP_DATA_DIR"] = _SESSION_DIR
 os.environ["APP_DATABASE_URL"] = f"sqlite:///{_SESSION_DIR.replace(os.sep, '/')}/default.db"
 os.environ.setdefault("APP_MASTER_KEY", base64.b64encode(os.urandom(32)).decode())
 os.environ.setdefault("APP_JWT_SECRET", base64.b64encode(os.urandom(32)).decode())
-# The platform-default LLM (LLM_ENABLED / GEMINI_* in the environment or backend/.env) must never leak into tests.
+# The platform-default LLM (LLM_ENABLED / NVIDIA_* in the environment or backend/.env) must never leak into tests.
 os.environ["LLM_ENABLED"] = "false"
 
 
@@ -21,3 +21,25 @@ def symlink_or_skip(target, link) -> None:
         os.symlink(target, link)
     except OSError as exc:  # pragma: no cover - platform dependent
         pytest.skip(f"symlinks unavailable on this platform: {exc}")
+
+
+@pytest.fixture
+def nvidia_server(monkeypatch):
+    """Exercise the fixed HTTPS contract on an isolated real server, without operator keys or network access."""
+    from app.ai.providers import base
+    from app.core.ssrf import safe_request
+    from tests.ai.fake_llm import make_server
+
+    srv, script, hp = make_server("nvidia")
+
+    async def local_request(method, url, **kwargs):
+        assert url == "https://integrate.api.nvidia.com/v1/chat/completions"
+        assert kwargs["max_redirects"] == 0
+        kwargs["allow_hosts"] = kwargs["allow_hosts"] | {hp}
+        return await safe_request(method, f"http://{hp}/v1/chat/completions", **kwargs)
+
+    monkeypatch.setattr(base, "safe_request", local_request)
+    try:
+        yield script, hp
+    finally:
+        srv.shutdown()

@@ -20,6 +20,7 @@ import { toast } from '../store/toast'
 import { useWorkspaceUi } from '../store/workspace'
 import { SET_SOURCE_EVENT } from '../workspace/NewCheckDialog'
 import { AiAssistant } from './AiAssistant'
+import { useCompactWorkspace } from '../workspace/useCompactWorkspace'
 import { HeaderButton, InlineName, OverflowMenu, sourceLabel, TriggerSwitch, type TriggerKind } from './CanvasHeader'
 import { EditorContext } from './EditorContext'
 import {
@@ -57,7 +58,11 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   const nav = useNavigate()
   const invalidate = useInvalidate()
   const [params, setParams] = useSearchParams()
-  const { inspectorCollapsed, toggleInspector, setLastWorkflow } = useWorkspaceUi()
+  const { inspectorCollapsed: desktopCollapsed, toggleInspector: toggleDesktopInspector, setInspectorCollapsed, setLastWorkflow } = useWorkspaceUi()
+  const compact = useCompactWorkspace()
+  const [mobilePanel, setMobilePanel] = useState(false)
+  const inspectorCollapsed = compact ? !mobilePanel : desktopCollapsed
+  const toggleInspector = () => compact ? setMobilePanel(!mobilePanel) : toggleDesktopInspector()
   const customNodes = useCustomNodes(workflow.workspace_id).data
   const project = useProjects().data?.find((p) => p.id === workflow.project_id)
   const [nodes, setNodes] = useState<FlowNode[]>([])
@@ -78,6 +83,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   const fileRef = useRef<HTMLInputElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
   const runId = params.get('run')
+  useEffect(() => setMobilePanel(!!runId), [runId, workflow.id])
   const runMode = runId !== null
   const live = useRunEvents(runId)
   const shownRun = useRun(runId ?? workflow.last_run?.id ?? undefined, true)
@@ -403,14 +409,14 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   return (
     <EditorContext.Provider value={{ catalog: catalog.nodes, lang, runMode, onQuickAdd: (from) => setQuick({ from }) }}>
       <div className="flex h-full flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface px-3">
+        <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-1 border-b border-border bg-surface px-2 py-1.5 sm:gap-2 sm:px-3 xl:flex-nowrap">
           <InlineName value={workflow.name} onSave={rename} />
           <button type="button" onClick={() => setParams((p) => { const n = new URLSearchParams(p); n.set('source', '1'); return n })} disabled={runMode}
             title={t('canvas.changeSource')} className="flex h-8 min-w-0 max-w-[280px] items-center gap-1.5 rounded-chip border border-border px-2.5 text-[13px] hover:bg-soft disabled:opacity-60">
             <Icon name={src.icon} size={14} className="shrink-0 text-muted" /><span className="truncate">{src.text}</span>
           </button>
           <TriggerSwitch node={trigNode} readOnly={runMode} onChange={replaceTrigger} />
-          <div className="flex-1" />
+          <div className="hidden flex-1 xl:block" />
           {!runMode && (
             <span className="hidden text-[12px] text-muted lg:inline" aria-live="polite">
               {autosave.pending || dirty ? t('canvas.saving') : t('editor.saved')}
@@ -421,8 +427,14 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
               <HeaderButton icon="undo" onClick={undo} disabled={!history.current.canUndo} title="Ctrl+Z" ariaLabel={t('editor.undo')} />
               <HeaderButton icon="redo" onClick={redo} disabled={!history.current.canRedo} title="Ctrl+Y" ariaLabel={t('editor.redo')} />
               <HeaderButton icon="layout" onClick={layout}>{t('canvas.layout')}</HeaderButton>
-              <HeaderButton icon="plus" onClick={() => setQuick((q) => (q ? null : {}))} active={!!quick} title="Tab">{t('canvas.nodes')}</HeaderButton>
-              <HeaderButton icon="sparkles" onClick={() => setAssistant((a) => !a)} active={assistant}>AI</HeaderButton>
+              <HeaderButton icon="plus" onClick={() => { setMobilePanel(false); setQuick((q) => (q ? null : {})) }} active={!!quick} title="Tab">{t('canvas.nodes')}</HeaderButton>
+              <HeaderButton icon="sparkles" onClick={() => {
+                if (inspectorCollapsed) {
+                  if (compact) setMobilePanel(true)
+                  else setInspectorCollapsed(false)
+                  setAssistant(true)
+                } else setAssistant(!assistant)
+              }} active={assistant}>AI</HeaderButton>
               <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
               <OverflowMenu items={[
                 { key: 'validate', icon: 'shield-check', label: t('editor.validate'), onClick: () => void validate() },
@@ -441,7 +453,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
         {globalIssues.length > 0 && !runMode && (
           <div role="alert" className="border-b border-danger/30 bg-danger-soft px-4 py-1.5 text-[13px] text-danger">{globalIssues.map((i) => i.message).join(' · ')}</div>
         )}
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
           <div ref={boxRef} className={clsx('canvas-area relative min-w-0 flex-1 bg-surface-2', runMode && running && 'is-running')}
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }} onDrop={onDrop}>
             <ReactFlow<FlowNode, FlowEdge>
@@ -449,6 +461,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
               onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onConnectEnd={onConnectEnd}
               isValidConnection={isValidConnection} onNodeDragStart={() => record()}
               onBeforeDelete={async () => !runMode}
+              onNodeClick={() => { if (compact) { setAssistant(false); setMobilePanel(true) } }}
               onNodeContextMenu={(e, n) => { e.preventDefault(); if (!runMode) setMenu({ x: e.clientX, y: e.clientY, id: n.id }) }}
               onPaneClick={() => { setMenu(null); setQuick(null) }}
               nodesConnectable={!runMode} elementsSelectable
@@ -469,7 +482,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
               </Controls>
             </ReactFlow>
             {runMode && (
-              <div className="run-banner absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-chip border border-border bg-surface/95 px-3 py-1.5 text-[13px] shadow-pop">
+              <div className="run-banner absolute left-1/2 top-3 z-10 flex w-max max-w-[calc(100%-16px)] -translate-x-1/2 flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-chip border border-border bg-surface/95 px-3 py-1.5 text-[13px] shadow-pop">
                 {live.status ? <StatusBadge status={live.status} /> : <Spinner size={14} />}
                 {totalMs !== null && <span className="text-muted">{t('editor.totalTime')}: {fmtDuration(totalMs, lang)}</span>}
                 {live.error && <span className="max-w-[320px] truncate text-danger" title={live.error}>{live.error}</span>}
@@ -502,7 +515,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
             )}
           </div>
           {!inspectorCollapsed && (
-            <aside className="w-[380px] shrink-0 border-l border-border bg-surface" aria-label={t('canvas.inspector')}>
+            <aside className="w-[380px] max-w-full shrink-0 max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-10 max-lg:shadow-pop border-l border-border bg-surface" aria-label={t('canvas.inspector')}>
               {assistant && !runMode ? (
                 <div className="h-full overflow-y-auto">
                   <AiAssistant workflowId={workflow.id} dirty={dirty} onSaveFirst={autosave.flush} onApplied={(g) => {

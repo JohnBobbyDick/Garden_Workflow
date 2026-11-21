@@ -12,6 +12,7 @@ import { Icon, type IconName } from '../components/ui/Icon'
 import { useAuth } from '../store/auth'
 import { useUi } from '../store/ui'
 import { useWorkspaceUi } from '../store/workspace'
+import { useCompactWorkspace } from './useCompactWorkspace'
 import { Drawer } from './Drawer'
 import { NewCheckDialog } from './NewCheckDialog'
 import { legacyRedirect, panelFromSearch, withPanel, type PanelId } from './routes'
@@ -50,7 +51,12 @@ function Rail() {
   const wfs = useWorkflows()
   const me = useMe()
   const { workspaceId, setWorkspace } = useUi()
-  const { railCollapsed, toggleRail } = useWorkspaceUi()
+  const { railCollapsed: desktopCollapsed, toggleRail: toggleDesktopRail } = useWorkspaceUi()
+  const compact = useCompactWorkspace()
+  const [mobileExpanded, setMobileExpanded] = useState(false)
+  const railCollapsed = compact ? !mobileExpanded : desktopCollapsed
+  const toggleRail = () => compact ? setMobileExpanded(!mobileExpanded) : toggleDesktopRail()
+  useEffect(() => setMobileExpanded(false), [loc.key])
   const { refreshToken, clear } = useAuth()
   const [account, setAccount] = useState(false)
   const panel = panelFromSearch(loc.search)
@@ -60,10 +66,13 @@ function Rail() {
   }
   const item = 'flex h-9 w-full items-center gap-2.5 rounded-chip px-2.5 text-[14px] transition-colors'
   return (
-    <aside className={clsx('flex h-full shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200',
+    <div className="relative shrink-0 max-lg:w-16">
+      {compact && mobileExpanded && <button type="button" aria-label={t('ws.collapseRail')} onClick={toggleRail}
+        className="fixed inset-0 z-20 bg-fg/25" />}
+    <aside className={clsx('relative z-20 flex h-full shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200',
       railCollapsed ? 'w-16' : 'w-[248px]')} aria-label={t('ws.navigation')}>
-      <div className="flex h-14 items-center gap-2 px-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-chip bg-primary text-[13px] font-bold text-white" aria-hidden="true">✳</span>
+      <div className={clsx("flex h-14 shrink-0 items-center gap-2 px-3", railCollapsed && "justify-center")}>
+        {!railCollapsed && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-chip bg-primary text-[13px] font-bold text-white" aria-hidden="true">✳</span>}
         {!railCollapsed && <span className="truncate text-[16px] font-bold">Garden Security</span>}
         <button type="button" onClick={toggleRail} className={clsx('rounded-chip p-1.5 text-muted hover:bg-soft hover:text-fg', !railCollapsed && 'ml-auto')}
           aria-label={railCollapsed ? t('ws.expandRail') : t('ws.collapseRail')} title={railCollapsed ? t('ws.expandRail') : t('ws.collapseRail')}>
@@ -102,7 +111,7 @@ function Rail() {
           {(me.data?.user.display_name || me.data?.user.email || '?').slice(0, 1).toUpperCase()}
         </button>
         {!railCollapsed && <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{me.data?.workspaces.find((w) => w.id === workspaceId)?.name}</span>}
-        <ThemeLangToggles />
+        <ThemeLangToggles stacked={railCollapsed} />
         {account && (
           <div role="menu" className="card absolute bottom-12 left-2 z-50 w-72 p-3 shadow-pop">
             <div className="mb-2 truncate text-sm text-muted">{me.data?.user.email}</div>
@@ -118,6 +127,7 @@ function Rail() {
         )}
       </div>
     </aside>
+    </div>
   )
 }
 

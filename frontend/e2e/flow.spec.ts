@@ -183,14 +183,21 @@ test('settings → AI: proxy secret and connection diagnostics table; screenshot
 
   await page.getByRole('button', { name: 'Настройки' }).click()
   const panel = page.getByRole('dialog', { name: 'Настройки' })
-  await panel.locator('#ai-p').selectOption('gemini')
+  await panel.getByRole('radio', { name: /Nemotron/ }).click()
+  await panel.getByText('Ключи, прокси и повторные попытки', { exact: true }).click()
   await panel.getByLabel('Название прокси').fill('dead-proxy')
   await panel.getByLabel('Прокси', { exact: true }).fill('127.0.0.1:9:user:secret-pass')
   await panel.getByRole('button', { name: 'Добавить прокси' }).click()
+  await expect(panel.getByRole('checkbox', { name: /dead-proxy/ })).toBeChecked()
+  await expect(panel).not.toContainText('secret-pass')
+  await panel.getByRole('radio', { name: 'Ollama' }).click()
+  await panel.getByLabel('Base URL').fill('http://127.0.0.1:9')
+  await panel.getByLabel('Модель', { exact: true }).fill('local-test')
   await panel.getByRole('button', { name: 'Диагностика' }).click()
   const table = panel.getByRole('table', { name: 'Диагностика' })
   await expect(table).toBeVisible({ timeout: 60_000 })
-  await expect(table).toContainText('127.0.0.1:9')
+  await expect(table).toContainText('напрямую')
+  await expect(table).toContainText('FAIL')
   await expect(table).not.toContainText('secret-pass')
   await page.keyboard.press('Escape')
 
@@ -245,7 +252,7 @@ test('workspace nodes: author a rule, reuse it after reload, run it on grouped f
   await expect(page.getByText(/"review":\s*true/).first()).toBeVisible()
 })
 
-test('review catalog: find ten nodes and export a sampled scan to CSV', async ({ page }) => {
+test('review catalog: find review nodes and export a sampled scan to CSV', async ({ page }) => {
   await register(page, 'review')
   const dlg = await newCheckDialog(page)
   await dlg.getByRole('tab', { name: 'Учебный проект' }).click()
@@ -256,7 +263,7 @@ test('review catalog: find ten nodes and export a sampled scan to CSV', async ({
   const search = palette.getByLabel('Найти блок…')
   for (const type of ['logic.path_filter', 'logic.finding_delta', 'logic.check_fields', 'logic.join_json',
     'logic.render_text', 'analysis.audit_sample', 'analysis.file_hotspots', 'analysis.dependency_fixes',
-    'analysis.severity_budget', 'output.findings_csv']) {
+    'analysis.severity_budget', 'analysis.ai_coverage', 'output.findings_csv']) {
     await search.fill(type)
     await expect(palette.locator(`[data-node-type="${type}"]`)).toBeVisible()
   }

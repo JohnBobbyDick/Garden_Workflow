@@ -22,6 +22,14 @@ class User(IdMixin, CreatedMixin, Base):
     is_platform_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class RegistrationCode(Base):
+    __tablename__ = "registration_codes"
+    email: Mapped[str] = mapped_column(String(320), primary_key=True)
+    digest: Mapped[str] = mapped_column(String(64))
+    issued_at: Mapped[datetime] = mapped_column(UTCDateTime, index=True)
+    attempts_left: Mapped[int] = mapped_column(Integer)
+
+
 class Workspace(IdMixin, CreatedMixin, Base):
     __tablename__ = "workspaces"
     name: Mapped[str] = mapped_column(String(200))
@@ -110,7 +118,7 @@ class AISettings(Base):
     __tablename__ = "ai_settings"
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    provider: Mapped[str] = mapped_column(String(32), default="openai_compat")
+    provider: Mapped[str] = mapped_column(String(32), default="nvidia")
     base_url: Mapped[str] = mapped_column(String(500), default="")
     model: Mapped[str] = mapped_column(String(200), default="")
     credential_id: Mapped[str | None] = mapped_column(ForeignKey("credentials.id", ondelete="SET NULL"), nullable=True)

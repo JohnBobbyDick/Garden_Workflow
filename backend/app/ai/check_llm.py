@@ -21,7 +21,7 @@ def main() -> int:
     print(f"LLM_ENABLED={env.enabled} provider={env.provider} keys={len(env.keys)} proxies={len(env.proxies)} "
           f"models={','.join(env.models)} retries={env.retries}")
     if cfg is None:
-        print("LLM отключён или не настроен (LLM_ENABLED≠true или пустой GEMINI_API_KEY)")
+        print("LLM отключён или не настроен. Проверьте LLM_ENABLED, провайдер, его модель и ключ.")
         return 1
     rows = asyncio.run(diagnose(cfg, masker))
     for r in rows:

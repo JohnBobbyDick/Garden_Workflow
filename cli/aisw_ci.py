@@ -347,4 +347,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    # Redirected CI logs on Windows can use a code page without the report's symbols.
+    sys.stdout.reconfigure(errors="backslashreplace")
     sys.exit(main())

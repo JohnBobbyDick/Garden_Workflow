@@ -1,9 +1,10 @@
-"""OpenAI-compatible chat completions (OpenRouter, Gemini OpenAI endpoint, vLLM, LM Studio, llama.cpp server…)."""
+"""NVIDIA Build chat completions for Nemotron 3.5 Lightning."""
 
 from __future__ import annotations
 
 import json
 
+from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL
 from app.ai.providers.base import JSON_INSTRUCTION, ChatResult, LLMError, LLMProvider, register_provider
 
 
@@ -15,16 +16,18 @@ def _with_instruction(messages: list[dict], schema: dict) -> list[dict]:
 
 
 @register_provider
-class OpenAICompatProvider(LLMProvider):
-    name = "openai_compat"
+class NvidiaProvider(LLMProvider):
+    name = "nvidia"
+    max_redirects = 0
 
     def _url(self, path: str) -> str:
-        return self.cfg.base_url.rstrip("/") + path
+        return NVIDIA_BASE_URL + path
 
     async def chat(self, messages, response_schema=None, temperature=0.2, max_tokens=2048, timeout=None,
                    validate=None):
         if not self.cfg.pooled:
-            return await self._chat_once(self.cfg.model, self.cfg.api_key, None, messages, response_schema,
+            keys = self.cfg.keys
+            return await self._chat_once(self.cfg.model, keys[0] if keys else None, None, messages, response_schema,
                                          temperature, max_tokens, timeout, attempts=None)
 
         async def attempt(model, key, proxy):
@@ -52,6 +55,9 @@ class OpenAICompatProvider(LLMProvider):
                 continue
             body: dict = {"model": model, "temperature": temperature, "max_tokens": max_tokens,
                           "messages": messages}
+            if response_schema is not None:
+                # Even the 20-token connection probe needs its full budget for visible JSON.
+                body["chat_template_kwargs"] = {"enable_thinking": False}
             if mode == "schema":
                 body["response_format"] = {"type": "json_schema",
                                            "json_schema": {"name": "aisw_response", "schema": response_schema,
@@ -79,7 +85,4 @@ class OpenAICompatProvider(LLMProvider):
         raise LLMError(f"провайдер не принял ни один режим JSON: {last_error}")
 
     async def list_models(self) -> list[str]:
-        resp = await self._request("GET", self._url("/models"), headers=self._auth_headers())
-        if resp.status_code != 200:
-            raise LLMError(f"список моделей недоступен: HTTP {resp.status_code}")
-        return [m.get("id") for m in resp.json().get("data", []) if m.get("id")]
+        return [NEMOTRON_LIGHTNING]

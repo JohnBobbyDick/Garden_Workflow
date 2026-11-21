@@ -16,6 +16,8 @@ from app.config import BACKEND_DIR
 SCHEMES = ("auto", "http", "https", "socks5", "socks5h")
 MAX_AUTO_RETRIES = 6
 MIN_AUTO_RETRIES = 3
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+NEMOTRON_LIGHTNING = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 
 def split_list(raw: str | None) -> list[str]:
@@ -62,54 +64,57 @@ def mask_proxy(url: str) -> str:
 class LLMEnv(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(BACKEND_DIR / ".env"), extra="ignore", case_sensitive=False)
 
-    llm_enabled: bool = False
-    llm_provider: str = "gemini"
-    gemini_api_key: str = ""
-    gemini_keys_count: str = ""
-    gemini_model: str = "gemini-2.5-flash"
-    gemini_fallback_models: str = "gemini-2.5-flash,gemini-2.5-flash-lite"
-    gemini_max_retries: str = ""
-    gemini_proxies: str = ""
-    gemini_proxy_scheme: str = "auto"
-    gemini_proxy_port: str = ""
-    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    llm_enabled: bool = True
+    llm_provider: str = "nvidia"
+    nvidia_api_key: str = ""
+    nvidia_proxies: str = ""
     ollama_url: str = "http://localhost:11434"
-    ollama_model: str = "codellama:7b"
+    ollama_model: str = "qwen2.5:3b"
 
     @property
     def enabled(self) -> bool:
         return self.llm_enabled
 
     @property
+    def configured(self) -> bool:
+        if self.provider == "ollama":
+            return self.enabled and bool(self.ollama_url and self.ollama_model)
+        return self.enabled and self.provider == "nvidia" and bool(self.keys)
+
+    @property
     def provider(self) -> str:
-        return (self.llm_provider or "gemini").strip().lower()
+        return self.llm_provider.strip().lower()
 
     @property
     def keys(self) -> list[str]:
-        keys = split_list(self.gemini_api_key)
-        n = self.gemini_keys_count.strip()
-        return keys[: int(n)] if n.isdigit() and int(n) > 0 else keys
+        return split_list(self.nvidia_api_key) if self.provider == "nvidia" else []
 
     @property
     def models(self) -> list[str]:
-        out = [self.gemini_model.strip()] if self.gemini_model.strip() else []
-        for m in split_list(self.gemini_fallback_models):
-            if m not in out:
-                out.append(m)
-        return out
+        if self.provider == "nvidia":
+            return [NEMOTRON_LIGHTNING]
+        return [self.ollama_model] if self.provider == "ollama" else []
 
     @property
     def proxies(self) -> list[str]:
-        scheme = self.gemini_proxy_scheme.strip().lower() or "auto"
-        port = self.gemini_proxy_port.strip() or None
-        return [p for p in (parse_proxy(e, scheme, port) for e in split_list(self.gemini_proxies)) if p]
+        return [p for entry in split_list(self.nvidia_proxies) if (p := parse_proxy(entry))] if self.provider == "nvidia" else []
 
     @property
     def retries(self) -> int:
-        n = self.gemini_max_retries.strip()
-        if n.isdigit() and int(n) > 0:
-            return int(n)
         return auto_retries(len(self.keys), self.proxies)
+
+
+def canonical_provider(provider: str, base_url: str, model: str) -> str | None:
+    """Recognize the two supported backends, including stored NVIDIA settings from the generic adapter."""
+    if not isinstance(base_url, str) or not isinstance(model, str):
+        return None
+    if provider == "ollama":
+        return provider
+    if provider == "openai_compat" and base_url.rstrip("/") == NVIDIA_BASE_URL and model == NEMOTRON_LIGHTNING:
+        return "nvidia"
+    if provider == "nvidia" and base_url.rstrip("/") in ("", NVIDIA_BASE_URL) and model in ("", NEMOTRON_LIGHTNING):
+        return "nvidia"
+    return None
 
 
 @lru_cache

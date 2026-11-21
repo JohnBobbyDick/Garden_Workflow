@@ -67,7 +67,7 @@ def test_token_restricted_to_workflow(client, alice):
     assert r.status_code == 403
 
 
-def test_ci_run_status_gate_and_reports(client, db, alice):
+def test_ci_run_status_gate_and_reports(client, db, alice, bob):
     wid = client.post("/api/workflows", json={"name": "ci", "graph": ci_graph()}, headers=alice.headers).json()["id"]
     h = {"Authorization": f"Bearer {mk_token(client, alice)['token']}"}
     r = client.post("/api/v1/ci/runs", files={"archive": ("p.zip", zip_training())},
@@ -83,9 +83,7 @@ def test_ci_run_status_gate_and_reports(client, db, alice):
     assert len(sub["findings"]) == 15
     md = client.get(f"/api/v1/ci/runs/{rid}/report", params={"format": "markdown"}, headers=h)
     assert "Отчёт анализа безопасности" in md.text
-    other = client.post("/api/auth/register", json={"email": "z@example.org", "password": "Str0ng-Passw0rd!"}).json()
-    assert client.get(f"/api/v1/ci/runs/{rid}", headers={"Authorization": f"Bearer {other['access_token']}"}
-                      ).status_code == 401
+    assert client.get(f"/api/v1/ci/runs/{rid}", headers=bob.headers).status_code == 401
 
 
 def test_yaml_generator_github_and_gitlab(client, alice):

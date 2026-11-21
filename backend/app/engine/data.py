@@ -74,10 +74,12 @@ def summary_dict(findings: list[Finding]) -> dict[str, Any]:
     }
 
 
-def build_context(inputs: dict[str, Any], run: RunInfo, state: dict[str, Any]) -> dict[str, Any]:
+def build_context(inputs: dict[str, Any], run: RunInfo, state: dict[str, Any], *,
+                  findings: list[Finding] | None = None) -> dict[str, Any]:
     """Context for ``logic.if_else`` expressions and message templates. Only masked/derived data, no secrets."""
     envs = flatten_inputs(inputs)
-    findings = findings_of([e for e in envs if "findings" in e.data])
+    if findings is None:
+        findings = findings_of([e for e in envs if "findings" in e.data])
     data: dict[str, Any] = {}
     report: dict[str, Any] = {}
     for e in envs:

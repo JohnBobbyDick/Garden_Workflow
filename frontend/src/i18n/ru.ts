@@ -25,6 +25,8 @@ const ru = {
   },
   auth: {
     login: 'Вход', register: 'Регистрация', email: 'E-mail', password: 'Пароль', displayName: 'Имя',
+    code: 'Код из письма', codeSent: 'Код отправлен на {{email}} и действует 10 минут.',
+    sendCode: 'Получить код', resendCode: 'Отправить код повторно', changeEmail: 'Изменить адрес',
     submitLogin: 'Войти', submitRegister: 'Создать аккаунт', noAccount: 'Нет аккаунта?', haveAccount: 'Уже есть аккаунт?',
     passwordHint: 'Не короче 10 символов', welcome: 'Безопасность кода — без корпоративных сканеров',
     features: {
@@ -112,6 +114,10 @@ const ru = {
     addNode: 'Добавить ноду', addAfter: 'Добавить ноду после этой', addAfterNode: 'После «{{name}}» — новая нода подключится сама',
   },
   results: {
+    belowThreshold: 'Ниже порога уверенности: {{n}} (не входят в выгрузку)',
+    belowThresholdHint: 'Эти срабатывания показаны для проверки вручную. В submission.json, report.md и report.html попадают только находки с уверенностью от {{p}}.',
+    projectRoot: 'Корень проекта', projectRootAuto: 'определён автоматически',
+    projectRootHint: 'Пути находок считаются от этого каталога — как требует формат организаторов',
     run: 'Запуск', waiting: 'Проверка ещё идёт — находки появятся, когда она закончится.', backToList: 'Ко всем находкам',
     dataHint: 'Что передала каждая нода следующим (превью данных — в панели ноды во время запуска).',
     compare: 'Сравнить', fullReport: 'Полный отчёт', tabs: 'Результаты запуска',
@@ -182,13 +188,14 @@ const ru = {
     severityChanged: 'Изменилась критичность', compareTitle: 'Сравнение запусков', base: 'Базовый', head: 'Новый',
   },
   settings: {
-    pool: 'Ключи, прокси и повторные попытки', poolHint: 'Для внешних API (например, Gemini): попытки перебирают ключи, прокси и модели-фолбэки. Секреты хранятся зашифрованными.',
+    pool: 'Ключи, прокси и повторные попытки', poolHint: 'При повторе запроса к NVIDIA можно использовать другой ключ или прокси.',
     extraKeys: 'Дополнительные ключи', noExtraKeys: 'Добавьте ещё ключи во вкладке «Секреты» (вид llm_api_key)',
     proxies: 'Прокси', proxyName: 'Название прокси', proxyValue: 'Прокси', addProxy: 'Добавить прокси',
     proxyFormats: 'Форматы: host:port:login:password · host:login:password (порт — ниже) · socks5://login:password@host:1080',
     proxyScheme: 'Протокол', proxyPort: 'Порт по умолчанию', retries: 'Число попыток', retriesHint: 'Пусто — авто (3–6)',
-    fallbackModels: 'Модели-фолбэки', fallbackHint: 'Через запятую; используются на следующих попытках',
-    envDefault: 'Своих настроек нет — используется провайдер платформы из окружения: {{provider}} · {{model}}',
+    workspaceProvider: 'Использовать настройки рабочего пространства', platformKey: 'Ключ платформы (если настроен)',
+    envDefault: 'Провайдер платформы · {{provider}} · {{model}}', aiOff: 'AI выключен. Выберите провайдера, чтобы настроить его для этого пространства.',
+    reconfigure: 'Прежний провайдер больше недоступен. Выберите провайдера и сохраните настройки.',
     diagnose: 'Диагностика', diagProxy: 'Прокси', diagResult: 'Результат', diagTime: 'Время', diagReason: 'Причина',
     direct: 'напрямую', ms: 'мс',
     title: 'Настройки', ai: 'AI-провайдер', credentials: 'Секреты', allowlist: 'Allowlist репозиториев', members: 'Участники',

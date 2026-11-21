@@ -1,6 +1,6 @@
 """LLM provider abstraction. A new provider = a new class in ``app/ai/providers/`` decorated ``@register_provider``.
 
-All HTTP goes through the SSRF guard; local providers (Ollama, LM Studio) must be listed in ``allow_hosts``
+All HTTP goes through the SSRF guard; local Ollama hosts must be listed in ``allow_hosts``
 (the Ollama default ``localhost:11434`` is added automatically for the ``ollama`` provider only)."""
 
 from __future__ import annotations
@@ -18,10 +18,10 @@ from urllib.parse import unquote, urlsplit
 
 import httpx
 
-from app.ai.pool import auto_retries, mask_proxy
+from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL, auto_retries, mask_proxy
 from app.ai.proxy_scheme import forget, remember, resolve
 from app.core.masking import Masker, global_masker
-from app.core.ssrf import SSRFError, safe_request
+from app.core.ssrf import MAX_REDIRECTS, SSRFError, safe_request
 
 logger = logging.getLogger("app.ai")
 MAX_PAUSE = 10.0
@@ -82,6 +82,7 @@ class ChatResult:
 
 class LLMProvider(ABC):
     name: ClassVar[str]
+    max_redirects: ClassVar[int] = MAX_REDIRECTS
     default_allow: ClassVar[set[str]] = set()
 
     def __init__(self, cfg: ProviderConfig) -> None:
@@ -114,6 +115,7 @@ class LLMProvider(ABC):
             try:
                 resp = await safe_request(method, url, allow_hosts=self.allow_hosts, headers=headers, json=json_body,
                                           timeout=t, max_bytes=self.cfg.max_response_bytes, proxy=proxy,
+                                          max_redirects=self.max_redirects,
                                           connect_timeout=min(t, 10.0) if proxy else None)
             except SSRFError as exc:
                 raise LLMError(f"запрос к провайдеру заблокирован: {exc}") from exc
@@ -250,6 +252,9 @@ def build_provider(cfg: ProviderConfig) -> LLMProvider:
         raise LLMError(f"неизвестный провайдер LLM «{cfg.provider}»")
     if not cfg.base_url or not cfg.model:
         raise LLMError("у провайдера LLM не задан base_url или модель")
+    if cfg.provider == "nvidia" and (cfg.base_url.rstrip("/") != NVIDIA_BASE_URL
+                                     or cfg.models != [NEMOTRON_LIGHTNING]):
+        raise LLMError("Для NVIDIA доступны только NVIDIA Build и Nemotron 3.5 Lightning")
     return cls(cfg)
 
 

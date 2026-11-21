@@ -62,23 +62,20 @@ open http://localhost:8080                      # Linux: xdg-open; или про
 
 ## Настройка LLM
 
-**Настройки → AI-провайдер** (роль admin). Ключ сохраняется в зашифрованном хранилище. После ввода нажмите
-«Проверить соединение».
+По умолчанию платформа использует **NVIDIA Nemotron** (`nvidia/nemotron-3.5-lightning-30b-a3b`).
+Укажите `NVIDIA_API_KEY` в корневом `.env` для Compose или в `backend/.env` для локального запуска.
 
-| Вариант | Провайдер | Base URL | Модель |
-| --- | --- | --- | --- |
-| Локально в Compose, бесплатно, код не покидает машину | `ollama` | `http://ollama:11434` | `qwen2.5:7b` |
-| Ollama на хосте | `ollama` | `http://host.docker.internal:11434` (добавьте этот host:port в `APP_SSRF_ALLOW_HOSTS`) | `llama3.1:8b` |
-| OpenRouter, бесплатные модели | `openai_compat` | `https://openrouter.ai/api/v1` | любая с суффиксом `:free` |
-| Google Gemini | `openai_compat` | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
-| LM Studio, vLLM, llama.cpp | `openai_compat` | `http://host.docker.internal:1234/v1` (+ `APP_SSRF_ALLOW_HOSTS`) | загруженная модель |
-
-Локальная модель в Compose:
+Чтобы обрабатывать данные локально, администратор может выбрать **Ollama** в «Настройки → AI»,
+указать адрес сервера и установленную модель, сохранить выбор и проверить соединение.
+Для всей установки тот же выбор задаёт `LLM_PROVIDER=ollama`.
 
 ```bash
 docker compose --profile ollama up -d
-docker compose exec ollama ollama pull qwen2.5:7b
+docker compose exec ollama ollama pull qwen2.5:3b
 ```
+
+Внутри Compose адрес сервиса — `http://ollama:11434`. Если backend и Ollama запущены на хосте,
+используйте `http://localhost:11434`.
 
 Без LLM AI-отчёт формируется детерминированно (шаблонные объяснения по правилам), лог ноды прямо об этом сообщает.
 SCA AutoFix работает без LLM.
@@ -130,9 +127,7 @@ SCA AutoFix работает без LLM.
    `allow_write`) → «Применить патч и перепроверить» (новый запуск на копии проекта с патчем).
 5. **Шаблоны** (панель): опубликовать текущую проверку, найти, оценить, «Использовать для своего репозитория».
 6. **CI/CD** (панель): YAML для GitHub Actions / GitLab CI, API-токен, журнал вебхуков.
-7. **Внешние LLM** («Настройки → AI»): Gemini и OpenAI-совместимые API. Поддерживаются несколько ключей, прокси с
-   автоопределением протокола, модели-фолбэки и повторные попытки; «Диагностика» проверяет каждый прокси. Можно
-   задать и окружением (`LLM_ENABLED`, `GEMINI_*`, см. `.env.example` и [docs/AI.md](docs/AI.md)).
+7. **AI** («Настройки → AI»). Выберите Nemotron или Ollama и проверьте соединение. Параметры окружения и проверка ответов описаны в [docs/AI.md](docs/AI.md).
 8. **Diff-aware и PR от AutoFix** со скриптовым mock GitHub: `make demo-diff`, `make demo-autofix` (запускаются на
    dev-стеке, см. [docs/CI_CD.md](docs/CI_CD.md#демо-без-интернета)).
 
@@ -233,9 +228,7 @@ class PathExcludeNode(BaseNode):
 
 ## Ограничения и честные оговорки
 
-- **Реальная LLM в окружении разработки не запускалась** (Ollama и LM Studio не были установлены). AI-слой проверен
-  контрактными тестами на локальных HTTP-серверах в форматах OpenAI и Ollama. Качество объяснений на конкретной
-  модели не измерено.
+- **Живая проверка Nemotron** охватывает одну синтетическую находку. В разделе 8 [отчёта](docs/REPORT.md) приведены результат и метрики валидации.
 - **Реальные Telegram, SMTP, GitHub и GitLab** не проверялись. Интеграции проверены на локальных mock-серверах
   (`scripts/mock_services.py`, `scripts/mock_scm.py`), которые повторяют их HTTP-API.
 - **Анализаторы покрывают Kotlin/Spring/Gradle.** Java, Groovy-скрипты (кроме Gradle Groovy DSL для зависимостей) и

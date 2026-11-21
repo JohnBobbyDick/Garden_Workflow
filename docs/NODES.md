@@ -80,7 +80,7 @@ class Shout(BaseNode):
 - **Источник кода**: `source.repo`
 - **Сканеры**: `scanner.diff`, `scanner.sast`, `scanner.sca`, `scanner.secrets`
 - **Логика**: `logic.check_fields`, `logic.compare`, `logic.finding_delta`, `logic.if_else`, `logic.join_json`, `logic.map_fields`, `logic.merge`, `logic.path_filter`, `logic.regex`, `logic.render_text`, `logic.set_value`, `logic.severity_filter`
-- **Анализ**: `analysis.audit_sample`, `analysis.dependency_fixes`, `analysis.file_hotspots`, `analysis.group_findings`, `analysis.security_score`, `analysis.severity_budget`, `analysis.top_findings`
+- **Анализ**: `analysis.ai_coverage`, `analysis.audit_sample`, `analysis.dependency_fixes`, `analysis.file_hotspots`, `analysis.group_findings`, `analysis.security_score`, `analysis.severity_budget`, `analysis.top_findings`
 - **AI**: `ai.autofix`, `ai.report`
 - **Вывод**: `output.ci_gate`, `output.findings_csv`, `output.report_export`
 - **Уведомления**: `notify.smtp`, `notify.telegram`, `notify.webhook`
@@ -145,7 +145,7 @@ class Shout(BaseNode):
 | `ref` | string |  | Ветка / тег / commit |
 | `path` | string |  | Путь (внутри APP_SCAN_ROOTS) |
 | `upload_id` | string |  | Загруженный архив |
-| `subdir` | string |  | Подкаталог проекта. Корень проверки внутри репозитория, например training-project |
+| `subdir` | string |  | Подкаталог проекта. Корень проекта внутри репозитория, например training-project. Пусто — определяется автоматически по settings.gradle(.kts)/build.gradle(.kts); пути находок считаются от него |
 | `access_token` | credential |  | Токен доступа (приватный репозиторий) (ссылка на секрет хранилища) |
 
 ## Сканеры
@@ -391,6 +391,17 @@ match — есть ли совпадение; extract — извлечь сов�
 
 ## Анализ
 
+### `analysis.ai_coverage` — Покрытие AI-отчёта
+
+Считает, для скольких находок валидатор принял объяснение модели. Поле needs_review истинно, если хотя бы одно объяснение сформировано детерминированно.
+
+| Порт | Направление | Тип | Обязательный | Несколько |
+|---|---|---|---|---|
+| `in` (Отчёт ai.report) | вход | `report` | да | нет |
+| `out` (Покрытие) | выход | `json` | — | — |
+
+Параметров нет.
+
 ### `analysis.audit_sample` — Выборка для ручной проверки
 
 Выбирает находки для ревью. При том же наборе ID и ключе выборка повторяется независимо от порядка входа.
@@ -515,9 +526,9 @@ LLM объясняет уже найденные анализаторами пр
 
 | Параметр | Тип | По умолчанию | Описание |
 |---|---|---|---|
-| `provider` |  \| openai_compat \| ollama | "" | Провайдер (пусто — из настроек workspace) |
-| `base_url` | string |  | Base URL провайдера |
-| `model` | string |  | Модель |
+| `provider` |  \| nvidia \| ollama | "" | Провайдер (пусто — из настроек workspace) |
+| `base_url` | string |  | Адрес сервера Ollama |
+| `model` | string |  | Модель Ollama |
 | `api_key` | credential |  | API-ключ провайдера (ссылка на секрет хранилища) |
 | `language` | auto \| ru \| en | "auto" | Язык отчёта. auto — язык интерфейса пользователя |
 | `generate_fix_diff` | boolean | true | Предлагать исправления (diff) |

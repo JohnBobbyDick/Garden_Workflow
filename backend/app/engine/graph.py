@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.ai.pool import canonical_provider
 
 SCHEMA_VERSION = 1
 
@@ -22,6 +24,15 @@ class GraphNode(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
     label: str = ""
     disabled: bool = False
+
+
+    @model_validator(mode="after")
+    def migrate_nvidia_override(self) -> GraphNode:
+        cfg = self.config
+        if self.type == "ai.report" and cfg.get("provider") == "openai_compat":
+            if canonical_provider("openai_compat", cfg.get("base_url") or "", cfg.get("model") or ""):
+                self.config = {**cfg, "provider": "nvidia"}
+        return self
 
 
 class GraphEdge(BaseModel):

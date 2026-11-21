@@ -74,7 +74,7 @@ async def _one_batch(provider: LLMProvider, batch: list[Finding], read: FileRead
 
 
 def _merge(parts: list[tuple[dict, ValidationLog]], repairs: int) -> tuple[dict, dict]:
-    report = {"summary": " ".join(p[0]["summary"] for p in parts if p[0]["summary"]).strip(), "priority_order": [],
+    report = {"summary": parts[0][0]["summary"] if len(parts) == 1 else "", "priority_order": [],
               "findings": [], "global_recommendations": []}
     checks: list[dict] = []
     metrics: dict[str, Any] = dict.fromkeys(METRIC_SUMS, 0)
@@ -93,6 +93,11 @@ def _merge(parts: list[tuple[dict, ValidationLog]], repairs: int) -> tuple[dict,
         metrics["hallucinated_ids"] += log.metrics.get("hallucinated_ids", [])
         for k in flags:
             flags[k] = flags[k] or log.flags.get(k, False)
+    if len(parts) > 1:
+        # Batch summaries describe only their own inputs. Use validated explanations for the leading risks.
+        explanations = {item["finding_id"]: item["explanation"] for item in report["findings"]}
+        ranked = [explanations[fid] for fid in report["priority_order"] if explanations.get(fid)]
+        report["summary"] = "\n".join(ranked[:3])
     metrics["repair_attempts"] = repairs
     metrics["batches"] = len(parts)
     return report, {"checks": checks, "metrics": metrics, "flags": flags}

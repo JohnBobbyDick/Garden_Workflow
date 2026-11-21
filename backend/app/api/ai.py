@@ -9,7 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models as m
-from app.ai.diagnose import diagnose
+from app.ai.diagnose import diagnose, probe_chat
+from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL, canonical_provider, get_llm_env
 from app.ai.providers.base import LLMError, build_provider, provider_names
 from app.ai.settings_service import FREE_HINTS, env_default_out, host_port, provider_config_for
 from app.core.audit import audit
@@ -23,7 +24,7 @@ router = APIRouter(tags=["ai"])
 class AISettingsIn(BaseModel):
     workspace_id: str | None = None
     enabled: bool = False
-    provider: str = Field(default="openai_compat", max_length=32)
+    provider: str = Field(default="nvidia", max_length=32)
     base_url: str = Field(default="", max_length=500)
     model: str = Field(default="", max_length=200)
     credential_id: str | None = None
@@ -45,15 +46,22 @@ class WorkspaceRef(BaseModel):
 
 
 def settings_out(row: m.AISettings | None) -> dict:
+    name = canonical_provider(row.provider, row.base_url, row.model) if row else "nvidia"
+    if name is None:
+        row = None
     extra = dict(row.extra or {}) if row else {}
-    return {"enabled": bool(row and row.enabled), "provider": row.provider if row else "openai_compat",
-            "base_url": row.base_url if row else "", "model": row.model if row else "",
+    env = get_llm_env()
+    return {"enabled": bool(row and row.enabled), "provider": name or "nvidia",
+            "requires_reconfiguration": name is None,
+            "ollama_defaults": {"base_url": env.ollama_url, "model": env.ollama_model},
+            "base_url": row.base_url if name == "ollama" else NVIDIA_BASE_URL,
+            "model": row.model if name == "ollama" else NEMOTRON_LIGHTNING,
             "credential_id": row.credential_id if row else None, "headers": extra.get("headers", {}),
             "timeout": extra.get("timeout", 90), "json_mode": extra.get("json_mode", "auto"),
             "allow_local": bool(extra.get("allow_host")), "providers": provider_names(), "hints": FREE_HINTS,
             "credential_ids": list(extra.get("credential_ids") or []),
             "proxy_credential_ids": list(extra.get("proxy_credential_ids") or []),
-            "fallback_models": list(extra.get("fallback_models") or []),
+            "fallback_models": [],
             "proxy_scheme": extra.get("proxy_scheme") or "auto", "proxy_port": extra.get("proxy_port"),
             "max_retries": extra.get("max_retries"), "env_default": env_default_out()}
 
@@ -71,8 +79,28 @@ def put_ai_settings(body: AISettingsIn, request: Request, user: m.User = Depends
     ws = resolve_workspace(s, user, body.workspace_id, "admin")
     if body.provider not in provider_names():
         raise bad_request(f"неизвестный провайдер {body.provider}")
+    if body.fallback_models:
+        raise bad_request("дополнительные модели для выбранного провайдера не поддерживаются")
+    if body.provider == "nvidia":
+        if not canonical_provider(body.provider, body.base_url, body.model):
+            raise bad_request("Для NVIDIA доступны только NVIDIA Build и Nemotron 3.5 Lightning")
+        if not (body.credential_id or body.credential_ids) and (body.headers or body.proxy_credential_ids):
+            raise bad_request("Свои заголовки и прокси требуют ключ NVIDIA из хранилища рабочего пространства")
+        body.base_url, body.model, body.allow_local = NVIDIA_BASE_URL, NEMOTRON_LIGHTNING, False
+    elif body.credential_ids or body.proxy_credential_ids:
+        raise bad_request("Пулы ключей и прокси доступны для NVIDIA")
     if body.base_url and not body.base_url.startswith(("http://", "https://")):
         raise bad_request("base_url должен начинаться с http:// или https://")
+    if body.base_url:
+        from urllib.parse import urlsplit
+
+        try:
+            parts = urlsplit(body.base_url)
+            host_port(body.base_url)
+            if not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+                raise ValueError
+        except ValueError:
+            raise bad_request("Некорректный адрес сервера AI") from None
     if body.enabled and not (body.base_url and body.model):
         raise bad_request("для включения AI укажите base_url и модель")
     for cid in [c for c in [body.credential_id, *body.credential_ids] if c]:
@@ -111,7 +139,7 @@ async def test_ai(body: WorkspaceRef, user: m.User = Depends(current_user), s: S
     except LookupError as exc:
         return {"ok": False, "error": str(exc)}
     if cfg is None:
-        return {"ok": False, "error": "AI-провайдер не настроен: укажите base_url и модель"}
+        return {"ok": False, "error": "AI-провайдер не настроен. Проверьте ключ NVIDIA или настройки сервера Ollama."}
     provider = build_provider(cfg)
     started = time.monotonic()
     models: list[str] = []
@@ -120,9 +148,7 @@ async def test_ai(body: WorkspaceRef, user: m.User = Depends(current_user), s: S
             models = await provider.list_models()
         except LLMError:
             models = []
-        res = await provider.chat([{"role": "user", "content": 'Верни JSON {"ok": true}'}],
-                                  response_schema={"type": "object", "properties": {"ok": {"type": "boolean"}},
-                                                   "required": ["ok"]}, max_tokens=20, timeout=min(cfg.timeout, 60))
+        res = await probe_chat(provider, min(cfg.timeout, 60))
         return {"ok": True, "model": res.model, "json_mode": res.json_mode, "models": models,
                 "latency_ms": int((time.monotonic() - started) * 1000), "reply": masker.mask(res.content[:200])}
     except LLMError as exc:
@@ -140,7 +166,7 @@ async def diagnose_ai(body: WorkspaceRef, user: m.User = Depends(current_user),
     except LookupError as exc:
         return {"results": [], "error": str(exc)}
     if cfg is None:
-        return {"results": [], "error": "AI-провайдер не настроен: укажите base_url и модель"}
+        return {"results": [], "error": "AI-провайдер не настроен. Проверьте ключ NVIDIA или настройки сервера Ollama."}
     return {"results": await diagnose(cfg, masker), "error": None}
 
 

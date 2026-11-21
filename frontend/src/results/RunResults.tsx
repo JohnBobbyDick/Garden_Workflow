@@ -14,7 +14,7 @@ import { useLang } from '../i18n'
 import { fmtDuration } from '../lib/format'
 import { AiReport } from '../pages/RunDetailsPage'
 import { FindingDetail } from './FindingDetail'
-import { filterFindings, runVerdict, SEVERITY_ORDER, sortFindings, type DiffFilter } from './findings'
+import { filterFindings, runVerdict, SEVERITY_ORDER, severityCounts, sortFindings, splitOfficial, type DiffFilter } from './findings'
 
 type Tab = 'findings' | 'ai' | 'score' | 'data' | 'journal'
 
@@ -41,7 +41,10 @@ function FindingsTab({ run }: { run: Run }) {
   const { t } = useTranslation()
   const done = !['queued', 'running'].includes(run.status)
   const q = useRunFindings(run.id, done)
-  const all = useMemo(() => sortFindings(q.data?.findings ?? []), [q.data])
+  const sorted = useMemo(() => sortFindings(q.data?.findings ?? []), [q.data])
+  // the list shows exactly what submission.json and the reports contain; the rest is a separate, folded block
+  const { official: all, below } = useMemo(() => splitOfficial(sorted), [sorted])
+  const [showBelow, setShowBelow] = useState(false)
   const hasDiff = all.some((f) => f.diff_status)
   const [diff, setDiff] = useState<DiffFilter>('all')
   const [sev, setSev] = useState<Severity | ''>('')
@@ -50,7 +53,7 @@ function FindingsTab({ run }: { run: Run }) {
   useEffect(() => { setOpen(null); setDiff(hasDiff ? 'new' : 'all') }, [run.id, hasDiff])
   if (!done) return <p className="text-sm text-muted">{t('results.waiting')}</p>
   if (q.isLoading) return <Skeleton className="h-40" />
-  const selected = all.find((f) => f.id === open)
+  const selected = sorted.find((f) => f.id === open)
   if (selected) return <FindingDetail run={run} finding={selected} onBack={() => setOpen(null)} />
   const list = filterFindings(all, { diff, severity: sev || undefined, category: cat || undefined })
   return (
@@ -92,6 +95,32 @@ function FindingsTab({ run }: { run: Run }) {
             </li>
           ))}
         </ul>
+      )}
+      {below.length > 0 && (
+        <div className="mt-4 border-t border-border pt-3">
+          <button type="button" className="flex items-center gap-1 text-[13px] font-bold text-muted hover:text-fg" aria-expanded={showBelow}
+            onClick={() => setShowBelow((v) => !v)}>
+            <Icon name="chevron-right" size={13} className={showBelow ? 'rotate-90' : ''} />{t('results.belowThreshold', { n: below.length })}
+          </button>
+          {showBelow && (
+            <>
+              <p className="mt-1 text-[12px] text-muted">{t('results.belowThresholdHint', { p: q.data?.official_min_confidence ?? 0.6 })}</p>
+              <ul className="mt-2 space-y-2">
+                {below.map((f) => (
+                  <li key={f.id}>
+                    <button type="button" onClick={() => setOpen(f.id)}
+                      className="w-full rounded-card border border-dashed border-border bg-surface p-3 text-left opacity-75 hover:opacity-100">
+                      <div className="flex items-center gap-2"><SeverityBadge severity={f.severity} />
+                        <span className="text-[12px] text-warning">{t('run.lowConfidence')}</span></div>
+                      <div className="mt-1.5 text-[14px] font-bold leading-snug">{f.title}</div>
+                      <div className="truncate font-mono text-[11px] text-muted">{f.path}:{f.line}</div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       )}
     </div>
   )
@@ -157,10 +186,14 @@ export function RunResults({ run, onClose }: { run: Run; onClose?: () => void })
   const done = !['queued', 'running'].includes(run.status)
   const verdict = runVerdict(run)
   const findings = useRunFindings(run.id, done)
+  const official = findings.data ? splitOfficial(findings.data.findings).official : null
+  const total = official ? official.length : run.summary.total ?? 0
+  const bySeverity = official ? severityCounts(official) : run.summary.by_severity ?? {}
+  const src = (run.source ?? {}) as { subdir?: string; subdir_detected?: boolean }
   const hasAi = !!run.graph_snapshot?.nodes.some((n) => n.type === 'ai.report')
   const hasScore = run.score !== null
   const tabs = [
-    { id: 'findings' as const, label: t('run.findings'), count: run.summary.total },
+    { id: 'findings' as const, label: t('run.findings'), count: total },
     ...(hasAi ? [{ id: 'ai' as const, label: t('run.ai') }] : []),
     ...(hasScore ? [{ id: 'score' as const, label: 'Score' }] : []),
     { id: 'data' as const, label: t('editor.data') },
@@ -182,11 +215,11 @@ export function RunResults({ run, onClose }: { run: Run; onClose?: () => void })
         </div>
         {done && (
           <div className="mt-3 flex items-end gap-4">
-            <div><div className="text-[34px] font-bold leading-none"><CountUp value={run.summary.total ?? 0} /></div><div className="text-[12px] text-muted">{t('run.findings').toLowerCase()}</div></div>
+            <div><div className="text-[34px] font-bold leading-none"><CountUp value={total} /></div><div className="text-[12px] text-muted">{t('run.findings').toLowerCase()}</div></div>
             {hasScore && <div><div className="text-[34px] font-bold leading-none text-primary"><CountUp value={run.score ?? 0} /></div><div className="text-[12px] text-muted">Security Score</div></div>}
             <div className="ml-auto flex flex-wrap justify-end gap-1">
-              {SEVERITY_ORDER.filter((s) => run.summary.by_severity?.[s]).map((s) => (
-                <span key={s} className="flex items-center gap-1 text-[12px]"><SeverityBadge severity={s} />{run.summary.by_severity?.[s]}</span>
+              {SEVERITY_ORDER.filter((s) => bySeverity[s]).map((s) => (
+                <span key={s} className="flex items-center gap-1 text-[12px]"><SeverityBadge severity={s} />{bySeverity[s]}</span>
               ))}
             </div>
           </div>
@@ -206,6 +239,12 @@ export function RunResults({ run, onClose }: { run: Run; onClose?: () => void })
               <Icon name="external" size={12} />{t('results.fullReport')}
             </Link>
           </div>
+        )}
+        {src.subdir && (
+          <p className="mt-2 text-[12px] text-muted" title={t('results.projectRootHint')}>
+            {t('results.projectRoot')}: <span className="font-mono text-fg">{src.subdir}/</span>
+            {src.subdir_detected ? ` · ${t('results.projectRootAuto')}` : ''}
+          </p>
         )}
         {run.error && <p role="alert" className="mt-3 rounded-field bg-danger-soft px-3 py-2 text-[13px] text-danger">{run.error}</p>}
       </div>
