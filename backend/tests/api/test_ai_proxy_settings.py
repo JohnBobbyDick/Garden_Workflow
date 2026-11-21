@@ -153,6 +153,40 @@ def test_env_disabled_means_no_provider(db, alice, monkeypatch):
         assert settings_service.provider_config_for(s, alice.workspace_id, None, Masker()) is None
 
 
+def test_nvidia_environment_pool_is_independent_of_gemini(monkeypatch):
+    from app.core.masking import Masker
+
+    env = LLMEnv(_env_file=None, llm_enabled=True, llm_provider="nvidia", gemini_api_key=KEY1,
+                 gemini_proxies="legacy:8080:user:pw", nvidia_api_key="nvapi-test-one,nvapi-test-two",
+                 nvidia_model="nvidia/test-model", nvidia_proxies="example.org:3128:user:pw")
+    monkeypatch.setattr(settings_service, "get_llm_env", lambda: env)
+    masker = Masker()
+    cfg = settings_service.env_provider_config(masker)
+    assert cfg.provider == "openai_compat" and cfg.base_url == "https://integrate.api.nvidia.com/v1"
+    assert cfg.keys == ["nvapi-test-one", "nvapi-test-two"] and cfg.models == ["nvidia/test-model"]
+    assert cfg.proxies == ["auto://user:pw@example.org:3128"]
+    assert "nvapi-test" not in masker.mask("nvapi-test-one nvapi-test-two")
+    assert settings_service.env_default_out() == {"enabled": True, "provider": "nvidia", "model": "nvidia/test-model"}
+
+    env.nvidia_api_key = ""
+    assert settings_service.env_provider_config(masker) is None
+    assert not settings_service.env_default_out()["enabled"]
+
+
+def test_connection_test_uses_platform_when_workspace_override_is_off(client, alice, db, monkeypatch):
+    from app.core.masking import Masker
+
+    r = client.put("/api/settings/ai", headers=alice.headers, json={
+        "workspace_id": alice.workspace_id, "enabled": False, "provider": "gemini",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta", "model": "old-model"})
+    assert r.status_code == 200
+    env = LLMEnv(_env_file=None, llm_enabled=True, llm_provider="nvidia", nvidia_api_key="nvapi-test-key")
+    monkeypatch.setattr(settings_service, "get_llm_env", lambda: env)
+    with db.session() as s:
+        cfg = settings_service.provider_config_for(s, alice.workspace_id, None, Masker(), require_enabled=False)
+    assert cfg.provider == "openai_compat" and cfg.keys == ["nvapi-test-key"]
+
+
 def test_diagnose_reports_per_proxy_without_secrets(client, alice, gemini, allow_local, caplog):
     script, hp = gemini
     script.default = {"status": 200, "content": {"ok": True}, "delay": 0, "body": None, "headers": {}}

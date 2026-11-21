@@ -13,6 +13,8 @@ from app.core.crypto import get_box
 from app.core.masking import Masker
 
 FREE_HINTS = [
+    "NVIDIA Build: provider=openai_compat, base_url=https://integrate.api.nvidia.com/v1, "
+    "модель nvidia/nemotron-3.5-lightning-30b-a3b",
     "Ollama локально (бесплатно, код не покидает машину): provider=ollama, base_url=http://localhost:11434, "
     "модель qwen2.5:7b или llama3.1:8b",
     "OpenRouter (есть бесплатные модели с суффиксом :free): provider=openai_compat, "
@@ -67,28 +69,28 @@ def env_provider_config(masker: Masker) -> ProviderConfig | None:
     """Platform-default provider from the environment (``LLM_PROXY.md`` names). The operator configured these hosts,
     so the API base and the proxies are allowed even when they are local; secrets go to the masker, never to the DB."""
     env = get_llm_env()
-    if not env.enabled:
+    if not env.configured:
         return None
     allow = set(get_settings().ssrf_allowed())
     if env.provider == "ollama":
         allow.add(host_port(env.ollama_url))
         return ProviderConfig(provider="ollama", base_url=env.ollama_url, model=env.ollama_model, allow_hosts=allow)
     keys = env.keys
-    if not keys or not env.models:
-        return None
     masker.register(*keys)
     for p in env.proxies:
         _register_proxy(masker, p)
         allow.add(host_port("http://" + p.split("://", 1)[1].rsplit("@", 1)[-1]))
-    allow.add(host_port(env.gemini_base_url))
-    return ProviderConfig(provider="gemini", base_url=env.gemini_base_url, model=env.models[0], api_key=keys[0],
+    provider, base_url = ("openai_compat", "https://integrate.api.nvidia.com/v1") if env.provider == "nvidia" else (
+        "gemini", env.gemini_base_url)
+    allow.add(host_port(base_url))
+    return ProviderConfig(provider=provider, base_url=base_url, model=env.models[0], api_key=keys[0],
                           api_keys=keys, fallback_models=env.models[1:], proxies=env.proxies,
                           rotation_retries=env.retries, allow_hosts=allow)
 
 
 def env_default_out() -> dict:
     env = get_llm_env()
-    if not env.enabled:
+    if not env.configured:
         return {"enabled": False, "provider": "", "model": ""}
     model = env.ollama_model if env.provider == "ollama" else (env.models[0] if env.models else "")
     return {"enabled": True, "provider": env.provider, "model": model}
@@ -107,8 +109,12 @@ def provider_config_for(s, workspace_id: str, override: dict[str, Any] | None, m
                               api_key=_decrypt(s, workspace_id, override.get("api_key"), masker),
                               headers=dict(extra.get("headers") or {}), timeout=float(extra.get("timeout") or 90),
                               json_mode=extra.get("json_mode") or "auto", allow_hosts=allow)
-    if ws_settings is None or (require_enabled and not ws_settings.enabled):
+    if ws_settings is None:
         return env_provider_config(masker)
+    if not ws_settings.enabled:
+        platform = env_provider_config(masker)
+        if platform is not None or require_enabled:
+            return platform
     if not ws_settings.base_url or not ws_settings.model:
         return env_provider_config(masker) if not require_enabled else None
     key = _decrypt(s, workspace_id, ws_settings.credential_id, masker)

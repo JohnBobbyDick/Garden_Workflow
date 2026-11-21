@@ -71,6 +71,7 @@ open http://localhost:8080                      # Linux: xdg-open; или про
 | Ollama на хосте | `ollama` | `http://host.docker.internal:11434` (добавьте этот host:port в `APP_SSRF_ALLOW_HOSTS`) | `llama3.1:8b` |
 | OpenRouter, бесплатные модели | `openai_compat` | `https://openrouter.ai/api/v1` | любая с суффиксом `:free` |
 | Google Gemini | `openai_compat` | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
+| NVIDIA Build | `openai_compat` | `https://integrate.api.nvidia.com/v1` | `nvidia/nemotron-3.5-lightning-30b-a3b` |
 | LM Studio, vLLM, llama.cpp | `openai_compat` | `http://host.docker.internal:1234/v1` (+ `APP_SSRF_ALLOW_HOSTS`) | загруженная модель |
 
 Локальная модель в Compose:
@@ -132,7 +133,7 @@ SCA AutoFix работает без LLM.
 6. **CI/CD** (панель): YAML для GitHub Actions / GitLab CI, API-токен, журнал вебхуков.
 7. **Внешние LLM** («Настройки → AI»): Gemini и OpenAI-совместимые API. Поддерживаются несколько ключей, прокси с
    автоопределением протокола, модели-фолбэки и повторные попытки; «Диагностика» проверяет каждый прокси. Можно
-   задать и окружением (`LLM_ENABLED`, `GEMINI_*`, см. `.env.example` и [docs/AI.md](docs/AI.md)).
+   задать и окружением (`LLM_ENABLED`, `LLM_PROVIDER`, `NVIDIA_*` или `GEMINI_*`, см. `.env.example` и [docs/AI.md](docs/AI.md)).
 8. **Diff-aware и PR от AutoFix** со скриптовым mock GitHub: `make demo-diff`, `make demo-autofix` (запускаются на
    dev-стеке, см. [docs/CI_CD.md](docs/CI_CD.md#демо-без-интернета)).
 

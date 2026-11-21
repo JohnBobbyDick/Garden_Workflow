@@ -57,6 +57,13 @@ def test_falls_back_to_instruction_mode_when_response_format_unsupported(openai)
     assert res.json_mode == "instruction"
 
 
+def test_nemotron_structured_reply_reserves_tokens_for_json(openai):
+    script, hp = openai
+    script.reply({"ok": True})
+    chat(cfg(hp, model="nvidia/nemotron-3.5-lightning-30b-a3b"), response_schema=SCHEMA, max_tokens=20)
+    assert script.requests[0]["body"].get("chat_template_kwargs") == {"enable_thinking": False}
+
+
 def test_retries_on_429_and_5xx(openai):
     script, hp = openai
     script.reply(status=429, headers={"Retry-After": "0"}).reply(status=503).reply({"ok": True})

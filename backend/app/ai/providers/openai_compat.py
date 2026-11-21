@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from app.ai.pool import NEMOTRON_LIGHTNING
 from app.ai.providers.base import JSON_INSTRUCTION, ChatResult, LLMError, LLMProvider, register_provider
 
 
@@ -52,6 +53,9 @@ class OpenAICompatProvider(LLMProvider):
                 continue
             body: dict = {"model": model, "temperature": temperature, "max_tokens": max_tokens,
                           "messages": messages}
+            if model == NEMOTRON_LIGHTNING and response_schema is not None:
+                # Even the 20-token connection probe needs its full budget for visible JSON.
+                body["chat_template_kwargs"] = {"enable_thinking": False}
             if mode == "schema":
                 body["response_format"] = {"type": "json_schema",
                                            "json_schema": {"name": "aisw_response", "schema": response_schema,

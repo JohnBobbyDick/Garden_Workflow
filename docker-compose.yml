@@ -21,6 +21,9 @@ x-backend-env: &backend-env
   # platform-default external LLM (LLM_PROXY.md); empty = workspace AI settings only
   LLM_ENABLED: ${LLM_ENABLED:-false}
   LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+  NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+  NVIDIA_MODEL: ${NVIDIA_MODEL:-nvidia/nemotron-3.5-lightning-30b-a3b}
+  NVIDIA_PROXIES: ${NVIDIA_PROXIES:-}
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   GEMINI_KEYS_COUNT: ${GEMINI_KEYS_COUNT:-}
   GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
