@@ -44,7 +44,7 @@ export function ConfigPanel({ node, spec, issues, onChange, readOnly }: {
       <h2 className="text-base font-semibold">{spec ? pick(spec.title, lang) : node.data.nodeType}</h2>
       {spec && <p className="mt-1 text-sm text-muted">{pick(spec.description, lang)}</p>}
       {general.length > 0 && (
-        <ul className="mt-3 space-y-1 rounded-lg border border-danger/40 bg-danger/10 p-2 text-xs text-danger" role="alert">
+        <ul className="mt-3 space-y-1 rounded-field border border-danger/40 bg-danger/10 p-2 text-xs text-danger" role="alert">
           {general.map((i, k) => <li key={k} className="flex gap-1.5"><Icon name="alert" size={13} />{i.message}</li>)}
         </ul>
       )}
@@ -64,7 +64,7 @@ export function ConfigPanel({ node, spec, issues, onChange, readOnly }: {
 
 function Preview({ p, name }: { p: PortPreview; name: string }) {
   return (
-    <div className="mb-2 rounded-lg border border-border">
+    <div className="mb-2 rounded-field border border-border">
       <div className="flex items-center justify-between border-b border-border px-2 py-1 text-xs">
         <span className="font-mono">{name} · {p.type}</span>
         <span className="text-muted">{p.count !== null && p.count !== undefined ? `${p.count} · ` : ''}{p.summary}</span>
@@ -87,7 +87,7 @@ export function RunNodePanel({ node, live }: { node: FlowNode; live: NodeLive | 
           {live && <StatusBadge status={live.status} />}
           {live?.durationMs !== undefined && live?.durationMs !== null && <span className="text-xs text-muted">{fmtDuration(live.durationMs, lang)}</span>}
         </div>
-        {live?.error && <p role="alert" className="mt-2 rounded-lg bg-danger/10 p-2 text-xs text-danger">{live.error}</p>}
+        {live?.error && <p role="alert" className="mt-2 rounded-field bg-danger/10 p-2 text-xs text-danger">{live.error}</p>}
         {live?.reason && <p className="mt-2 text-xs text-muted">{live.reason}</p>}
       </div>
       <div className="px-4"><Tabs label="node" value={tab} onChange={setTab} tabs={[

@@ -1,7 +1,9 @@
 import shutil
+from datetime import timedelta
 
 import pytest
 
+from app import models as m
 from app.config import get_settings
 from tests.ai.fake_llm import make_server
 from tests.api.conftest import drain
@@ -64,6 +66,13 @@ def test_score_is_recorded_for_every_run_with_delta_and_priority(client, db, ali
     assert hist["trend"]["enough_data"] is False  # < 3 points
     r3 = run(client, db, alice, wid)
     assert r3["score_delta"] == 0  # same commit twice → same score
+    trend = client.get(f"/api/projects/{pid}/score/history", headers=alice.headers).json()["trend"]
+    assert trend["enough_data"] is False  # three runs within seconds: a weekly slope would be a fake extrapolation
+    with db.session() as s:  # spread the same three runs over two days → a real trend
+        for rid, days in ((r1["id"], 2), (r2["id"], 1)):
+            row = s.get(m.Run, rid)
+            row.created_at, row.finished_at = row.created_at - timedelta(days=days), row.finished_at - timedelta(days=days)
+        s.commit()
     trend = client.get(f"/api/projects/{pid}/score/history", headers=alice.headers).json()["trend"]
     assert trend["enough_data"] is True and trend["slope_per_week"] > 0
     dash = client.get(f"/api/dashboard?workspace_id={alice.workspace_id}", headers=alice.headers).json()

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { catalog } from '../test/fixtures'
-import { autoLayout, canConnect, copyFragment, flowToGraph, graphToFlow, pasteFragment } from './graphModel'
+import { autoLayout, canConnect, copyFragment, findConnection, flowToGraph, graphToFlow, pasteFragment, placeAfter } from './graphModel'
 import type { Graph } from '../api/types'
 
 const graph: Graph = {
@@ -59,12 +59,12 @@ describe('canConnect', () => {
 })
 
 describe('layout and clipboard', () => {
-  it('auto-layout orders nodes left to right by dependency', () => {
+  it('auto-layout orders nodes top to bottom by dependency (design: vertical PR-check scheme)', () => {
     const { nodes, edges } = graphToFlow(graph)
     const laid = autoLayout(nodes, edges)
-    const x = Object.fromEntries(laid.map((n) => [n.id, n.position.x]))
-    expect(x.t).toBeLessThan(x.src)
-    expect(x.src).toBeLessThan(x.sast)
+    const y = Object.fromEntries(laid.map((n) => [n.id, n.position.y]))
+    expect(y.t).toBeLessThan(y.src)
+    expect(y.src).toBeLessThan(y.sast)
   })
   it('copy/paste remaps ids and keeps internal edges only', () => {
     const { nodes, edges } = graphToFlow(graph)
@@ -74,5 +74,33 @@ describe('layout and clipboard', () => {
     expect(pasted.nodes.map((n) => n.id)).not.toContain('src')
     expect(pasted.edges[0].source).toBe(pasted.nodes[0].id)
     expect(pasted.nodes[0].position.x).toBe(240)
+  })
+})
+
+describe('findConnection (links panel: node → node without choosing ports)', () => {
+  const { nodes, edges } = graphToFlow(graph)
+  it('picks the first compatible port pair', () => {
+    expect(findConnection('sast', 'm', nodes, edges, catalog)).toEqual(
+      { ok: true, connection: { source: 'sast', sourceHandle: 'out', target: 'm', targetHandle: 'in' } })
+  })
+  it('explains why no link is possible', () => {
+    expect(findConnection('t', 'sast', nodes, edges, catalog)).toEqual({ ok: false, reason: 'editor.err.types' })
+    expect(findConnection('sast', 'src', nodes, edges, catalog).ok).toBe(false)
+    expect(findConnection('t', 'src', nodes, edges, catalog)).toEqual({ ok: false, reason: 'editor.err.duplicate' })
+    expect(findConnection('m', 't', nodes, edges, catalog)).toEqual({ ok: false, reason: 'editor.err.port' })
+  })
+})
+
+describe('placeAfter (quick add from a node output)', () => {
+  const { nodes } = graphToFlow(graph)
+  it('puts the new node right under the source when free', () => {
+    const src = { ...nodes[3], position: { x: 1000, y: 0 } }
+    expect(placeAfter(src, [src])).toEqual({ x: 1000, y: 140 })
+  })
+  it('shifts right while the spot is taken', () => {
+    const src = { ...nodes[3], position: { x: 1000, y: 0 } }
+    const taken = { ...nodes[2], id: 'x', position: { x: 1000, y: 140 } }
+    const taken2 = { ...nodes[1], id: 'y', position: { x: 1280, y: 150 } }
+    expect(placeAfter(src, [src, taken, taken2])).toEqual({ x: 1560, y: 140 })
   })
 })

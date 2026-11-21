@@ -100,10 +100,13 @@ def create_app() -> FastAPI:
         ai,
         auth,
         autofix,
+        checks,
         ci,
         credentials,
+        demo,
         nodes,
         projects,
+        repos,
         runs,
         scoring,
         templates,
@@ -115,7 +118,7 @@ def create_app() -> FastAPI:
 
     for r in (auth.router, workspaces.router, projects.router, nodes.router, workflows.router, runs.router,
               credentials.router, settings_api.router, ai.router, templates.router, ci.router,
-              webhooks.router, scoring.router, autofix.router):
+              webhooks.router, scoring.router, autofix.router, demo.router, repos.router, checks.router):
         app.include_router(r, prefix=API_PREFIX)
 
     @app.get("/api/healthz", tags=["health"])

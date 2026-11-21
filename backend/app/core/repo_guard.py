@@ -41,6 +41,35 @@ def normalize_repo_url(url: str) -> str:
     return f"{parts.scheme.lower()}://{(parts.hostname or '').lower()}{path.rstrip('/').lower()}"
 
 
+_TREE_RE = re.compile(r"^(?P<repo>.+?)(?:/-)?/(?P<kind>tree|blob)/(?P<ref>[^/]+)(?:/(?P<rest>.*))?$")
+
+
+def normalize_user_repo_url(raw: str) -> tuple[str, str | None, str | None]:
+    """What a person pastes from the browser → (normalized https repo URL, branch, sub-folder).
+    Trims spaces and ``.git``, strips ``/tree|blob/<ref>/…`` (GitHub) and ``/-/tree/<ref>/…`` (GitLab); a ``tree`` link
+    to a folder becomes the project sub-folder (a ``blob`` link to a file does not)."""
+    url = (raw or "").strip()
+    parts = urlsplit(url)
+    if parts.scheme == "http":
+        raise RepoGuardError("нужна ссылка https:// — по http репозитории не принимаются")
+    if parts.scheme != "https" or not parts.hostname:
+        raise RepoGuardError("вставьте полную ссылку вида https://github.com/org/repo")
+    path, ref, subdir = parts.path, None, None
+    m = _TREE_RE.match(path)
+    if m:
+        path, ref = m.group("repo"), m.group("ref")
+        rest = (m.group("rest") or "").strip("/")
+        if m.group("kind") == "tree" and rest:
+            if ".." in rest.split("/"):
+                raise RepoGuardError("недопустимый путь в ссылке")
+            subdir = rest
+    base = f"https://{parts.netloc}{path}"
+    check_git_url(base, [base])
+    if ref is not None:
+        check_ref(ref)
+    return normalize_repo_url(base), ref, subdir
+
+
 def check_git_url(url: str, allowlist: list[str]) -> str:
     if not isinstance(url, str) or not url or url.startswith("-") or len(url) > 500:
         raise RepoGuardError("недопустимый URL репозитория")

@@ -1,0 +1,99 @@
+/* Run animation of the canvas («неон»): CSS only — custom property + conic gradient, transform/opacity/box-shadow.
+   States come from nodeVisualState() → .node-<state> on the node card. */
+
+@property --neon-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.node-card { position: relative; transition: transform 200ms ease, opacity 300ms ease, border-color 300ms ease, box-shadow 300ms ease; }
+
+/* neon frame: a rotating conic gradient drawn only in the 2px ring around the card */
+.node-card::before,
+.node-card::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 18px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.node-card::before {
+  padding: 2px;
+  background: conic-gradient(from var(--neon-angle), rgb(var(--neon-1)), rgb(var(--neon-2)), rgb(var(--neon-3)), rgb(var(--neon-1)));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.node-card::after {
+  box-shadow: 0 0 16px 2px rgb(var(--neon-1) / 0.55), 0 0 34px 8px rgb(var(--neon-2) / 0.22);
+}
+
+/* waiting for its turn: dimmed, slow breathing */
+.node-waiting { opacity: 0.78; }
+.node-waiting::after { opacity: 1; box-shadow: 0 0 0 1px rgb(var(--edge) / 0.35); animation: node-breathe 2.4s ease-in-out infinite; }
+
+/* running: the neon ring spins and glows */
+.node-running { transform: scale(1.02); border-color: transparent !important; }
+.node-running::before { opacity: 1; animation: neon-spin 1.8s linear infinite; }
+.node-running::after { opacity: 1; animation: neon-pulse 1.6s ease-in-out infinite; }
+
+/* done: spin fades into a steady green rim with a short flash */
+.node-success { border-color: rgb(var(--primary)) !important; }
+.node-success::after { opacity: 1; box-shadow: 0 0 10px 0 rgb(var(--primary) / 0.28); animation: node-flash 450ms ease-out 1; }
+
+/* error: red neon, a short shake */
+.node-failed { border-color: rgb(var(--danger)) !important; animation: node-shake 160ms ease-in-out 2; }
+.node-failed::after { opacity: 1; box-shadow: 0 0 16px 2px rgb(var(--danger) / 0.45); }
+
+/* skipped branch: fades out, dashed rim */
+.node-skipped { opacity: 0.45; border-style: dashed !important; }
+
+/* final wave over successful nodes (delay set inline) */
+.node-finale::after { animation: node-finale 650ms ease-out 1 both; animation-delay: var(--finale-delay, 0ms); }
+
+@keyframes neon-spin { to { --neon-angle: 360deg; } }
+@keyframes neon-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes node-breathe { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes node-flash {
+  0% { box-shadow: 0 0 0 0 rgb(var(--primary) / 0.7); }
+  100% { box-shadow: 0 0 10px 0 rgb(var(--primary) / 0.28); }
+}
+@keyframes node-shake { 0%, 100% { translate: 0; } 25% { translate: -3px 0; } 75% { translate: 3px 0; } }
+@keyframes node-finale {
+  0% { box-shadow: 0 0 10px 0 rgb(var(--primary) / 0.28); }
+  40% { box-shadow: 0 0 26px 6px rgb(var(--neon-2) / 0.55), 0 0 4px 2px rgb(var(--neon-1) / 0.8); }
+  100% { box-shadow: 0 0 10px 0 rgb(var(--primary) / 0.28); }
+}
+
+/* the canvas dims slightly while a run is in progress (under the nodes) */
+.canvas-area .react-flow__pane { transition: background-color 200ms ease; }
+.canvas-area.is-running .react-flow__pane { background-color: rgb(var(--fg) / 0.05); }
+
+/* edges: a glowing packet runs along the path while data flows; finished edges keep a soft rim */
+.react-flow__edge.edge-active .react-flow__edge-path {
+  stroke: rgb(var(--neon-1));
+  stroke-width: 2.5;
+  stroke-dasharray: 10 14;
+  filter: drop-shadow(0 0 3px rgb(var(--neon-2) / 0.9));
+  animation: edge-packet 900ms linear infinite;
+}
+.react-flow__edge.edge-done .react-flow__edge-path { stroke: rgb(var(--primary)); stroke-width: 2.25; }
+.react-flow__edge.edge-skipped .react-flow__edge-path { stroke-dasharray: 4 6; opacity: 0.45; }
+/* the label group is positioned by an SVG transform attribute: animate opacity only, never CSS transform */
+.react-flow__edge.edge-active .react-flow__edge-textwrapper,
+.react-flow__edge.edge-done .react-flow__edge-textwrapper { animation: edge-label-pop 260ms ease-out 1 both; }
+.react-flow__edge-textbg { fill: rgb(var(--surface)); }
+.react-flow__edge-text { fill: rgb(var(--primary)); font-weight: 700; font-size: 11px; }
+@keyframes edge-packet { to { stroke-dashoffset: -24; } }
+@keyframes edge-label-pop { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .node-card, .node-card::before, .node-card::after,
+  .react-flow__edge.edge-active .react-flow__edge-path,
+  .react-flow__edge .react-flow__edge-textwrapper { animation: none !important; transition: none !important; }
+  .node-running { transform: none; }
+  .react-flow__edge.edge-active .react-flow__edge-path { stroke-dasharray: none; }
+}

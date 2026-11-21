@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -105,19 +108,58 @@ async def sprint_plan(run_id: str, request: Request, body: SprintIn | None = Non
     return plan_out(row)
 
 
+def _commit(run: m.Run) -> str | None:
+    sha = (run.source or {}).get("commit") or (run.trigger_payload or {}).get("head_sha")
+    return sha[:7] if sha else None
+
+
+def _blocking(run: m.Run) -> int:
+    """New findings at/above the diff threshold if a diff verdict exists, otherwise CRITICAL findings (gate default)."""
+    v = run.verdict or {}
+    if v.get("new_counts_by_severity") is not None:
+        order = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        th = order.index(v.get("threshold", "CRITICAL")) if v.get("threshold") in order else 3
+        return sum(int(c) for k, c in v["new_counts_by_severity"].items() if k in order and order.index(k) >= th)
+    return int(((run.summary or {}).get("by_severity") or {}).get("CRITICAL", 0))
+
+
+def _period_cards(s: Session, ws: str, period: str) -> dict:
+    since = datetime.now(UTC) - timedelta(days=PERIODS[period])
+    runs = s.scalars(select(m.Run).where(m.Run.workspace_id == ws, m.Run.created_at >= since)
+                     .order_by(m.Run.created_at.desc())).all()
+    last = next((r for r in runs if r.status == "success"), None)
+    validated = s.scalar(select(func.count()).select_from(m.Autofix).join(m.Run, m.Run.id == m.Autofix.run_id)
+                         .where(m.Run.workspace_id == ws, m.Autofix.status == "validated",
+                                m.Autofix.created_at >= since)) or 0
+    wf_names = {w.id: w.name for w in s.scalars(select(m.Workflow).where(m.Workflow.workspace_id == ws))}
+    return {
+        "period": period, "checks": len(runs),
+        "open_findings": int((last.summary or {}).get("total", 0)) if last else 0,
+        "blocking_findings": _blocking(last) if last else 0,
+        "validated_patches": int(validated),
+        "findings_by_category": dict((last.summary or {}).get("by_category") or {}) if last else {},
+        # severity levels describe the same run as the cards above (not only runs that carry a score)
+        "findings_by_severity": {k: int(((last.summary or {}).get("by_severity") or {}).get(k, 0)) if last else 0
+                                 for k in ("CRITICAL", "HIGH", "MEDIUM", "LOW")},
+        "last_run_id": last.id if last else None,
+        "recent_runs": [{"id": r.id, "workflow_id": r.workflow_id, "workflow_name": wf_names.get(r.workflow_id),
+                         "created_at": r.created_at, "status": r.status, "score": r.score, "score_delta": r.score_delta,
+                         "gate": r.gate, "verdict": (r.verdict or {}).get("verdict"), "commit": _commit(r),
+                         "pr_number": (r.trigger_payload or {}).get("pr_number"),
+                         "total": (r.summary or {}).get("total")} for r in runs[:10]],
+    }
+
+
 @router.get("/dashboard")
-def dashboard(workspace_id: str | None = None, user: m.User = Depends(current_user),
-              s: Session = Depends(get_session)) -> dict:
+def dashboard(workspace_id: str | None = None, period: Literal["7d", "30d"] = "7d",
+              user: m.User = Depends(current_user), s: Session = Depends(get_session)) -> dict:
     ws = resolve_workspace(s, user, workspace_id)
     count = lambda model: s.scalar(select(func.count()).select_from(model).where(model.workspace_id == ws))  # noqa: E731
     latest = s.scalars(select(m.Run).where(m.Run.workspace_id == ws, m.Run.status == "success",
                                            m.Run.score.is_not(None)).order_by(m.Run.created_at.desc()).limit(1)).first()
-    by_sev = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     score = None
     if latest is not None:
-        for k, v in ((latest.summary or {}).get("by_severity") or {}).items():
-            by_sev[k] = by_sev.get(k, 0) + v
-        hist = history(s, ws, latest.project_id, "30d") if latest.project_id else None
+        hist = history(s, ws, latest.project_id, period) if latest.project_id else None
         plan = _latest_plan(s, latest.id)
         score = {"run_id": latest.id, "project_id": latest.project_id, "workflow_id": latest.workflow_id,
                  "value": latest.score, "delta": latest.score_delta,
@@ -126,7 +168,7 @@ def dashboard(workspace_id: str | None = None, user: m.User = Depends(current_us
                  "top3": (latest.score_details or {}).get("priority", [])[:3],
                  "sprint_plan": plan_out(plan) if plan else None, "note": NOTE}
     return {"workspace_id": ws, "projects": count(m.Project), "workflows": count(m.Workflow), "runs": count(m.Run),
-            "findings_by_severity": by_sev, "score": score}
+            "score": score, **_period_cards(s, ws, period)}
 
 
 class ScoreSettingsIn(BaseModel):

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useMatch } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, withWs } from '../api/client'
 import { useWorkflows, useWs } from '../api/hooks'
@@ -20,7 +20,8 @@ export default function IntegrationPage() {
   const lang = useLang()
   const ws = useWs()
   const wfs = useWorkflows()
-  const [wf, setWf] = useState('')
+  const openCheck = useMatch('/c/:id')?.params.id
+  const [wf, setWf] = useState(openCheck ?? '')
   const [provider, setProvider] = useState<'github' | 'gitlab'>('github')
   const [name, setName] = useState('ci')
   const [restrict, setRestrict] = useState(true)
@@ -49,7 +50,7 @@ export default function IntegrationPage() {
               <Select id="ci-wf" value={wf} onChange={(e) => setWf(e.target.value)}>{(wfs.data ?? []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</Select></Field></div>
             <Tabs label="provider" value={provider} onChange={setProvider} tabs={[{ id: 'github', label: 'GitHub Actions' }, { id: 'gitlab', label: 'GitLab CI' }]} />
           </div>
-          <pre className="max-h-[480px] overflow-auto rounded-lg border border-border bg-surface-2 p-3 font-mono text-xs">{yaml.data ?? '…'}</pre>
+          <pre className="max-h-[480px] overflow-auto rounded-field border border-border bg-surface-2 p-3 font-mono text-xs">{yaml.data ?? '…'}</pre>
           <p className="mt-2 text-xs text-muted">{provider === 'github' ? '.github/workflows/aisw.yml' : '.gitlab-ci.yml'} · {t('integration.cliHint')}</p>
         </Card>
         <div className="space-y-4">
@@ -90,7 +91,7 @@ export default function IntegrationPage() {
       </div>
       <Card title={t('integration.tokens')} className="mt-4" padded={false}>
         {fresh && (
-          <div role="alert" className="m-4 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
+          <div role="alert" className="m-4 rounded-field border border-warning/40 bg-warning/10 p-3 text-sm">
             <p className="mb-1 font-medium">{t('integration.tokenOnce')}</p>
             <div className="flex items-center gap-2"><code className="flex-1 break-all font-mono text-xs">{fresh}</code><CopyButton text={fresh} /></div>
           </div>

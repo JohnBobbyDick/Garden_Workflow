@@ -5,6 +5,8 @@ export interface EditorCtx {
   catalog: NodeSpec[]
   lang: Lang
   runMode: boolean
+  /** open the quick-add palette from a node's output (new node is placed under it and connected) */
+  onQuickAdd?: (fromNodeId: string) => void
 }
 
 export const EditorContext = createContext<EditorCtx>({ catalog: [], lang: 'ru', runMode: false })

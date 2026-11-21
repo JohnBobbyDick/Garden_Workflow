@@ -88,7 +88,7 @@ export function PriorityTable({ items, limit }: { items: PriorityItem[]; limit?:
   const rows = limit ? items.slice(0, limit) : items
   if (!rows.length) return <EmptyState icon="shield-check" title={t('score.nothingToFix')} />
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
+    <div className="overflow-x-auto rounded-card border border-border">
       <table className="table-base">
         <thead><tr><th>#</th><th>{t('score.finding')}</th><th>{t('run.severity')}</th><th>{t('score.whyNow')}</th><th className="text-right">{t('score.gain')}</th></tr></thead>
         <tbody>
@@ -167,7 +167,7 @@ export function RunScoreTab({ runId }: { runId: string }) {
         <Card title={t('score.breakdown')} className="lg:col-span-2">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as Severity[]).map((k) => (
-              <div key={k} className="rounded-lg bg-surface-2 p-2 text-sm"><SeverityBadge severity={k} />
+              <div key={k} className="rounded-field bg-surface-2 p-2 text-sm"><SeverityBadge severity={k} />
                 <div className="mt-1 tabular-nums">{t('score.pcs', { n: s.breakdown.by_severity[k].count })} · <span className="text-danger">−{s.breakdown.by_severity[k].penalty}</span></div></div>
             ))}
           </div>

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def scanner_set_signature(graph: dict | None) -> str:
@@ -13,11 +13,17 @@ def scanner_set_signature(graph: dict | None) -> str:
     return "+".join(sorted(types))
 
 
+MIN_SPAN = timedelta(days=1)
+
+
 def linear_trend(points: list[tuple[datetime, float]]) -> dict:
-    """OLS slope of score over time, in points per week; fewer than 3 points → not enough data."""
+    """OLS slope of score over time, in points per week; fewer than 3 points or less than a day of history → not
+    enough data (a weekly slope from runs minutes apart is a meaningless extrapolation)."""
     if len(points) < 3:
         return {"enough_data": False, "slope_per_week": None, "points": len(points)}
     t0 = min(t for t, _ in points)
+    if max(t for t, _ in points) - t0 < MIN_SPAN:
+        return {"enough_data": False, "slope_per_week": None, "points": len(points)}
     xs = [(t - t0).total_seconds() / 86400 / 7 for t, _ in points]
     ys = [float(v) for _, v in points]
     n = len(xs)

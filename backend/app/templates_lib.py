@@ -67,12 +67,15 @@ class TemplateParamError(ValueError):
 
 
 def apply_parameters(graph: dict, parameters: list[dict], values: dict[str, Any],
-                     credential_ok: Callable[[str], bool]) -> dict:
+                     credential_ok: Callable[[str], bool], missing: list[dict] | None = None) -> dict:
+    """Substitute ``{{param:…}}`` placeholders. With ``missing`` given (creation from «Новая проверка»), required
+    parameters without a value do not fail: the field is left empty and ``{node_id, field}`` is appended to
+    ``missing`` so the canvas can flag the node as needing input."""
     g = copy.deepcopy(graph)
     declared = {p["name"]: p for p in parameters}
     errors: list[str] = []
 
-    def resolve(v: Any) -> tuple[bool, Any]:
+    def resolve(v: Any, node_id: str, field: str) -> tuple[bool, Any]:
         m = PARAM_RE.match(v) if isinstance(v, str) else None
         if not m:
             return False, v
@@ -81,7 +84,10 @@ def apply_parameters(graph: dict, parameters: list[dict], values: dict[str, Any]
         val = values.get(name, p.get("default"))
         if val in (None, "", []):
             if p.get("required", True):
-                errors.append(f"не задан параметр «{name}»")
+                if missing is None:
+                    errors.append(f"не задан параметр «{name}»")
+                else:
+                    missing.append({"node_id": node_id, "field": field})
             return True, None
         if p.get("type") == "credential" and (not isinstance(val, str) or not credential_ok(val)):
             errors.append(f"параметр «{name}»: секрет не найден в хранилище этого рабочего пространства")
@@ -95,14 +101,14 @@ def apply_parameters(graph: dict, parameters: list[dict], values: dict[str, Any]
             v = cfg[key]
             if isinstance(v, dict):
                 for hk in list(v):
-                    hit, nv = resolve(v[hk])
+                    hit, nv = resolve(v[hk], node.get("id", ""), f"{key}.{hk}")
                     if hit:
                         if nv is None:
                             del v[hk]
                         else:
                             v[hk] = nv
                 continue
-            hit, nv = resolve(v)
+            hit, nv = resolve(v, node.get("id", ""), key)
             if hit:
                 if nv is None:
                     del cfg[key]

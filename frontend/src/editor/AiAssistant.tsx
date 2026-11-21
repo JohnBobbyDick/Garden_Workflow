@@ -46,12 +46,12 @@ export function AiAssistant({ workflowId, dirty, onSaveFirst, onApplied }: {
       <div className="flex items-center gap-2 border-b border-border p-3 font-semibold"><Icon name="sparkles" size={16} />{t('assistant.title')}</div>
       <div className="flex-1 space-y-2 overflow-y-auto p-3" aria-live="polite">
         {(history.data ?? []).map((m) => (
-          <div key={m.id} className={m.role === 'user' ? 'ml-6 rounded-lg bg-primary/15 p-2 text-sm' : 'mr-6 rounded-lg bg-surface-2 p-2 text-sm'}>
+          <div key={m.id} className={m.role === 'user' ? 'ml-6 rounded-field bg-primary/15 p-2 text-sm' : 'mr-6 rounded-field bg-surface-2 p-2 text-sm'}>
             {m.content || '—'} <Badge className="ml-1">{m.status}</Badge>
           </div>
         ))}
         {proposal && (
-          <div className="rounded-lg border border-primary/50 p-3 text-sm">
+          <div className="rounded-field border border-primary/50 p-3 text-sm">
             <div className="mb-2 font-medium">{t('assistant.proposal')}</div>
             <p className="mb-2 text-muted">{proposal.content}</p>
             {proposal.valid ? (

@@ -24,11 +24,11 @@ export function useAutofixCoverage() {
 
 export function PatchView({ patch }: { patch: string }) {
   return (
-    <pre className="max-h-96 overflow-auto rounded-lg border border-border bg-surface-2 p-2 font-mono text-xs leading-5" aria-label="patch">
+    <pre className="max-h-96 overflow-auto rounded-field border border-border bg-surface-2 p-2 font-mono text-xs leading-5" aria-label="patch">
       {patch.split('\n').map((l, i) => (
         <div key={i} className={clsx(
-          l.startsWith('+++') || l.startsWith('---') ? 'text-muted' : l.startsWith('+') ? 'bg-success/10 text-success'
-            : l.startsWith('-') ? 'bg-danger/10 text-danger' : l.startsWith('@@') ? 'text-primary' : '')}>{l || ' '}</div>
+          l.startsWith('+++') || l.startsWith('---') ? 'text-muted' : l.startsWith('+') ? 'bg-soft text-primary'
+            : l.startsWith('-') ? 'bg-danger-soft text-danger' : l.startsWith('@@') ? 'text-primary' : '')}>{l || ' '}</div>
       ))}
     </pre>
   )
@@ -77,7 +77,7 @@ export function AutofixPanel({ runId, finding }: { runId: string; finding: Findi
   }
 
   return (
-    <div className="mt-3 rounded-xl border border-border bg-surface p-3" data-testid="autofix-panel">
+    <div className="mt-3 rounded-card border border-border bg-surface p-4" data-testid="autofix-panel">
       <div className="flex flex-wrap items-center gap-2">
         <Icon name="wrench" size={16} /><b className="text-sm">AI AutoFix</b>
         {kind === 'deterministic' && <Badge tone="primary">{t('autofix.deterministic')}</Badge>}
@@ -97,7 +97,7 @@ export function AutofixPanel({ runId, finding }: { runId: string; finding: Findi
             {af.reason && <p className="text-sm text-danger">{af.reason}</p>}
             {af.kind !== 'deterministic' && af.proposal.explanation && <p className="text-sm">{af.proposal.explanation}</p>}
             {!!af.proposal.requires_config?.length && (
-              <div className="rounded-lg border border-warning/40 bg-warning/10 p-2 text-sm">
+              <div className="rounded-field border border-warning/40 bg-warning/10 p-2 text-sm">
                 <b>{t('autofix.requiresConfig')}</b>
                 <ul className="mt-1 list-disc pl-5">{af.proposal.requires_config.map((r) => <li key={r.name}><code>{r.name}</code> — {r.description}</li>)}</ul>
               </div>

@@ -46,9 +46,9 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       <div className="mx-auto grid w-full max-w-5xl flex-1 items-center gap-10 px-4 pb-12 md:grid-cols-2">
         <div className="hidden md:block">
           <div className="mb-6 flex items-center gap-3">
-            <img src="/favicon.svg" alt="" className="h-11 w-11" />
+            <span className="flex h-11 w-11 items-center justify-center rounded-chip bg-primary text-lg font-bold text-white" aria-hidden="true">✳</span>
             <div>
-              <div className="text-2xl font-semibold">{t('app.name')}</div>
+              <div className="text-2xl font-bold">{t('app.name')}</div>
               <div className="text-muted">{t('app.tagline')}</div>
             </div>
           </div>
@@ -56,7 +56,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           <ul className="space-y-3 text-sm text-muted">
             {([['key', 'secrets'], ['package', 'sca'], ['bug', 'sast'], ['sparkles', 'ai'], ['send', 'notify']] as const).map(([icon, k]) => (
               <li key={k} className="flex items-center gap-3">
-                <span className="rounded-lg bg-primary/15 p-2 text-primary"><Icon name={icon} size={16} /></span>
+                <span className="rounded-field bg-primary/15 p-2 text-primary"><Icon name={icon} size={16} /></span>
                 {t(`auth.features.${k}`)}
               </li>
             ))}
@@ -76,7 +76,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
             <Input id="password" type="password" required minLength={mode === 'register' ? 10 : undefined} value={password}
               onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
           </Field>
-          {error && <p role="alert" className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
+          {error && <p role="alert" className="mb-3 rounded-field bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
           <Button type="submit" variant="primary" className="w-full" loading={busy}>
             {mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister')}
           </Button>

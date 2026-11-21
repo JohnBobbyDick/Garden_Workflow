@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
+import { useRun, useRuns } from '../api/hooks'
 import type { Run, Severity } from '../api/types'
 import { SeverityBadge, StatusBadge } from '../components/domain'
 import { Page } from '../components/layout/AppShell'
@@ -33,8 +34,16 @@ export default function ComparePage() {
   const { t } = useTranslation()
   const lang = useLang()
   const [p] = useSearchParams()
-  const base = p.get('base')
   const head = p.get('head')
+  // «Сравнить» from the results panel passes only the new run: compare with the previous run of the same check
+  const headRun = useRun(p.get('base') ? undefined : head ?? undefined)
+  const siblings = useRuns({ workflow_id: headRun.data?.workflow_id ?? undefined, limit: 50 })
+  const prev = (() => {
+    const list = (siblings.data ?? []).filter((r) => r.status === 'success')
+    const i = list.findIndex((r) => r.id === head)
+    return i >= 0 ? list[i + 1]?.id : undefined
+  })()
+  const base = p.get('base') ?? (headRun.data?.workflow_id ? prev ?? null : null)
   const q = useQuery({ queryKey: ['compare', base, head], enabled: !!base && !!head,
     queryFn: () => api<CompareResult>(`/api/runs/compare?base=${base}&head=${head}`) })
   if (!base || !head) return <Page><EmptyState title={t('runs.compareHint')} /></Page>

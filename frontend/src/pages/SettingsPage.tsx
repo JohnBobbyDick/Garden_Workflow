@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { api, ApiError, withWs } from '../api/client'
@@ -12,11 +12,98 @@ import { fmtDate } from '../lib/format'
 import { toast } from '../store/toast'
 import { useUi } from '../store/ui'
 
-type Tab = 'ai' | 'credentials' | 'allowlist' | 'members' | 'schedules' | 'preferences'
+const ProjectsPage = lazy(() => import('./ProjectsPage'))
+
+type Tab = 'ai' | 'credentials' | 'allowlist' | 'members' | 'schedules' | 'projects' | 'preferences'
 const err = (e: unknown) => toast.error(e instanceof ApiError ? e.message : String(e))
 
 interface AISettings { enabled: boolean; provider: string; base_url: string; model: string; credential_id: string | null;
-  headers: Record<string, string>; timeout: number; json_mode: string; allow_local: boolean; providers: string[]; hints: string[] }
+  headers: Record<string, string>; timeout: number; json_mode: string; allow_local: boolean; providers: string[]; hints: string[]
+  credential_ids: string[]; proxy_credential_ids: string[]; fallback_models: string[]; proxy_scheme: string
+  proxy_port: string | null; max_retries: number | null; env_default: { enabled: boolean; provider: string; model: string } }
+interface DiagRow { proxy: string; scheme: string | null; ok: boolean; ms: number; error: string | null }
+
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+const PROXY_SCHEMES = ['auto', 'http', 'https', 'socks5', 'socks5h']
+
+function toggle(list: string[], id: string): string[] {
+  return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
+}
+
+function PoolSection({ form, set, admin }: { form: AISettings; set: <K extends keyof AISettings>(k: K, v: AISettings[K]) => void; admin: boolean }) {
+  const { t } = useTranslation()
+  const ws = useWs()
+  const creds = useCredentials()
+  const invalidate = useInvalidate()
+  const [proxy, setProxy] = useState({ name: '', value: '' })
+  const keys = (creds.data ?? []).filter((c) => c.kind !== 'proxy' && c.id !== form.credential_id)
+  const proxies = (creds.data ?? []).filter((c) => c.kind === 'proxy')
+  const addProxy = async () => {
+    try {
+      const c = await api<{ id: string }>('/api/credentials', { method: 'POST', json: { workspace_id: ws, kind: 'proxy', ...proxy } })
+      setProxy({ name: '', value: '' })
+      await invalidate('credentials')
+      set('proxy_credential_ids', [...form.proxy_credential_ids, c.id])
+    } catch (e) { err(e) }
+  }
+  return (
+    <fieldset disabled={!admin} className="mt-4 border-t border-border pt-4">
+      <legend className="mb-1 text-base font-bold">{t('settings.pool')}</legend>
+      <p className="mb-3 text-xs text-muted">{t('settings.poolHint')}</p>
+      <div className="mb-3">
+        <div className="label">{t('settings.extraKeys')}</div>
+        {keys.length ? keys.map((c) => (
+          <label key={c.id} className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.credential_ids.includes(c.id)} onChange={() => set('credential_ids', toggle(form.credential_ids, c.id))} />
+            {c.name} <span className="font-mono text-muted">{c.display}</span>
+          </label>
+        )) : <p className="text-xs text-muted">{t('settings.noExtraKeys')}</p>}
+      </div>
+      <div className="mb-3">
+        <div className="label">{t('settings.proxies')}</div>
+        {proxies.map((c) => (
+          <label key={c.id} className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.proxy_credential_ids.includes(c.id)} onChange={() => set('proxy_credential_ids', toggle(form.proxy_credential_ids, c.id))} />
+            {c.name} <span className="font-mono text-muted">{c.display}</span>
+          </label>
+        ))}
+        <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+          <Input aria-label={t('settings.proxyName')} placeholder={t('settings.proxyName')} value={proxy.name} onChange={(e) => setProxy({ ...proxy, name: e.target.value })} />
+          <Input aria-label={t('settings.proxyValue')} type="password" autoComplete="off" placeholder="host:port:login:password" value={proxy.value} onChange={(e) => setProxy({ ...proxy, value: e.target.value })} />
+          <Button icon="plus" disabled={!proxy.name || !proxy.value} onClick={addProxy}>{t('settings.addProxy')}</Button>
+        </div>
+        <p className="mt-1 text-xs text-muted">{t('settings.proxyFormats')}</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field label={t('settings.proxyScheme')} htmlFor="ai-ps">
+          <Select id="ai-ps" value={form.proxy_scheme} onChange={(e) => set('proxy_scheme', e.target.value)}>{PROXY_SCHEMES.map((x) => <option key={x}>{x}</option>)}</Select>
+        </Field>
+        <Field label={t('settings.proxyPort')} htmlFor="ai-pp"><Input id="ai-pp" inputMode="numeric" value={form.proxy_port ?? ''} onChange={(e) => set('proxy_port', e.target.value.replace(/\D/g, '') || null)} /></Field>
+        <Field label={t('settings.retries')} htmlFor="ai-r" hint={t('settings.retriesHint')}>
+          <Input id="ai-r" inputMode="numeric" value={form.max_retries ?? ''} placeholder="auto"
+            onChange={(e) => { const n = parseInt(e.target.value, 10); set('max_retries', Number.isFinite(n) ? Math.min(6, Math.max(1, n)) : null) }} />
+        </Field>
+      </div>
+      <Field label={t('settings.fallbackModels')} htmlFor="ai-fm" hint={t('settings.fallbackHint')}>
+        <Input id="ai-fm" value={form.fallback_models.join(', ')} placeholder="gemini-2.5-flash-lite"
+          onChange={(e) => set('fallback_models', e.target.value.split(/[,;\s]+/).filter(Boolean))} />
+      </Field>
+    </fieldset>
+  )
+}
+
+function DiagnoseTable({ rows }: { rows: DiagRow[] }) {
+  const { t } = useTranslation()
+  return (
+    <table className="table-base mb-3" aria-label={t('settings.diagnose')}>
+      <thead><tr><th>{t('settings.diagProxy')}</th><th>{t('settings.proxyScheme')}</th><th>{t('settings.diagResult')}</th><th>{t('settings.diagTime')}</th><th>{t('settings.diagReason')}</th></tr></thead>
+      <tbody>{rows.map((r, i) => (
+        <tr key={i}><td className="font-mono">{r.proxy === 'direct' ? t('settings.direct') : r.proxy}</td><td>{r.scheme ?? '—'}</td>
+          <td><Badge tone={r.ok ? 'success' : 'danger'}>{r.ok ? 'OK' : 'FAIL'}</Badge></td><td className="tabular-nums">{r.ms} {t('settings.ms')}</td>
+          <td className="text-xs text-muted">{r.error ?? ''}</td></tr>))}</tbody>
+    </table>
+  )
+}
 
 function AiTab({ admin }: { admin: boolean }) {
   const { t } = useTranslation()
@@ -25,11 +112,12 @@ function AiTab({ admin }: { admin: boolean }) {
   const q = useQuery({ queryKey: ['ai-settings', ws], queryFn: () => api<AISettings>(withWs('/api/settings/ai', ws)) })
   const [form, setForm] = useState<AISettings | null>(null)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
-  const [busy, setBusy] = useState<'save' | 'test' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'test' | 'diag' | null>(null)
+  const [diag, setDiag] = useState<{ rows: DiagRow[]; error: string | null } | null>(null)
   useEffect(() => { if (q.data) setForm(q.data) }, [q.data])
   if (q.error) return <ErrorState error={q.error} />
   if (!form) return <Skeleton className="h-64" />
-  const set = <K extends keyof AISettings>(k: K, v: AISettings[K]) => setForm({ ...form, [k]: v })
+  const set = <K extends keyof AISettings>(k: K, v: AISettings[K]) => setForm((f) => (f ? { ...f, [k]: v } : f))
   const save = async () => {
     setBusy('save')
     try { await api('/api/settings/ai', { method: 'PUT', json: { ...form, workspace_id: ws } }); toast.success(t('settings.saved')) } catch (e) { err(e) } finally { setBusy(null) }
@@ -42,13 +130,30 @@ function AiTab({ admin }: { admin: boolean }) {
       setResult({ ok: r.ok, text: r.ok ? t('settings.testOk', { model: r.model, ms: r.latency_ms }) : t('settings.testFail', { error: r.error }) })
     } catch (e) { err(e) } finally { setBusy(null) }
   }
+  const runDiag = async () => {
+    setBusy('diag')
+    try {
+      if (admin) await api('/api/settings/ai', { method: 'PUT', json: { ...form, workspace_id: ws } })
+      const r = await api<{ results: DiagRow[]; error: string | null }>('/api/settings/ai/diagnose', { method: 'POST', json: { workspace_id: ws } })
+      setDiag({ rows: r.results, error: r.error })
+    } catch (e) { err(e) } finally { setBusy(null) }
+  }
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <Card title={t('settings.ai')} className="lg:col-span-2">
+        {form.env_default.enabled && !form.enabled && (
+          <p role="status" className="mb-3 rounded-field bg-soft px-3 py-2 text-sm text-primary">
+            {t('settings.envDefault', { provider: form.env_default.provider, model: form.env_default.model })}
+          </p>
+        )}
         <fieldset disabled={!admin} className="space-y-1">
           <div className="mb-3"><Switch checked={form.enabled} onChange={(v) => set('enabled', v)} label={t('settings.enabled')} /></div>
           <Field label={t('settings.provider')} htmlFor="ai-p">
-            <Select id="ai-p" value={form.provider} onChange={(e) => set('provider', e.target.value)}>{form.providers.map((p) => <option key={p}>{p}</option>)}</Select>
+            <Select id="ai-p" value={form.provider} onChange={(e) => {
+              const p = e.target.value
+              setForm((f) => (f ? { ...f, provider: p, base_url: p === 'gemini' && !f.base_url ? GEMINI_BASE : f.base_url,
+                model: p === 'gemini' && !f.model ? 'gemini-2.5-flash' : f.model } : f))
+            }}>{form.providers.map((p) => <option key={p}>{p}</option>)}</Select>
           </Field>
           <Field label={t('settings.baseUrl')} htmlFor="ai-u"><Input id="ai-u" value={form.base_url} placeholder="http://localhost:11434" onChange={(e) => set('base_url', e.target.value)} /></Field>
           <Field label={t('settings.model')} htmlFor="ai-m"><Input id="ai-m" value={form.model} placeholder="qwen2.5:7b" onChange={(e) => set('model', e.target.value)} /></Field>
@@ -60,10 +165,13 @@ function AiTab({ admin }: { admin: boolean }) {
           </Field>
           <div className="mb-3"><Switch checked={form.allow_local} onChange={(v) => set('allow_local', v)} label={t('settings.allowLocal')} /></div>
         </fieldset>
+        <PoolSection form={form} set={set} admin={admin} />
         {result && <p role="status" className={result.ok ? 'mb-3 text-sm text-success' : 'mb-3 text-sm text-danger'}>{result.text}</p>}
+        {diag && (diag.error ? <p role="status" className="mb-3 text-sm text-danger">{diag.error}</p> : <DiagnoseTable rows={diag.rows} />)}
         <div className="flex gap-2">
           <Button variant="primary" icon="save" disabled={!admin} loading={busy === 'save'} onClick={save}>{t('common.save')}</Button>
           <Button icon="sparkles" disabled={!admin} loading={busy === 'test'} onClick={test}>{t('settings.test')}</Button>
+          <Button icon="shield-check" loading={busy === 'diag'} onClick={runDiag}>{t('settings.diagnose')}</Button>
           {!admin && <span className="self-center text-xs text-muted">{t('settings.adminOnly')}</span>}
         </div>
       </Card>
@@ -72,7 +180,7 @@ function AiTab({ admin }: { admin: boolean }) {
   )
 }
 
-const KINDS = ['telegram', 'smtp', 'webhook_secret', 'repo_token', 'repo_write_token', 'llm_api_key', 'generic']
+const KINDS = ['telegram', 'smtp', 'webhook_secret', 'repo_token', 'repo_write_token', 'llm_api_key', 'proxy', 'generic']
 
 function CredentialsTab({ admin }: { admin: boolean }) {
   const { t } = useTranslation()
@@ -242,7 +350,8 @@ export default function SettingsPage() {
   return (
     <Page wide>
       <PageHeader title={t('settings.title')} />
-      <Tabs label={t('settings.title')} value={tab} onChange={(v) => setParams({ tab: v })} tabs={(['ai', 'credentials', 'allowlist', 'members', 'schedules', 'preferences'] as Tab[])
+      <Tabs label={t('settings.title')} value={tab} onChange={(v) => setParams((p) => { const n = new URLSearchParams(p); n.set('tab', v); return n })}
+        tabs={(['ai', 'credentials', 'allowlist', 'members', 'schedules', 'projects', 'preferences'] as Tab[])
         .map((id) => ({ id, label: t(`settings.${id}`) }))} />
       <div className="mt-4">
         {tab === 'ai' && <AiTab admin={admin} />}
@@ -250,6 +359,7 @@ export default function SettingsPage() {
         {tab === 'allowlist' && <AllowlistTab admin={admin} />}
         {tab === 'members' && <MembersTab admin={admin} />}
         {tab === 'schedules' && <SchedulesTab />}
+        {tab === 'projects' && <Suspense fallback={<Skeleton className="h-40" />}><ProjectsPage /></Suspense>}
         {tab === 'preferences' && <PreferencesTab />}
       </div>
     </Page>

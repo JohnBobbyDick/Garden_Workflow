@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useId, useRef, type ButtonHTMLAttributes, type I
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { toast } from '../../store/toast'
+import { useEmbedded } from '../layout/embedded'
 import { Icon, type IconName } from './Icon'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -16,12 +17,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLBut
       ref={ref}
       disabled={disabled || loading}
       className={clsx(
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors focus-visible:outline-none',
+        'inline-flex items-center justify-center gap-1.5 rounded-chip font-bold transition-colors focus-visible:outline-none',
         'focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50',
-        size === 'sm' ? 'h-8 px-2.5 text-xs' : 'h-9 px-3.5 text-sm',
+        size === 'sm' ? 'h-8 px-2.5 text-[13px]' : 'h-[38px] px-4 text-[15px]',
         variant === 'primary' && 'bg-primary text-primary-fg hover:bg-primary/90',
-        variant === 'secondary' && 'border border-border bg-surface-2 text-fg hover:bg-border/60',
-        variant === 'ghost' && 'text-fg hover:bg-surface-2',
+        variant === 'secondary' && 'border border-border bg-surface text-fg hover:bg-soft',
+        variant === 'ghost' && 'text-fg hover:bg-soft',
         variant === 'danger' && 'bg-danger text-white hover:bg-danger/90',
         className,
       )}
@@ -94,8 +95,8 @@ export function Card({ title, actions, children, className, padded = true }: {
   return (
     <section className={clsx('card', className)}>
       {(title || actions) && (
-        <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold">{title}</h2>
+        <header className="flex items-center justify-between gap-2 px-4 pb-1 pt-[17px]">
+          <h2 className="text-lg font-bold">{title}</h2>
           <div className="flex items-center gap-2">{actions}</div>
         </header>
       )}
@@ -108,13 +109,12 @@ export function Badge({ children, tone = 'neutral', className, title }: {
   children: ReactNode; tone?: 'neutral' | 'success' | 'danger' | 'warning' | 'info' | 'primary'; className?: string; title?: string
 }) {
   return (
-    <span title={title} className={clsx('inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium', {
-      'bg-surface-2 text-muted border border-border': tone === 'neutral',
-      'bg-success/15 text-success': tone === 'success',
-      'bg-danger/15 text-danger': tone === 'danger',
-      'bg-warning/15 text-warning': tone === 'warning',
+    <span title={title} className={clsx('inline-flex items-center gap-1 whitespace-nowrap rounded-chip px-2.5 py-1 text-[13px] font-bold leading-5', {
+      'bg-surface text-muted border border-border': tone === 'neutral',
+      'bg-danger-soft text-danger': tone === 'danger',
+      'bg-warning-soft text-warning': tone === 'warning',
       'bg-info/15 text-info': tone === 'info',
-      'bg-primary/15 text-primary': tone === 'primary',
+      'bg-soft text-primary': tone === 'primary' || tone === 'success',
     }, className)}>{children}</span>
   )
 }
@@ -138,22 +138,22 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   const { t } = useTranslation()
   const message = error instanceof Error ? error.message : t('common.unknownError')
   return (
-    <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm">
+    <div role="alert" className="flex items-center justify-between gap-3 rounded-card bg-danger-soft px-4 py-3 text-sm">
       <span className="flex items-center gap-2 text-danger"><Icon name="alert" size={16} />{message}</span>
       {onRetry && <Button size="sm" onClick={onRetry}>{t('common.retry')}</Button>}
     </div>
   )
 }
 
-export function Tabs<T extends string>({ tabs, value, onChange, label }: {
-  tabs: { id: T; label: ReactNode; count?: number }[]; value: T; onChange: (v: T) => void; label: string
+export function Tabs<T extends string>({ tabs, value, onChange, label, compact }: {
+  tabs: { id: T; label: ReactNode; count?: number }[]; value: T; onChange: (v: T) => void; label: string; compact?: boolean
 }) {
   return (
-    <div role="tablist" aria-label={label} className="flex gap-1 overflow-x-auto border-b border-border">
+    <div role="tablist" aria-label={label} className={clsx('flex gap-1 border-b border-border', compact ? 'flex-wrap' : 'overflow-x-auto overflow-y-hidden')}>
       {tabs.map((tab) => (
         <button
           key={tab.id} role="tab" type="button" aria-selected={value === tab.id} onClick={() => onChange(tab.id)}
-          className={clsx('-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors',
+          className={clsx('-mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 transition-colors', compact ? 'px-2 py-1.5 text-[13px] font-bold' : 'px-3 py-2 text-[15px]',
             value === tab.id ? 'border-primary text-fg' : 'border-transparent text-muted hover:text-fg')}
         >
           {tab.label}
@@ -178,14 +178,14 @@ export function Modal({ open, onClose, title, children, footer, wide }: {
   }, [open, onClose])
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4" onMouseDown={onClose}>
       <div
         ref={ref} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}
-        className={clsx('card max-h-[90vh] w-full overflow-y-auto', wide ? 'max-w-3xl' : 'max-w-lg')}
+        className={clsx('card max-h-[90vh] w-full overflow-y-auto shadow-pop', wide ? 'max-w-3xl' : 'max-w-lg')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="font-semibold">{title}</h2>
+        <header className="flex items-center justify-between px-4 pb-1 pt-[17px]">
+          <h2 className="text-lg font-bold">{title}</h2>
           <button type="button" aria-label="close" className="rounded p-1 text-muted hover:bg-surface-2" onClick={onClose}>
             <Icon name="x" size={16} />
           </button>
@@ -208,11 +208,21 @@ export function CopyButton({ text, label }: { text: string; label?: string }) {
 }
 
 export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
+  const embedded = useEmbedded()
+  if (embedded) {
+    if (!subtitle && !actions) return null
+    return (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        {subtitle ? <p className="text-sm text-muted">{subtitle}</p> : <span />}
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      </div>
+    )
+  }
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="text-[34px] font-bold leading-tight lg:text-display">{title}</h1>
+        {subtitle && <p className="mt-1 text-[15px] text-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -221,7 +231,7 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
 
 export function DiffView({ before, after, path }: { before: string; after: string; path?: string }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-surface-2 font-mono text-xs">
+    <div className="overflow-x-auto rounded-field border border-border bg-surface-2 font-mono text-xs">
       {path && <div className="border-b border-border px-3 py-1.5 text-muted">{path}</div>}
       <pre className="p-2 leading-5">
         {before.split('\n').map((l, i) => <div key={`b${i}`} className="bg-danger/10 text-danger"><span aria-hidden="true">- </span>{l}</div>)}

@@ -6,25 +6,25 @@ import { Spinner } from './ui'
 import { Icon } from './ui/Icon'
 
 const SEV_CLASS: Record<Severity, string> = {
-  CRITICAL: 'bg-sev-critical text-white',
-  HIGH: 'bg-sev-high text-white',
-  MEDIUM: 'bg-sev-medium text-black',
-  LOW: 'bg-sev-low text-white',
+  CRITICAL: 'bg-danger-soft text-danger',
+  HIGH: 'bg-danger-soft text-danger',
+  MEDIUM: 'bg-warning-soft text-warning',
+  LOW: 'bg-soft text-primary',
 }
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
   const { t } = useTranslation()
   return (
-    <span className={clsx('inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide', SEV_CLASS[severity])}>
+    <span className={clsx('inline-flex rounded-chip px-2.5 py-1 text-[13px] font-bold leading-5', SEV_CLASS[severity])}>
       {t(`severity.${severity}`)}
     </span>
   )
 }
 
 const STATUS_TONE: Record<string, string> = {
-  queued: 'text-muted bg-surface-2 border border-border', pending: 'text-muted bg-surface-2 border border-border',
-  running: 'text-info bg-info/15', success: 'text-success bg-success/15', failed: 'text-danger bg-danger/15',
-  cancelled: 'text-warning bg-warning/15', skipped: 'text-muted bg-surface-2 border border-dashed border-border',
+  queued: 'text-muted bg-surface border border-border', pending: 'text-muted bg-surface border border-border',
+  running: 'text-primary bg-soft', success: 'text-primary bg-soft', failed: 'text-danger bg-danger-soft',
+  cancelled: 'text-warning bg-warning-soft', skipped: 'text-muted bg-surface border border-dashed border-border',
 }
 
 export const STATUS_ICON: Record<string, string> = {
@@ -34,7 +34,7 @@ export const STATUS_ICON: Record<string, string> = {
 export function StatusBadge({ status }: { status: RunStatus | NodeStatus }) {
   const { t } = useTranslation()
   return (
-    <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium', STATUS_TONE[status])}>
+    <span className={clsx('inline-flex items-center gap-1 rounded-chip px-2.5 py-1 text-[13px] font-bold leading-5', STATUS_TONE[status])}>
       {status === 'running' ? <Spinner size={12} /> : <Icon name={STATUS_ICON[status] ?? 'info'} size={12} />}
       {t(`status.${status}`)}
     </span>
@@ -44,7 +44,7 @@ export function StatusBadge({ status }: { status: RunStatus | NodeStatus }) {
 export function GateBadge({ gate }: { gate: 'pass' | 'fail' | null | undefined }) {
   if (!gate) return null
   return (
-    <span className={clsx('rounded-md px-2 py-0.5 text-xs font-bold uppercase', gate === 'pass' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger')}>
+    <span className={clsx('rounded-chip px-2.5 py-1 text-[13px] font-bold leading-5 uppercase', gate === 'pass' ? 'bg-soft text-primary' : 'bg-danger-soft text-danger')}>
       {gate}
     </span>
   )
@@ -57,7 +57,7 @@ export function Toaster() {
       {toasts.map((t) => (
         <div
           key={t.id} role={t.kind === 'error' ? 'alert' : 'status'}
-          className={clsx('pointer-events-auto flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm shadow-card',
+          className={clsx('pointer-events-auto flex items-start gap-2 rounded-field border px-3 py-2.5 text-sm shadow-pop',
             'bg-surface', t.kind === 'error' ? 'border-danger/50' : t.kind === 'success' ? 'border-success/50' : 'border-border')}
         >
           <Icon name={t.kind === 'error' ? 'alert' : t.kind === 'success' ? 'check' : 'info'} size={16}

@@ -11,6 +11,10 @@ export interface FlowNodeData extends Record<string, unknown> {
   issues?: string[]
   summary?: string
   durationMs?: number | null
+  error?: string
+  reason?: string
+  /** final wave of a finished run: delay of this node's glow, ms */
+  finaleDelay?: number
 }
 
 export type FlowNode = Node<FlowNodeData, 'aisw'>
@@ -111,9 +115,39 @@ export function canConnect(c: ConnectionLike, nodes: FlowNode[], edges: FlowEdge
   return { ok: true }
 }
 
+/** Links panel: connect two nodes by picking the first compatible (output, input) port pair. When none fits,
+ * returns the most informative refusal (a real candidate's reason beats a missing-port one). */
+export function findConnection(source: string, target: string, nodes: FlowNode[], edges: FlowEdge[], catalog: NodeSpec[]):
+  { ok: true; connection: { source: string; sourceHandle: string; target: string; targetHandle: string } } | { ok: false; reason: string } {
+  const sSpec = specOf(catalog, nodes.find((n) => n.id === source)?.data.nodeType ?? '')
+  const tSpec = specOf(catalog, nodes.find((n) => n.id === target)?.data.nodeType ?? '')
+  let reason = 'editor.err.port'
+  for (const o of sSpec?.outputs ?? []) {
+    for (const i of tSpec?.inputs ?? []) {
+      const c = { source, sourceHandle: o.name, target, targetHandle: i.name }
+      const r = canConnect(c, nodes, edges, catalog)
+      if (r.ok) return { ok: true, connection: c }
+      if (reason === 'editor.err.port' || r.reason !== 'editor.err.types') reason = r.reason ?? reason
+    }
+  }
+  if (source === target) reason = 'editor.err.self'
+  return { ok: false, reason }
+}
+
+const ROW_GAP = 140
+const COL_GAP = 280
+
+/** Position for a node added from another node's output: right under it, shifted right while the spot is taken. */
+export function placeAfter(source: FlowNode, existing: FlowNode[]): { x: number; y: number } {
+  const pos = { x: source.position.x, y: source.position.y + ROW_GAP }
+  const taken = (x: number, y: number) => existing.some((n) => Math.abs(n.position.x - x) < NODE_WIDTH && Math.abs(n.position.y - y) < 100)
+  while (taken(pos.x, pos.y)) pos.x += COL_GAP
+  return pos
+}
+
 export function autoLayout(nodes: FlowNode[], edges: FlowEdge[]): FlowNode[] {
   const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 90, marginx: 20, marginy: 20 })
+  g.setGraph({ rankdir: 'TB', nodesep: 48, ranksep: 56, marginx: 20, marginy: 20 })
   g.setDefaultEdgeLabel(() => ({}))
   for (const n of nodes) g.setNode(n.id, { width: n.measured?.width ?? NODE_WIDTH, height: n.measured?.height ?? NODE_HEIGHT })
   for (const e of edges) g.setEdge(e.source, e.target)

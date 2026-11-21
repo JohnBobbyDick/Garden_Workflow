@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -7,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import models as m
+from app.ai.pool import parse_proxy
 from app.core.audit import audit
 from app.core.crypto import get_box
 from app.core.errors import conflict
@@ -15,7 +18,7 @@ from app.deps import client_ip, current_user, get_session, load_scoped, resolve_
 
 router = APIRouter(tags=["credentials"])
 
-KINDS = ["telegram", "smtp", "webhook_secret", "repo_token", "repo_write_token", "llm_api_key", "generic"]
+KINDS = ["telegram", "smtp", "webhook_secret", "repo_token", "repo_write_token", "llm_api_key", "proxy", "generic"]
 
 
 class CredentialIn(BaseModel):
@@ -38,8 +41,17 @@ def store_value(c: m.Credential, value: str) -> None:
     box = get_box()
     c.ciphertext = box.encrypt(value)
     c.key_version = box.current
-    c.tail = mask_tail(value)
+    c.tail = proxy_display(value) if c.kind == "proxy" else mask_tail(value)
     global_masker.register(value)
+
+
+def proxy_display(value: str) -> str:
+    """A proxy secret is shown as ``host:port`` only: its tail would be the end of the password."""
+    url = parse_proxy(value, "http", None)
+    if not url:
+        return mask_tail(value)
+    p = urlsplit(url)
+    return f"{p.hostname}:{p.port}" if p.port else (p.hostname or mask_tail(value))
 
 
 @router.get("/credentials")

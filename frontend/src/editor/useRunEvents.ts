@@ -11,6 +11,7 @@ export interface PortPreview {
 
 export interface NodeLive {
   status: NodeStatus
+  startedAt?: string | null
   durationMs?: number | null
   error?: string
   summary?: string
@@ -51,6 +52,7 @@ export function reduceRunEvent(s: LiveRun, e: RunEvent | { type: '__reset' } | {
     }
     case 'node.status':
       next.nodes = { ...next.nodes, [ev.node_id!]: { ...node(ev.node_id!), status: d.status as NodeStatus,
+        startedAt: d.status === 'running' ? ev.at : node(ev.node_id!).startedAt,
         durationMs: (d.duration_ms as number) ?? node(ev.node_id!).durationMs, error: d.error as string | undefined,
         summary: (d.summary as string) ?? node(ev.node_id!).summary, reason: d.reason as string | undefined } }
       return next

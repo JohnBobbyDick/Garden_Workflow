@@ -156,7 +156,7 @@ function KeyValue({ value, onChange, credential, readOnly }: { value: Record<str
   )
 }
 
-function UploadField({ value, onChange, id, readOnly }: { value: string; onChange: (v: string) => void; id: string; readOnly?: boolean }) {
+export function UploadField({ value, onChange, id, readOnly }: { value: string; onChange: (v: string) => void; id: string; readOnly?: boolean }) {
   const ws = useWs()
   const [busy, setBusy] = useState(false)
   const upload = async (file: File) => {
@@ -176,7 +176,7 @@ function UploadField({ value, onChange, id, readOnly }: { value: string; onChang
   return (
     <div className="flex items-center gap-2">
       <Input id={id} value={value} readOnly className="font-mono text-xs" />
-      {!readOnly && <label className="inline-flex h-9 cursor-pointer items-center rounded-lg border border-border bg-surface-2 px-3 text-sm">
+      {!readOnly && <label className="inline-flex h-9 cursor-pointer items-center rounded-field border border-border bg-surface-2 px-3 text-sm">
         {busy ? '…' : <Icon name="upload" size={15} />}
         <input type="file" className="sr-only" accept=".zip,.tar,.tgz,.gz" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
       </label>}

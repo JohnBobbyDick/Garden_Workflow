@@ -45,7 +45,7 @@ function RunGraph({ run, live }: { run: Run; live: ReturnType<typeof useRunEvent
   })
   return (
     <EditorContext.Provider value={{ catalog: catalog.data?.nodes ?? [], lang, runMode: true }}>
-      <div className="h-[520px] overflow-hidden rounded-xl border border-border">
+      <div className="h-[520px] overflow-hidden rounded-card border border-border">
         <ReactFlowProvider>
           <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView nodesConnectable={false} nodesDraggable={false} elementsSelectable={false}>
             <Background variant={BackgroundVariant.Dots} gap={16} size={1.2} color="rgb(var(--border))" />
@@ -102,7 +102,7 @@ function FindingsTable({ findings, runId }: { findings: Finding[]; runId: string
         <Input placeholder={t('common.search')} aria-label={t('common.search')} value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       {!list.length ? <EmptyState icon="shield-check" title={t('run.noFindings')} /> : (
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className="overflow-x-auto rounded-card border border-border">
           <table className="table-base">
             <thead><tr><th>{t('run.severity')}</th><th>{t('run.category')}</th><th>{t('run.class')}</th><th>{t('run.location')}</th><th>{t('run.confidence')}</th></tr></thead>
             <tbody>
@@ -130,7 +130,7 @@ function FindingsTable({ findings, runId }: { findings: Finding[]; runId: string
                           )}
                           <p className="mt-2 text-sm"><b>{t('run.recommendation')}:</b> {f.remediation}</p>
                         </div>
-                        {f.snippet && <div><div className="label">{t('run.snippet')}</div><pre className="overflow-x-auto rounded-lg border border-border bg-surface p-2 font-mono text-xs">{f.snippet}</pre></div>}
+                        {f.snippet && <div><div className="label">{t('run.snippet')}</div><pre className="overflow-x-auto rounded-field border border-border bg-surface p-2 font-mono text-xs">{f.snippet}</pre></div>}
                       </div>
                       <AutofixPanel runId={runId} finding={f} />
                     </td></tr>
@@ -148,7 +148,7 @@ function FindingsTable({ findings, runId }: { findings: Finding[]; runId: string
 export function TrustIndicator({ ai }: { ai: AIReportResponse }) {
   const { t } = useTranslation()
   if (!ai.ai_generated) {
-    return <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-warning"><Icon name="info" size={15} className="mr-1 inline" />{t('run.deterministic')}{ai.error ? ` — ${ai.error}` : ''}</div>
+    return <div className="rounded-field border border-warning/40 bg-warning/10 p-3 text-sm text-warning"><Icon name="info" size={15} className="mr-1 inline" />{t('run.deterministic')}{ai.error ? ` — ${ai.error}` : ''}</div>
   }
   const m = ai.validation.metrics as Record<string, number & string[]>
   const total = Number(m.total_items ?? 0)
@@ -156,7 +156,7 @@ export function TrustIndicator({ ai }: { ai: AIReportResponse }) {
   const pct = total ? Math.round((valid / total) * 100) : 100
   const tone = ai.validation.flags.hallucinated_ids || pct < 80 ? 'warning' : 'success'
   return (
-    <div className={clsx('rounded-lg border p-3 text-sm', tone === 'success' ? 'border-success/40 bg-success/10' : 'border-warning/40 bg-warning/10')}>
+    <div className={clsx('rounded-field border p-3 text-sm', tone === 'success' ? 'border-success/40 bg-success/10' : 'border-warning/40 bg-warning/10')}>
       <div className="mb-1 flex items-center gap-2 font-semibold">
         <Icon name="shield-check" size={16} />{t('run.trust')}: {pct}%
         <span className="font-normal text-muted">· {t('run.model')}: {ai.provider}/{ai.model}</span>
@@ -171,7 +171,7 @@ export function TrustIndicator({ ai }: { ai: AIReportResponse }) {
   )
 }
 
-function AiReport({ runId, findings }: { runId: string; findings: Finding[] }) {
+export function AiReport({ runId, findings }: { runId: string; findings: Finding[] }) {
   const { t } = useTranslation()
   const ai = useAiReport(runId)
   if (ai.isLoading) return <Skeleton className="h-40" />
@@ -240,7 +240,7 @@ export default function RunDetailsPage() {
   return (
     <Page wide>
       <PageHeader
-        title={<span className="flex flex-wrap items-center gap-2">{t('run.title')}: {r.workflow_name ?? r.id.slice(0, 8)} <StatusBadge status={r.status} /> <GateBadge gate={r.gate} /><VerdictBadge verdict={r.verdict} /></span>}
+        title={<span className="flex flex-wrap items-center gap-x-3 gap-y-2">{t('run.title')}: {r.workflow_name ?? r.id.slice(0, 8)} <StatusBadge status={r.status} /> <GateBadge gate={r.gate} /><VerdictBadge verdict={r.verdict} /></span>}
         subtitle={`${t(`trigger.${r.trigger_type}`, r.trigger_type)} · ${fmtDate(r.created_at, lang)} · ${t('common.duration')}: ${fmtDuration(r.duration_ms, lang)}`}
         actions={<>
           {!done && <Button icon="stop" variant="danger" onClick={cancel}>{t('runs.cancel')}</Button>}

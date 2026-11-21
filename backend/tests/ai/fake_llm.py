@@ -43,6 +43,9 @@ def make_server(kind: str = "openai"):
             self.wfile.write(raw)
 
         def do_GET(self):
+            script.requests.append({"path": self.path, "headers": dict(self.headers), "body": None, "method": "GET"})
+            if self.path.endswith("/models") and kind == "gemini":
+                return self._send(200, {"models": [{"name": "models/gemini-2.5-flash"}, {"name": "models/other"}]})
             if self.path.endswith("/models"):
                 return self._send(200, {"data": [{"id": "test-model"}, {"id": "other"}]})
             if self.path.endswith("/api/tags"):
@@ -65,6 +68,10 @@ def make_server(kind: str = "openai"):
             if r["status"] != 200:
                 return self._send(r["status"], {"error": {"message": "scripted error"}}, r["headers"])
             text = _content_text(r["content"])
+            if kind == "gemini":
+                return self._send(200, {"candidates": [{"content": {"role": "model", "parts": [{"text": text}]}}],
+                                        "usageMetadata": {"promptTokenCount": 11, "candidatesTokenCount": 22,
+                                                          "totalTokenCount": 33}})
             if kind == "ollama":
                 return self._send(200, {"model": body.get("model"), "message": {"role": "assistant", "content": text},
                                         "prompt_eval_count": 11, "eval_count": 22, "done": True})

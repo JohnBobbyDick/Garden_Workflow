@@ -75,7 +75,7 @@ function ProjectForm({ onDone }: { onDone: () => void }) {
         <Field label={t('projects.path')} htmlFor="p-path" required><Input id="p-path" value={form.path} onChange={(e) => set('path', e.target.value)} /></Field>
       )}
       <Field label={t('projects.subdir')} htmlFor="p-sub" hint="training-project"><Input id="p-sub" value={form.subdir} onChange={(e) => set('subdir', e.target.value)} /></Field>
-      {error && <p role="alert" className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
+      {error && <p role="alert" className="mb-3 rounded-field bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button onClick={onDone}>{t('common.cancel')}</Button>
         <Button variant="primary" loading={busy} disabled={!form.name} onClick={submit}>{t('common.create')}</Button>

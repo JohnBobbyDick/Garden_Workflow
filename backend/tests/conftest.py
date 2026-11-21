@@ -11,6 +11,8 @@ os.environ["APP_DATA_DIR"] = _SESSION_DIR
 os.environ["APP_DATABASE_URL"] = f"sqlite:///{_SESSION_DIR.replace(os.sep, '/')}/default.db"
 os.environ.setdefault("APP_MASTER_KEY", base64.b64encode(os.urandom(32)).decode())
 os.environ.setdefault("APP_JWT_SECRET", base64.b64encode(os.urandom(32)).decode())
+# The platform-default LLM (LLM_ENABLED / GEMINI_* in the environment or backend/.env) must never leak into tests.
+os.environ["LLM_ENABLED"] = "false"
 
 
 def symlink_or_skip(target, link) -> None:

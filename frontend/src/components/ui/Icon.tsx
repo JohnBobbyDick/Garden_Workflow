@@ -33,6 +33,8 @@ const P: Record<string, string> = {
   download: 'M12 3v12M7 10l5 5 5-5M4 21h16',
   upload: 'M12 21V9M7 14l5-5 5 5M4 3h16',
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3',
+  maximize: 'M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5',
+  minimize: 'M3 8h5V3M21 8h-5V3M16 21v-5h5M8 21v-5H3',
   sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
   moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',

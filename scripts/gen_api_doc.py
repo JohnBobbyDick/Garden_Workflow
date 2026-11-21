@@ -60,6 +60,7 @@ RU = {
     "GET /api/runs/{run_id}/ai-report": "AI-отчёт с журналом валидатора",
     "GET /api/settings/ai": "настройки AI-провайдера", "PUT /api/settings/ai": "провайдер, base_url, модель, ключ (admin)",
     "GET /api/settings/ai/models": "список моделей провайдера", "POST /api/settings/ai/test": "проверка соединения с LLM",
+    "POST /api/settings/ai/diagnose": "диагностика LLM: по запросу через каждый прокси (для auto — по каждому протоколу) и напрямую; OK/FAIL, время, причина без секретов",
     "POST /api/ai/workflows/generate": "сценарий из текста (LLM строит граф, граф валидируется)",
     "GET /api/ai/workflows/{workflow_id}/chat": "история чат-правок",
     "POST /api/ai/workflows/{workflow_id}/chat": "предложить правку графа сообщением",
@@ -80,7 +81,7 @@ RU = {
     "GET /api/v1/ci/runs/{run_id}/report": "отчёт для артефакта CI", "GET /api/v1/ci/runs/{run_id}/verdict": "вердикт: 200 PASS / 422 FAIL",
     "POST /api/v1/webhooks/github": "вебхук GitHub (HMAC `X-Hub-Signature-256`, идемпотентность по delivery id)",
     "POST /api/v1/webhooks/gitlab": "вебхук GitLab (`X-Gitlab-Token`)",
-    "GET /api/dashboard": "дашборд: счётчики, Security Score, тренд, топ-3, AI-план",
+    "GET /api/dashboard": "дашборд за период `7d` / `30d`: проверки, открытые/блокирующие находки, проверенные патчи, по типам и уровням, история запусков, Security Score, тренд, топ-3, AI-план",
     "GET /api/projects/{project_id}/score/history": "история score, маркеры, тренд (7d/30d/90d)",
     "GET /api/runs/{run_id}/score": "score запуска: разбивка штрафа, Priority Fix List, AI-план",
     "POST /api/runs/{run_id}/sprint-plan": "AI-план на спринт (с валидацией чисел; без LLM — детерминированный)",
@@ -90,6 +91,14 @@ RU = {
     "GET /api/runs/{run_id}/autofixes": "исправления запуска", "GET /api/autofixes/{autofix_id}": "исправление + доступность PR",
     "GET /api/autofixes/{autofix_id}/patch": "скачать маскированный `.patch`",
     "POST /api/autofixes/{autofix_id}/pull-request": "создать/обновить PR/MR (только `allow_write`, иначе 403)",
+    "POST /api/autofixes/{autofix_id}/recheck": "«Повторная проверка»: запуск сценария на копии проекта с применённым "
+                                                "проверенным патчем (новый run, 202)",
+    "POST /api/demo/setup": "«Демо-данные»: идемпотентно создать демо-проект на учебном наборе и сценарий "
+                            "«Проверка перед merge»",
+    "POST /api/checks": "«Новая проверка» одним запросом: источник (ссылка / архив / учебный проект) + старт (готовый сценарий, шаблон, пустой граф или текст для AI); незаполненные параметры уведомлений возвращаются в needs_input",
+    "GET /api/checks/starters": "готовые сценарии для «С чего начать?»: полная проверка, только секреты, проверка PR",
+    "POST /api/repos/attest": "«Это учебный / собственный проект»: публичный https-репозиторий добавляется в allowlist пространства (только чтение) с записью в аудит; приватные адреса отклоняются",
+    "GET /api/demo/training": "путь учебного набора организаторов (для «Источник проверки → Учебный проект»)",
 }
 
 

@@ -27,9 +27,11 @@ const nodeTypes = { aisw: NodeCard }
 function Stars({ value, onRate, label }: { value: number; onRate?: (n: number) => void; label: string }) {
   return (
     <span className="inline-flex items-center" aria-label={`${label}: ${value.toFixed(1)}`}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button key={n} type="button" disabled={!onRate} onClick={() => onRate?.(n)} aria-label={onRate ? `${label} ${n}` : undefined}
+      {[1, 2, 3, 4, 5].map((n) => onRate ? (
+        <button key={n} type="button" onClick={() => onRate(n)} aria-label={`${label} ${n}`}
           className={n <= Math.round(value) ? 'text-warning' : 'text-border'}>★</button>
+      ) : (  // read-only stars live inside clickable cards: no nested buttons
+        <span key={n} aria-hidden="true" className={n <= Math.round(value) ? 'text-warning' : 'text-border'}>★</span>
       ))}
     </span>
   )
@@ -41,7 +43,7 @@ function Preview({ graph }: { graph: Graph }) {
   const flow = useMemo(() => { const f = graphToFlow(graph); return { nodes: autoLayout(f.nodes, f.edges), edges: f.edges.map((e) => ({ ...e, type: 'smoothstep' })) } }, [graph])
   return (
     <EditorContext.Provider value={{ catalog: catalog.data?.nodes ?? [], lang, runMode: false }}>
-      <div className="h-72 overflow-hidden rounded-lg border border-border">
+      <div className="h-72 overflow-hidden rounded-field border border-border">
         <ReactFlowProvider>
           <ReactFlow nodes={flow.nodes} edges={flow.edges} nodeTypes={nodeTypes} fitView nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}>
             <Background variant={BackgroundVariant.Dots} gap={16} size={1.2} color="rgb(var(--border))" />
@@ -71,7 +73,7 @@ function TemplateDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const use = () => run(async () => {
     const r = await api<{ id: string }>(`/api/templates/${id}/use`, { method: 'POST', json: { workspace_id: ws, name: name || undefined, params: values } })
     toast.success(t('templates.created'))
-    navigate(`/workflows/${r.id}`)
+    navigate(`/c/${r.id}`)
   })
   return (
     <Modal open onClose={onClose} title={tpl?.name ?? '…'} wide>
@@ -103,14 +105,17 @@ function TemplateDetail({ id, onClose }: { id: string; onClose: () => void }) {
                 ) : <Input id={`p-${p.name}`} value={values[p.name] ?? ''} onChange={(e) => setValues({ ...values, [p.name]: e.target.value })} />}
               </Field>
             ))}
-            <Button variant="primary" icon="play" onClick={use}>{t('templates.use')}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" icon="folder-git" onClick={() => navigate({ search: `?new=1&template=${id}` })}>{t('templates.useForRepo')}</Button>
+              <Button icon="play" onClick={use}>{t('templates.use')}</Button>
+            </div>
           </Card>
           <Card title={t('templates.reviews')}>
             <div className="mb-3 flex items-center gap-2 text-sm">{t('templates.rate')}:
               <Stars value={tpl.my_rating ?? 0} label={t('templates.rate')} onRate={(n) => run(async () => { await api(`/api/templates/${id}/rate`, { method: 'POST', json: { stars: n } }); refresh() })} /></div>
             <ul className="mb-3 space-y-2">
               {(rq.data ?? []).map((r) => (
-                <li key={r.id} className="rounded-lg bg-surface-2 p-2 text-sm">
+                <li key={r.id} className="rounded-field bg-surface-2 p-2 text-sm">
                   <div className="mb-1 flex justify-between text-xs text-muted"><span>{r.author} · {fmtDate(r.created_at, lang)}</span>
                     {r.mine && <span className="flex gap-2">
                       <button type="button" onClick={() => setEditing({ id: r.id, text: r.text })}>{t('common.edit')}</button>

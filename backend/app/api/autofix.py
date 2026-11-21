@@ -145,3 +145,38 @@ async def pull_request(autofix_id: str, request: Request, body: PrIn | None = No
           details={"url": res.url, "branch": res.branch, "created": res.created}, ip=client_ip(request))
     s.commit()
     return {"url": res.url, "number": res.number, "branch": res.branch, "created": res.created}
+
+
+@router.post("/autofixes/{autofix_id}/recheck", status_code=202)
+def recheck(autofix_id: str, request: Request, user: m.User = Depends(current_user),
+            s: Session = Depends(get_session)) -> dict:
+    """Apply the validated fix to a copy of the run's sources and run the same workflow (graph snapshot) on it."""
+    import copy
+
+    from app.api.projects import store_upload
+    from app.autofix.pull_request import patched_archive
+    from app.engine import runs as run_service
+
+    a, run = _load(s, autofix_id, user, "developer")
+    if a.status != "validated":
+        raise ApiError(409, "not_validated", "перепроверить можно только проверенное (validated) исправление")
+    f = _finding(s, run, a.finding_id)
+    try:
+        data = patched_archive(s, run, a, f)
+    except (SourceUnavailable, RepoGuardError, ValueError) as exc:
+        raise ApiError(409, "source_unavailable", Masker().mask(str(exc))) from exc
+    up = store_upload(s, run.workspace_id, user.id, f"autofix-{a.finding_id}.zip", data)
+    graph = copy.deepcopy(run.graph_snapshot)
+    for node in graph.get("nodes", []):
+        if node.get("type") == "source.repo":
+            node["config"] = {"mode": "upload", "upload_id": up.id}
+    wf = s.get(m.Workflow, run.workflow_id) if run.workflow_id else None
+    if wf is None:
+        raise ApiError(409, "workflow_missing", "сценарий исходного запуска удалён")
+    new = run_service.create_run(s, wf, trigger_type="manual", triggered_by=user.id, trigger_node_id=run.trigger_node_id,
+                                 payload={"recheck_of": run.id, "autofix_id": a.id}, project_id=run.project_id,
+                                 graph=graph)
+    audit(s, "autofix.recheck", user_id=user.id, workspace_id=run.workspace_id, target=a.id,
+          details={"run_id": new.id}, ip=client_ip(request))
+    s.commit()
+    return {"run_id": new.id, "status": new.status}

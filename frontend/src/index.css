@@ -2,46 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens (RGB triplets so Tailwind can apply opacity). Dark is the default theme. */
+/* Design tokens from the Garden Security Figma (RGB triplets so Tailwind can apply opacity).
+   Light is the design theme and the default; dark is derived from the same green palette. */
 :root,
-[data-theme='dark'] {
-  --bg: 13 16 21;
-  --surface: 21 26 33;
-  --surface-2: 29 35 44;
-  --border: 45 53 65;
-  --fg: 230 233 238;
-  --muted: 156 166 180;
-  --primary: 92 145 255;
-  --primary-fg: 8 14 28;
-  --danger: 244 98 96;
-  --warning: 245 170 66;
-  --success: 52 199 122;
-  --info: 92 170 255;
-  --sev-critical: 214 51 70;
-  --sev-high: 236 96 62;
-  --sev-medium: 238 168 60;
-  --sev-low: 84 150 226;
-  color-scheme: dark;
+[data-theme='light'] {
+  --bg: 246 248 245;          /* #f6f8f5 page */
+  --surface: 255 255 255;     /* cards, header */
+  --surface-2: 242 248 240;   /* #f2f8f0 canvas, soft panels */
+  --soft: 232 246 231;        /* #e8f6e7 chips, active nav */
+  --score-bg: 237 248 235;    /* #edf8eb score card */
+  --border: 223 232 222;      /* #dfe8de */
+  --fg: 32 39 34;             /* #202722 */
+  --muted: 83 102 90;         /* #53665a */
+  --primary: 40 134 56;       /* #288638 */
+  --primary-fg: 255 255 255;
+  --danger: 155 52 43;        /* #9b342b */
+  --danger-soft: 252 232 230; /* #fce8e6 */
+  --warning: 138 97 0;
+  --warning-soft: 251 241 211;
+  --success: 40 134 56;
+  --info: 47 111 159;
+  --edge: 116 171 120;        /* #74ab78 */
+  --grid: 189 219 188;        /* #bddbbc */
+  --neon-1: 34 197 94;         /* run animation: green → teal → lime */
+  --neon-2: 20 184 166;
+  --neon-3: 163 230 53;
+  --sev-critical: 203 105 92; /* #cb695c */
+  --sev-high: 244 147 119;    /* #f49377 */
+  --sev-medium: 235 206 120;  /* #ebce78 */
+  --sev-low: 131 183 154;     /* #83b79a */
+  color-scheme: light;
 }
 
-[data-theme='light'] {
-  --bg: 245 247 250;
-  --surface: 255 255 255;
-  --surface-2: 238 241 245;
-  --border: 214 220 228;
-  --fg: 20 25 33;
-  --muted: 86 96 110;
-  --primary: 37 99 214;
-  --primary-fg: 255 255 255;
-  --danger: 196 43 43;
-  --warning: 168 98 0;
-  --success: 20 128 74;
-  --info: 30 102 196;
-  --sev-critical: 170 22 44;
-  --sev-high: 196 62 28;
-  --sev-medium: 156 96 0;
-  --sev-low: 34 99 180;
-  color-scheme: light;
+[data-theme='dark'] {
+  --bg: 15 21 17;
+  --surface: 22 30 24;
+  --surface-2: 27 37 30;
+  --soft: 31 52 36;
+  --score-bg: 24 40 28;
+  --border: 44 60 48;
+  --fg: 227 235 228;
+  --muted: 157 179 163;
+  --primary: 92 186 104;
+  --primary-fg: 10 20 12;
+  --danger: 236 140 128;
+  --danger-soft: 58 32 29;
+  --warning: 230 190 100;
+  --warning-soft: 56 46 20;
+  --success: 92 186 104;
+  --info: 120 175 220;
+  --edge: 92 150 98;
+  --grid: 52 74 56;
+  --neon-1: 74 222 128;
+  --neon-2: 45 212 191;
+  --neon-3: 190 242 100;
+  --sev-critical: 214 112 99;
+  --sev-high: 240 150 122;
+  --sev-medium: 226 196 110;
+  --sev-low: 120 176 145;
+  color-scheme: dark;
 }
 
 html, body, #root { height: 100%; }
@@ -54,13 +73,13 @@ body {
 :focus-visible { outline: 2px solid rgb(var(--primary)); outline-offset: 2px; }
 
 @layer components {
-  .card { @apply bg-surface border border-border rounded-xl shadow-card; }
+  .card { @apply bg-surface border border-border rounded-card; }
   .input {
-    @apply w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-fg placeholder:text-muted
+    @apply h-[38px] w-full rounded-field border border-border bg-surface px-2.5 py-2 text-[15px] text-fg placeholder:text-muted
       focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50;
   }
   .input-error { @apply border-danger focus:border-danger focus:ring-danger/30; }
-  .label { @apply mb-1 block text-xs font-medium text-muted; }
+  .label { @apply mb-1 block text-sm text-fg; }
   .kbd { @apply rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[11px]; }
   .table-base { @apply w-full border-collapse text-sm; }
   .table-base th { @apply border-b border-border px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-muted; }
@@ -69,15 +88,13 @@ body {
 }
 
 /* React Flow theming */
-.react-flow { --xy-background-color: rgb(var(--bg)); --xy-node-border-radius: 12px; }
-.react-flow__minimap { background: rgb(var(--surface)); border: 1px solid rgb(var(--border)); border-radius: 8px; }
+.react-flow { --xy-background-color: rgb(var(--surface-2)); --xy-node-border-radius: 15px; }
+.react-flow__minimap { background: rgb(var(--surface)); border: 1px solid rgb(var(--border)); border-radius: 9px; }
 .react-flow__controls { box-shadow: none; border: 1px solid rgb(var(--border)); border-radius: 8px; overflow: hidden; }
 .react-flow__controls-button { background: rgb(var(--surface)); border-color: rgb(var(--border)); color: rgb(var(--fg)); fill: rgb(var(--fg)); }
 .react-flow__controls-button:hover { background: rgb(var(--surface-2)); }
-.react-flow__edge-path { stroke: rgb(var(--muted)); stroke-width: 1.6; }
+.react-flow__edge-path { stroke: rgb(var(--edge)); stroke-width: 2; }
 .react-flow__edge.selected .react-flow__edge-path { stroke: rgb(var(--primary)); stroke-width: 2.2; }
-.react-flow__edge.edge-active .react-flow__edge-path { stroke: rgb(var(--success)); stroke-dasharray: 6 4; animation: dash 0.6s linear infinite; }
-.react-flow__edge.edge-skipped .react-flow__edge-path { stroke-dasharray: 2 4; opacity: 0.45; }
 .react-flow__handle { width: 13px; height: 13px; border: 2px solid rgb(var(--surface)); }
 .react-flow__handle.connectingto { box-shadow: 0 0 0 4px rgb(var(--primary) / 0.35); }
 .react-flow__handle.valid { box-shadow: 0 0 0 4px rgb(var(--success) / 0.45); }
@@ -86,6 +103,18 @@ body {
 .react-flow__edge-text { fill: rgb(var(--fg)); font-size: 11px; }
 @keyframes dash { to { stroke-dashoffset: -20; } }
 @media (prefers-reduced-motion: reduce) {
-  .react-flow__edge.edge-active .react-flow__edge-path { animation: none; }
   * { scroll-behavior: auto !important; }
+}
+
+/* ---- workspace: second-level panels slide in over the canvas ---- */
+@keyframes drawer-in { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.drawer-panel { animation: drawer-in 220ms cubic-bezier(.2, .8, .2, 1); }
+.drawer-backdrop { animation: fade-in 200ms ease-out; }
+.canvas-empty {
+  background-image: radial-gradient(rgb(var(--grid)) 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer-panel, .drawer-backdrop { animation: none; }
 }

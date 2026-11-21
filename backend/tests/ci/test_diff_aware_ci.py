@@ -2,7 +2,9 @@
 real mock GitHub; CI verdict endpoint 200/422; CLI exit codes follow the diff verdict."""
 
 import json
+import os
 import subprocess
+import sys
 
 from app.config import get_settings
 from tests.api.conftest import drain
@@ -87,9 +89,9 @@ def test_ci_verdict_endpoint_and_cli_exit_codes(client, alice, live_server, git_
     token = mk_token(client, alice)["token"]
 
     def cli():
-        return subprocess.run(["python3", str(CLI), "--url", live_server, "--workflow", wid, "--out",
+        return subprocess.run([sys.executable, str(CLI), "--url", live_server, "--workflow", wid, "--out",
                                str(repo.parent / "out"), "--base", "main", "--no-comment"], cwd=root,
-                              env={"AISW_TOKEN": token, "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"},
+                              env={**os.environ, "AISW_TOKEN": token},  # Windows needs SYSTEMROOT etc. for SSL init
                               capture_output=True, text=True, timeout=300)
 
     p = cli()

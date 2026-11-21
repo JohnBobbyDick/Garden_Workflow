@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
@@ -8,8 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import models as m
+from app.ai.diagnose import diagnose
 from app.ai.providers.base import LLMError, build_provider, provider_names
-from app.ai.settings_service import FREE_HINTS, host_port, provider_config_for
+from app.ai.settings_service import FREE_HINTS, env_default_out, host_port, provider_config_for
 from app.core.audit import audit
 from app.core.errors import ApiError, bad_request, not_found
 from app.core.masking import global_masker
@@ -29,6 +31,13 @@ class AISettingsIn(BaseModel):
     timeout: float = Field(default=90, ge=5, le=600)
     json_mode: str = Field(default="auto", pattern="^(auto|schema|object|instruction)$")
     allow_local: bool = False
+    # pool (LLM_PROXY.md): more keys, proxies from the vault, fallback models, attempts
+    credential_ids: list[str] = Field(default_factory=list, max_length=20)
+    proxy_credential_ids: list[str] = Field(default_factory=list, max_length=50)
+    fallback_models: list[str] = Field(default_factory=list, max_length=10)
+    proxy_scheme: Literal["auto", "http", "https", "socks5", "socks5h"] = "auto"
+    proxy_port: str | None = Field(default=None, pattern=r"^\d{1,5}$")
+    max_retries: int | None = Field(default=None, ge=1, le=6)
 
 
 class WorkspaceRef(BaseModel):
@@ -41,7 +50,12 @@ def settings_out(row: m.AISettings | None) -> dict:
             "base_url": row.base_url if row else "", "model": row.model if row else "",
             "credential_id": row.credential_id if row else None, "headers": extra.get("headers", {}),
             "timeout": extra.get("timeout", 90), "json_mode": extra.get("json_mode", "auto"),
-            "allow_local": bool(extra.get("allow_host")), "providers": provider_names(), "hints": FREE_HINTS}
+            "allow_local": bool(extra.get("allow_host")), "providers": provider_names(), "hints": FREE_HINTS,
+            "credential_ids": list(extra.get("credential_ids") or []),
+            "proxy_credential_ids": list(extra.get("proxy_credential_ids") or []),
+            "fallback_models": list(extra.get("fallback_models") or []),
+            "proxy_scheme": extra.get("proxy_scheme") or "auto", "proxy_port": extra.get("proxy_port"),
+            "max_retries": extra.get("max_retries"), "env_default": env_default_out()}
 
 
 @router.get("/settings/ai")
@@ -61,10 +75,14 @@ def put_ai_settings(body: AISettingsIn, request: Request, user: m.User = Depends
         raise bad_request("base_url должен начинаться с http:// или https://")
     if body.enabled and not (body.base_url and body.model):
         raise bad_request("для включения AI укажите base_url и модель")
-    if body.credential_id:
-        cred = s.get(m.Credential, body.credential_id)
+    for cid in [c for c in [body.credential_id, *body.credential_ids] if c]:
+        cred = s.get(m.Credential, cid)
         if cred is None or cred.workspace_id != ws:
             raise bad_request("ключ не найден в хранилище этого рабочего пространства")
+    for cid in body.proxy_credential_ids:
+        cred = s.get(m.Credential, cid)
+        if cred is None or cred.workspace_id != ws or cred.kind != "proxy":
+            raise bad_request("прокси не найден в хранилище: добавьте секрет вида «proxy»")
     for name in body.headers:
         if name.lower() in ("authorization", "host", "content-length"):
             raise bad_request(f"заголовок {name} задаётся платформой; секреты храните в хранилище")
@@ -72,6 +90,9 @@ def put_ai_settings(body: AISettingsIn, request: Request, user: m.User = Depends
     row.enabled, row.provider, row.base_url, row.model = body.enabled, body.provider, body.base_url, body.model
     row.credential_id = body.credential_id
     row.extra = {"headers": body.headers, "timeout": body.timeout, "json_mode": body.json_mode,
+                 "credential_ids": body.credential_ids, "proxy_credential_ids": body.proxy_credential_ids,
+                 "fallback_models": [x.strip() for x in body.fallback_models if x.strip()],
+                 "proxy_scheme": body.proxy_scheme, "proxy_port": body.proxy_port, "max_retries": body.max_retries,
                  **({"allow_host": host_port(body.base_url)} if body.allow_local and body.base_url else {})}
     s.add(row)
     audit(s, "ai_settings.update", user_id=user.id, workspace_id=ws, target=body.provider,
@@ -106,6 +127,21 @@ async def test_ai(body: WorkspaceRef, user: m.User = Depends(current_user), s: S
                 "latency_ms": int((time.monotonic() - started) * 1000), "reply": masker.mask(res.content[:200])}
     except LLMError as exc:
         return {"ok": False, "error": masker.mask(str(exc)), "models": models}
+
+
+@router.post("/settings/ai/diagnose")
+async def diagnose_ai(body: WorkspaceRef, user: m.User = Depends(current_user),
+                      s: Session = Depends(get_session)) -> dict:
+    """One small request per proxy (every protocol for auto) and directly; OK/FAIL, time, reason — never secrets."""
+    ws = resolve_workspace(s, user, body.workspace_id, "developer")
+    masker = global_masker.child()
+    try:
+        cfg = provider_config_for(s, ws, None, masker, require_enabled=False)
+    except LookupError as exc:
+        return {"results": [], "error": str(exc)}
+    if cfg is None:
+        return {"results": [], "error": "AI-провайдер не настроен: укажите base_url и модель"}
+    return {"results": await diagnose(cfg, masker), "error": None}
 
 
 @router.get("/settings/ai/models")

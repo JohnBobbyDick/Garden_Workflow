@@ -94,12 +94,24 @@ def _pinned_url(target: Target) -> str:
     return urlunsplit((parts.scheme, f"{ip}:{target.port}", parts.path or "/", parts.query, ""))
 
 
+def _decoded_response(resp: httpx.Response, body: bytes, req: httpx.Request) -> httpx.Response:
+    """``aiter_bytes`` already decoded gzip/br/deflate: drop the encoding headers so the rebuilt response is not
+    decoded a second time (real APIs such as Gemini and OpenRouter compress their answers)."""
+    headers = [(k, v) for k, v in resp.headers.multi_items() if k.lower() not in ("content-encoding", "content-length")]
+    return httpx.Response(resp.status_code, headers=headers, content=body, request=req)
+
+
 async def safe_request(method: str, url: str, *, allow_hosts: set[str] | None = None, headers: dict | None = None,
                        content: bytes | None = None, json: object = None, data: dict | None = None,
                        files: dict | None = None, timeout: float = DEFAULT_TIMEOUT,
                        max_bytes: int = DEFAULT_MAX_BYTES, max_redirects: int = MAX_REDIRECTS,
-                       resolver: Resolver | None = None, verify: bool = True) -> httpx.Response:
+                       resolver: Resolver | None = None, verify: bool = True, proxy: str | None = None,
+                       connect_timeout: float | None = None) -> httpx.Response:
     allow = allow_hosts or set()
+    if proxy:
+        return await _via_proxy(method, url, proxy, allow, headers=headers, content=content, json=json, data=data,
+                                files=files, timeout=timeout, connect_timeout=connect_timeout, max_bytes=max_bytes,
+                                resolver=resolver, verify=verify)
     current = url
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, verify=verify, trust_env=False) as client:
         for _hop in range(max_redirects + 1):
@@ -122,7 +134,44 @@ async def safe_request(method: str, url: str, *, allow_hosts: set[str] | None = 
                     body.extend(chunk)
                     if len(body) > max_bytes:
                         raise SSRFError("ответ превышает допустимый размер")
-                return httpx.Response(resp.status_code, headers=resp.headers, content=bytes(body), request=req)
+                return _decoded_response(resp, bytes(body), req)
             finally:
                 await resp.aclose()
     raise SSRFError("слишком много перенаправлений")
+
+
+def check_proxy(proxy: str, allow_hosts: set[str], resolver: Resolver | None = None) -> None:
+    """The proxy host follows the same rule as any target: public, or explicitly allowed."""
+    parts = urlsplit(proxy)
+    if parts.scheme not in ("http", "https", "socks5", "socks5h"):
+        raise SSRFError("протокол прокси не поддерживается")
+    host = parts.hostname or ""
+    port = parts.port or (1080 if parts.scheme.startswith("socks") else 80)
+    check_url(f"http://{host}:{port}/", allow_hosts, resolver)
+
+
+async def _via_proxy(method: str, url: str, proxy: str, allow: set[str], *, headers: dict | None, content: bytes | None,
+                     json: object, data: dict | None, files: dict | None, timeout: float,
+                     connect_timeout: float | None, max_bytes: int, resolver: Resolver | None,
+                     verify: bool) -> httpx.Response:
+    """Through a proxy the name is resolved by the proxy, so the IP cannot be pinned: both the target and the proxy are
+    checked by policy instead, and redirects are not followed."""
+    check_url(url, allow, resolver)
+    check_proxy(proxy, allow, resolver)
+    t = httpx.Timeout(timeout, connect=connect_timeout or timeout)
+    try:
+        client = httpx.AsyncClient(proxy=proxy, timeout=t, follow_redirects=False, verify=verify, trust_env=False)
+    except (ValueError, ImportError) as exc:  # unknown proxy scheme / socks support missing
+        raise SSRFError(f"прокси не поддерживается: {type(exc).__name__}") from exc
+    async with client:
+        req = client.build_request(method, url, headers=headers, content=content, json=json, data=data, files=files)
+        resp = await client.send(req, stream=True)
+        try:
+            body = bytearray()
+            async for chunk in resp.aiter_bytes():
+                body.extend(chunk)
+                if len(body) > max_bytes:
+                    raise SSRFError("ответ превышает допустимый размер")
+            return _decoded_response(resp, bytes(body), req)
+        finally:
+            await resp.aclose()

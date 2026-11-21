@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useMatch } from 'react-router-dom'
 import { useRuns, useWorkflows, type RunFilters } from '../api/hooks'
 import { GateBadge, SeverityBadge, StatusBadge } from '../components/domain'
 import { Page } from '../components/layout/AppShell'
@@ -12,7 +12,8 @@ export default function RunsPage() {
   const { t } = useTranslation()
   const lang = useLang()
   const navigate = useNavigate()
-  const [f, setF] = useState<RunFilters>({ limit: 100 })
+  const openCheck = useMatch('/c/:id')?.params.id
+  const [f, setF] = useState<RunFilters>({ limit: 100, workflow_id: openCheck })
   const runs = useRuns(f, 5000)
   const workflows = useWorkflows()
   const [picked, setPicked] = useState<string[]>([])
@@ -29,7 +30,7 @@ export default function RunsPage() {
               const rb = runs.data?.find((r) => r.id === b)?.created_at ?? ''
               return ra.localeCompare(rb)
             })
-            navigate(`/runs/compare?base=${sorted[0]}&head=${sorted[1]}`)
+            navigate({ search: `?panel=compare&base=${sorted[0]}&head=${sorted[1]}` })
           }}>{t('runs.compare')}</Button>} />
       <Card className="mb-4">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">

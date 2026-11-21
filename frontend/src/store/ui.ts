@@ -18,7 +18,7 @@ function applyTheme(t: Theme) {
   document.documentElement.dataset.theme = t
 }
 
-const initialTheme = (localStorage.getItem('aisw.theme') as Theme | null) ?? 'dark'
+const initialTheme = (localStorage.getItem('aisw.theme') as Theme | null) ?? 'light'
 applyTheme(initialTheme)
 document.documentElement.lang = (localStorage.getItem('aisw.lang') as Lang | null) ?? 'ru'
 

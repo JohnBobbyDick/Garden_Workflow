@@ -88,6 +88,15 @@ def test_linear_trend_slope_per_week_and_insufficient_data():
     assert linear_trend(pts[:2]) == {"enough_data": False, "slope_per_week": None, "points": 2}
 
 
+def test_linear_trend_needs_at_least_a_day_of_history():
+    """Runs minutes apart must not be extrapolated to «+1964 points per week»."""
+    t0 = datetime(2026, 11, 21, 14, 0, tzinfo=UTC)
+    burst = [(t0 + timedelta(minutes=m), 17 + m) for m in (0, 5, 10)]
+    assert linear_trend(burst) == {"enough_data": False, "slope_per_week": None, "points": 3}
+    day = [(t0 + timedelta(hours=h), 17 + h / 24) for h in (0, 12, 24)]
+    assert linear_trend(day)["enough_data"] is True
+
+
 def test_scanner_set_signature_ignores_order_and_non_scanners():
     g1 = {"nodes": [{"type": "scanner.sca"}, {"type": "scanner.secrets"}, {"type": "logic.merge"}]}
     g2 = {"nodes": [{"type": "scanner.secrets"}, {"type": "scanner.sca"}, {"type": "scanner.diff"}]}

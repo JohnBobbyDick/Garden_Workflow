@@ -13,7 +13,8 @@ class OllamaProvider(LLMProvider):
     def _url(self, path: str) -> str:
         return self.cfg.base_url.rstrip("/") + path
 
-    async def chat(self, messages, response_schema=None, temperature=0.2, max_tokens=2048, timeout=None):
+    async def chat(self, messages, response_schema=None, temperature=0.2, max_tokens=2048, timeout=None,
+                   validate=None):
         body: dict = {"model": self.cfg.model, "messages": messages, "stream": False,
                       "options": {"temperature": temperature, "num_predict": max_tokens}}
         if response_schema is not None:

@@ -70,6 +70,21 @@
   `APP_CORS_ORIGINS`). Compose-backend занимает :8000 — перед `npx playwright test` делать `docker compose down`.
 - Свежий клон: каталог SQLite создаёт `app.db.ensure_sqlite_dir` (и в `alembic/env.py`) — не убирать.
 - `docs/API.md` генерируется (`make api-doc`); новый эндпоинт → русская строка в `scripts/gen_api_doc.py::RU`.
+- UI = одно рабочее пространство (спека `docs/superpowers/specs/2026-11-21-workspace-redesign-design.md`):
+  - каркас `frontend/src/workspace/` (левая колонка, панели `?panel=history|templates|ci|overview|settings|compare`,
+    «Новая проверка» `?new=1`, смена источника `?source=1`);
+  - холст `frontend/src/editor/CanvasPage.tsx`, итоги запуска `frontend/src/results/`;
+  - старые страницы рендерятся в панелях через `EmbeddedContext` (`components/layout/embedded.ts`);
+  - старые адреса редиректит `workspace/routes.ts::legacyRedirect`; `/runs/:id` обязан работать.
+- Анимации выполнения — только CSS в `frontend/src/editor/neon.css`. Не анимировать CSS `transform` у SVG-групп
+  React Flow (`.react-flow__edge-textwrapper`): это сбивает позицию подписи.
+- Внешние LLM: пул ключей, прокси и моделей в `app/ai/providers/base.py::_rotate`, провайдер `gemini`. Окружение
+  (`LLM_ENABLED`, `GEMINI_*`) задаёт провайдер платформы по умолчанию. `tests/conftest.py` принудительно ставит
+  `LLM_ENABLED=false`.
+- E2E: ноду из палитры перетаскивать через поиск «Найти блок…»; перенос ноды на холсте — `page.mouse` со `steps`.
+  В headless-браузере здесь `requestAnimationFrame` на паузе — FPS так не измерить.
+- Windows: подпроцесс в тестах — `sys.executable` (не `python3`, это заглушка Store) и окружение родителя
+  (без `SYSTEMROOT` не инициализируется SSL).
 
 ## Процесс
 Работа по фазам из `todo.md` с гейтами (тесты зелёные + ручная проверка на запущенном стеке), TDD (тест → красный →
