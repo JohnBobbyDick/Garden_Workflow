@@ -79,7 +79,7 @@ def test_put_and_get_pool_settings_roundtrip(client, alice, nvidia_server):
     r = client.put("/api/settings/ai", json={
         "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia",
         "model": NEMOTRON_LIGHTNING, "credential_id": k1,
-        "credential_ids": [k2], "proxy_credential_ids": [px], 
+        "credential_ids": [k2], "proxy_credential_ids": [px],
         "proxy_scheme": "socks5", "proxy_port": "1080", "max_retries": 4, "allow_local": True}, headers=alice.headers)
     assert r.status_code == 200, r.text
     got = client.get("/api/settings/ai", headers=alice.headers).json()
@@ -89,10 +89,22 @@ def test_put_and_get_pool_settings_roundtrip(client, alice, nvidia_server):
     assert KEY1 not in r.text + json.dumps(got) and "Pr0xyCanary" not in r.text + json.dumps(got)
 
 
+def test_single_additional_key_authenticates_connection(client, alice, nvidia_server):
+    script, _ = nvidia_server
+    key = cred(client, alice, "additional", "llm_api_key", KEY2)
+    saved = client.put("/api/settings/ai", headers=alice.headers, json={
+        "enabled": True, "provider": "nvidia", "credential_ids": [key]})
+    assert saved.status_code == 200
+    script.reply({"ok": True})
+    result = client.post("/api/settings/ai/test", headers=alice.headers, json={})
+    assert result.json()["ok"]
+    assert script.requests[-1]["headers"].get("Authorization") == f"Bearer {KEY2}"
+
+
 def test_put_rejects_foreign_or_wrong_kind_proxy(client, alice, nvidia_server):
     k = cred(client, alice, "k", "llm_api_key", KEY1)
     r = client.put("/api/settings/ai", json={
-        "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia", 
+        "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia",
         "model": NEMOTRON_LIGHTNING, "credential_id": k, "proxy_credential_ids": [k]}, headers=alice.headers)
     assert r.status_code == 400 and "прокси" in r.text
 
@@ -101,7 +113,7 @@ def test_pool_config_built_from_vault(client, alice, db, nvidia_server):
     k1, k2 = cred(client, alice, "k1", "llm_api_key", KEY1), cred(client, alice, "k2", "llm_api_key", KEY2)
     px = cred(client, alice, "proxy", "proxy", f"203.0.113.10:user:{PROXY_PASSWORD}")
     client.put("/api/settings/ai", json={
-        "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia", 
+        "workspace_id": alice.workspace_id, "enabled": True, "provider": "nvidia",
         "model": NEMOTRON_LIGHTNING, "credential_id": k1, "credential_ids": [k2], "proxy_credential_ids": [px],
         "proxy_scheme": "http", "proxy_port": "3128", "max_retries": 3}, headers=alice.headers)
     from app.core.masking import Masker

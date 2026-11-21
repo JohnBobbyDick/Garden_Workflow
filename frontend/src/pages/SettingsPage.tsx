@@ -102,7 +102,7 @@ function DiagnoseTable({ rows }: { rows: DiagRow[] }) {
   )
 }
 
-function AiTab({ admin }: { admin: boolean }) {
+function AiTab({ admin, canTest }: { admin: boolean; canTest: boolean }) {
   const { t } = useTranslation()
   const ws = useWs()
   const creds = useCredentials()
@@ -136,12 +136,14 @@ function AiTab({ admin }: { admin: boolean }) {
   const persist = async () => {
     const { enabled, provider, base_url, model, allow_local, credential_id, credential_ids,
       proxy_credential_ids, proxy_scheme, proxy_port, max_retries, timeout, json_mode } = form
+    const sameEndpoint = provider === q.data?.provider && base_url.trim() === q.data.base_url
+    const workspaceAuth = provider === 'ollama' || !!credential_id || credential_ids.length > 0
     const saved = await api<AISettings>('/api/settings/ai', { method: 'PUT', json: {
       workspace_id: ws, enabled, provider, timeout, json_mode,
       ...(provider === 'nvidia' ? { ...NVIDIA, allow_local: false, credential_id, credential_ids, proxy_credential_ids,
         proxy_scheme, proxy_port, max_retries } : { base_url: base_url.trim(), model: model.trim(), allow_local,
-        credential_id: null, credential_ids: [], proxy_credential_ids: [], proxy_scheme: 'auto', proxy_port: null, max_retries: null }),
-      headers: {}, fallback_models: [],
+        credential_id: sameEndpoint ? credential_id : null, credential_ids: [], proxy_credential_ids: [], proxy_scheme: 'auto', proxy_port: null, max_retries: null }),
+      headers: sameEndpoint && workspaceAuth ? form.headers : {}, fallback_models: [],
     } })
     client.setQueryData(['ai-settings', ws], saved)
     setForm(saved)
@@ -153,7 +155,7 @@ function AiTab({ admin }: { admin: boolean }) {
   const test = async () => {
     setBusy('test')
     try {
-      await persist()
+      if (admin) await persist()
       const r = await api<{ ok: boolean; model?: string; latency_ms?: number; error?: string }>('/api/settings/ai/test', { method: 'POST', json: { workspace_id: ws } })
       setResult({ ok: r.ok, text: r.ok ? t('settings.testOk', { model: r.model, ms: r.latency_ms }) : t('settings.testFail', { error: r.error }) })
     } catch (e) { err(e) } finally { setBusy(null) }
@@ -207,8 +209,8 @@ function AiTab({ admin }: { admin: boolean }) {
       {diag && (diag.error ? <p role="status" className="mt-3 text-sm text-danger [overflow-wrap:anywhere]">{diag.error}</p> : <DiagnoseTable rows={diag.rows} />)}
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <Button variant="primary" icon="save" disabled={!admin || !!busy} loading={busy === 'save'} onClick={save}>{t('common.save')}</Button>
-        <Button icon="sparkles" disabled={!admin || !!busy} loading={busy === 'test'} onClick={test}>{t('settings.test')}</Button>
-        <Button icon="shield-check" disabled={!!busy} loading={busy === 'diag'} onClick={runDiag}>{t('settings.diagnose')}</Button>
+        <Button icon="sparkles" disabled={!canTest || !!busy} loading={busy === 'test'} onClick={test}>{t('settings.test')}</Button>
+        <Button icon="shield-check" disabled={!canTest || !!busy} loading={busy === 'diag'} onClick={runDiag}>{t('settings.diagnose')}</Button>
         {!admin && <span className="text-xs text-muted">{t('settings.adminOnly')}</span>}
       </div>
     </Card>
@@ -381,7 +383,8 @@ export default function SettingsPage() {
   const me = useMe()
   const [params, setParams] = useSearchParams()
   const tab = (params.get('tab') as Tab) ?? 'ai'
-  const admin = me.data?.workspaces.find((w) => w.id === ws)?.role === 'admin'
+  const role = me.data?.workspaces.find((w) => w.id === ws)?.role
+  const admin = role === 'admin'
   return (
     <Page wide>
       <PageHeader title={t('settings.title')} />
@@ -389,7 +392,7 @@ export default function SettingsPage() {
         tabs={(['ai', 'credentials', 'allowlist', 'members', 'schedules', 'projects', 'preferences'] as Tab[])
         .map((id) => ({ id, label: t(`settings.${id}`) }))} />
       <div className="mt-4">
-        {tab === 'ai' && <AiTab key={ws} admin={admin} />}
+        {tab === 'ai' && <AiTab key={ws} admin={admin} canTest={admin || role === 'developer'} />}
         {tab === 'credentials' && <CredentialsTab admin={admin} />}
         {tab === 'allowlist' && <AllowlistTab admin={admin} />}
         {tab === 'members' && <MembersTab admin={admin} />}

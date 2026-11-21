@@ -26,7 +26,8 @@ class NvidiaProvider(LLMProvider):
     async def chat(self, messages, response_schema=None, temperature=0.2, max_tokens=2048, timeout=None,
                    validate=None):
         if not self.cfg.pooled:
-            return await self._chat_once(self.cfg.model, self.cfg.api_key, None, messages, response_schema,
+            keys = self.cfg.keys
+            return await self._chat_once(self.cfg.model, keys[0] if keys else None, None, messages, response_schema,
                                          temperature, max_tokens, timeout, attempts=None)
 
         async def attempt(model, key, proxy):

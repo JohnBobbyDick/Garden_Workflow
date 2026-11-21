@@ -16,14 +16,15 @@ const initial = {
   ollama_defaults: { base_url: 'http://ollama:11434', model: 'local-model:latest' },
 }
 
-function serve(settings = initial) {
+function serve(settings = initial, role = 'admin') {
   let saved = { ...settings }
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, request) => {
+    if (url === '/api/settings/ai/test') return Response.json({ ok: true, model: saved.model, latency_ms: 1 })
     if (String(url).startsWith('/api/settings/ai')) {
       if (request?.method === 'PUT') saved = { ...saved, ...JSON.parse(String(request.body)) }
       return Response.json(saved)
     }
-    if (url === '/api/auth/me') return Response.json({ workspaces: [{ id: 'workspace', role: 'admin' }] })
+    if (url === '/api/auth/me') return Response.json({ workspaces: [{ id: 'workspace', role }] })
     if (String(url).startsWith('/api/credentials')) return Response.json([])
     throw new Error('Unknown request')
   })
@@ -37,6 +38,43 @@ function mount() {
 }
 
 afterEach(() => vi.restoreAllMocks())
+
+it.each(['developer', 'viewer'])('shows the connection controls allowed for %s', async (role) => {
+  serve(initial, role)
+  mount()
+  const test = await screen.findByRole('button', { name: 'Проверить соединение' })
+  const diag = screen.getByRole('button', { name: 'Диагностика' })
+  expect(screen.getByRole('button', { name: 'Сохранить' })).toBeDisabled()
+  if (role === 'viewer') {
+    expect(test).toBeDisabled()
+    expect(diag).toBeDisabled()
+  } else {
+    await waitFor(() => expect(test).toBeEnabled())
+    fireEvent.click(test)
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/settings/ai/test', expect.anything()))
+    expect(vi.mocked(fetch).mock.calls.some(([, req]) => req?.method === 'PUT')).toBe(false)
+  }
+})
+
+it.each(['ollama', 'nvidia'])('preserves authentication when saving the same %s connection', async (provider) => {
+  const saved = serve({ ...initial, provider,
+    ...(provider === 'ollama' ? initial.ollama_defaults : cloud) })
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Сохранить' }))
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([, req]) => req?.method === 'PUT')).toBe(true))
+  expect(saved().headers).toEqual(initial.headers)
+  expect(saved().credential_id).toBe(initial.credential_id)
+})
+
+it('clears the previous server credentials when changing the Ollama URL', async () => {
+  const saved = serve({ ...initial, ...initial.ollama_defaults, provider: 'ollama' })
+  mount()
+  fireEvent.change(await screen.findByLabelText(/URL/), { target: { value: 'http://localhost:21434' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Сохранить' }))
+  await waitFor(() => expect(saved()).toMatchObject({
+    base_url: 'http://localhost:21434', credential_id: null, headers: {},
+  }))
+})
 
 it('saves a local model and clears cloud routing and credentials when switching providers', async () => {
   const saved = serve()

@@ -9,6 +9,8 @@ const data = mkdtempSync(join(tmpdir(), 'aisw-e2e-'))
 const dbUrl = `sqlite:///${data.replace(/\\/g, '/')}/e2e.db`
 const API_PORT = 8011
 const UI_PORT = 5181
+const apiUrl = `http://127.0.0.1:${API_PORT}`
+const uiUrl = `http://127.0.0.1:${UI_PORT}`
 
 export default defineConfig({
   testDir: './e2e',
@@ -17,7 +19,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: `http://localhost:${UI_PORT}`,
+    baseURL: uiUrl,
     channel: process.env.PW_CHANNEL ?? (process.platform === 'win32' ? 'msedge' : undefined),
     viewport: { width: 1920, height: 1080 },
     trace: 'retain-on-failure',
@@ -26,18 +28,18 @@ export default defineConfig({
     {
       command: `"${py}" -m alembic upgrade head && "${py}" -m uvicorn app.main:app --port ${API_PORT}`,
       cwd: backend,
-      url: `http://localhost:${API_PORT}/api/healthz`,
+      url: `${apiUrl}/api/healthz`,
       timeout: 120_000,
       reuseExistingServer: false,
       env: { APP_DATABASE_URL: dbUrl, APP_DATA_DIR: data, APP_INPROCESS_WORKER: 'true', APP_ENV: 'dev',
-        APP_PUBLIC_URL: `http://localhost:${UI_PORT}`, APP_CORS_ORIGINS: `http://localhost:${UI_PORT}`, APP_WORKER_POLL_SECONDS: '0.3' },
+        APP_PUBLIC_URL: uiUrl, APP_CORS_ORIGINS: uiUrl, APP_WORKER_POLL_SECONDS: '0.3', LLM_ENABLED: 'false' },
     },
     {
-      command: `npx vite --port ${UI_PORT} --strictPort`,
-      url: `http://localhost:${UI_PORT}`,
+      command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${UI_PORT} --strictPort`,
+      url: uiUrl,
       timeout: 120_000,
       reuseExistingServer: false,
-      env: { VITE_API_PROXY: `http://localhost:${API_PORT}` },
+      env: { VITE_API_PROXY: apiUrl },
     },
   ],
 })
