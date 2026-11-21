@@ -84,6 +84,11 @@
   В headless-браузере здесь `requestAnimationFrame` на паузе — FPS так не измерить.
 - Windows: подпроцесс в тестах — `sys.executable` (не `python3`, это заглушка Store) и окружение родителя
   (без `SYSTEMROOT` не инициализируется SSL).
+- `path` находки — от корня **проекта**, не репозитория (замечание ментора: `src/main/…`, не `training-project/src/…`).
+  Корень определяет `app/analyzers/common/project_root.py` в ноде `source.repo`, если `subdir` пуст; найденный корень
+  пишется в `run.source.subdir` (+`subdir_detected`) — по нему же AutoFix и PR пересобирают исходники.
+  Точность (`tests/eval`) мерить и при корне = весь репозиторий: `tests/api/test_project_root_detection.py`.
+- Оценка полезности AI на всём наборе: `python -m app.ai.eval_report` (нужен ключ модели; без него — код 2).
 
 ## Процесс
 Работа по фазам из `todo.md` с гейтами (тесты зелёные + ручная проверка на запущенном стеке), TDD (тест → красный →

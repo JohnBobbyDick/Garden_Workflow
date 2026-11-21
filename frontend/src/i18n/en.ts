@@ -116,6 +116,10 @@ const en: Shape<typeof ru> = {
     addNode: 'Add node', addAfter: 'Add a node after this one', addAfterNode: 'After “{{name}}” — the new node connects itself',
   },
   results: {
+    belowThreshold: 'Below the confidence threshold: {{n}} (not exported)',
+    belowThresholdHint: 'Shown for manual review. submission.json, report.md and report.html contain only findings with confidence from {{p}}.',
+    projectRoot: 'Project root', projectRootAuto: 'detected automatically',
+    projectRootHint: 'Finding paths are relative to this folder, as the organizers’ format requires',
     run: 'Run', waiting: 'The check is still running — findings appear when it ends.', backToList: 'All findings',
     dataHint: 'What each node passed on (data previews are in the node panel during a run).',
     compare: 'Compare', fullReport: 'Full report', tabs: 'Run results',

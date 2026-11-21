@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Finding } from '../api/types'
-import { filterFindings, runVerdict, sortFindings } from './findings'
+import { filterFindings, runVerdict, severityCounts, sortFindings, splitOfficial } from './findings'
 
 const f = (id: string, severity: Finding['severity'], category: Finding['category'], diff?: 'new' | 'existing', path = 'a.kt') =>
   ({ id, severity, category, diff_status: diff, path, line: 1, title: id } as Finding)
@@ -24,5 +24,15 @@ describe('findings in the results panel', () => {
     expect(runVerdict({ status: 'failed', gate: null, verdict: null })).toBe('fail')
     expect(runVerdict({ status: 'success', gate: null, verdict: null })).toBeNull()
     expect(runVerdict({ status: 'running', gate: null, verdict: null })).toBeNull()
+  })
+})
+
+describe('official findings = what goes into submission.json and the reports', () => {
+  it('splits by the export threshold flag and counts severities of the official part only', () => {
+    const mk = (id: string, severity: Finding['severity'], official: boolean) => ({ ...f(id, severity, 'SECRET'), official } as Finding)
+    const { official, below } = splitOfficial([mk('1', 'HIGH', true), mk('2', 'LOW', false), mk('3', 'HIGH', true), mk('4', 'MEDIUM', false)])
+    expect(official.map((x) => x.id)).toEqual(['1', '3'])
+    expect(below.map((x) => x.id)).toEqual(['2', '4'])
+    expect(severityCounts(official)).toEqual({ HIGH: 2 })
   })
 })

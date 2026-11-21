@@ -23,3 +23,15 @@ export function runVerdict(r: Pick<Run, 'status' | 'gate' | 'verdict'>): 'pass' 
   if (v) return v === 'FAIL' ? 'fail' : 'pass'
   return r.gate ?? null
 }
+
+/** What goes into submission.json, report.md and report.html (confidence ≥ the export threshold) vs. what is only
+ *  visible in the interface; both readable reports must show the same findings as the JSON. */
+export function splitOfficial(list: Finding[]): { official: Finding[]; below: Finding[] } {
+  return { official: list.filter((x) => x.official !== false), below: list.filter((x) => x.official === false) }
+}
+
+export function severityCounts(list: Finding[]): Partial<Record<Severity, number>> {
+  const out: Partial<Record<Severity, number>> = {}
+  for (const x of list) out[x.severity] = (out[x.severity] ?? 0) + 1
+  return out
+}

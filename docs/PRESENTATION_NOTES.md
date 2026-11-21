@@ -155,7 +155,9 @@ Gradle. Проверки безопасности сегодня либо руч
    детерминированный режим.
 2. **Проект** «training-project»: источник `path` →
    `/app/fixtures/organizer-training/training-project` (или git `https://github.com/TBagirov/training` — он в
-   allowlist по умолчанию).
+   allowlist по умолчанию). Если дан весь репозиторий или архив «Download ZIP», корень проекта `training-project/`
+   определяется автоматически: пути находок в отчётах — `src/main/…`, без префикса `training-project/`, как требует
+   формат организаторов. В итогах запуска видно «Корень проекта: training-project/ · определён автоматически».
 3. **Редактор:** перетащить `trigger.manual → source.repo → [secrets, sca, sast] → merge →
    if_else(severity.max >= HIGH) → ai.report → report_export + notify.webhook`; ветка `false` → `notify.webhook`.
    Webhook — `http://mock:8025/demo`. Для Telegram: `APP_TELEGRAM_API_BASE=http://mock:8025` в `.env`, любой токен.

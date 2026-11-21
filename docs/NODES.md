@@ -145,7 +145,7 @@ class Shout(BaseNode):
 | `ref` | string |  | Ветка / тег / commit |
 | `path` | string |  | Путь (внутри APP_SCAN_ROOTS) |
 | `upload_id` | string |  | Загруженный архив |
-| `subdir` | string |  | Подкаталог проекта. Корень проверки внутри репозитория, например training-project |
+| `subdir` | string |  | Подкаталог проекта. Корень проекта внутри репозитория, например training-project. Пусто — определяется автоматически по settings.gradle(.kts)/build.gradle(.kts); пути находок считаются от него |
 | `access_token` | credential |  | Токен доступа (приватный репозиторий) (ссылка на секрет хранилища) |
 
 ## Сканеры
@@ -526,9 +526,9 @@ LLM объясняет уже найденные анализаторами пр
 
 | Параметр | Тип | По умолчанию | Описание |
 |---|---|---|---|
-| `provider` |  \| openai_compat \| ollama | "" | Провайдер (пусто — из настроек workspace) |
-| `base_url` | string |  | Base URL провайдера |
-| `model` | string |  | Модель |
+| `provider` |  \| nvidia \| ollama | "" | Провайдер (пусто — из настроек workspace) |
+| `base_url` | string |  | Адрес сервера Ollama |
+| `model` | string |  | Модель Ollama |
 | `api_key` | credential |  | API-ключ провайдера (ссылка на секрет хранилища) |
 | `language` | auto \| ru \| en | "auto" | Язык отчёта. auto — язык интерфейса пользователя |
 | `generate_fix_diff` | boolean | true | Предлагать исправления (diff) |
