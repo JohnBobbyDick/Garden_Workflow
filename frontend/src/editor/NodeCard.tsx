@@ -90,7 +90,8 @@ function NodeCardImpl({ id, data, selected }: NodeProps<FlowNode>) {
       )}
       {selected && onQuickAdd && !!spec?.outputs.length && (
         <NodeToolbar position={Position.Bottom} offset={6}>
-          <button type="button" onClick={() => onQuickAdd(id)} title={t('canvas.addAfter')} aria-label={t('canvas.addAfter')}
+          <button type="button" onClick={(e) => { e.stopPropagation(); onQuickAdd(id) }}
+            title={t('canvas.addAfter')} aria-label={t('canvas.addAfter')}
             className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-fg shadow-pop hover:scale-110 transition-transform">
             <Icon name="plus" size={15} />
           </button>

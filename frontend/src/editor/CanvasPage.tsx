@@ -42,7 +42,7 @@ type Snapshot = { nodes: FlowNode[]; edges: FlowEdge[] }
 const CLIP_KEY = 'aisw.clipboard'
 
 function clean(nodes: FlowNode[]): FlowNode[] {
-  return nodes.map(({ selected: _s, dragging: _d, ...n }) => ({ ...n, data: { ...n.data, status: undefined, issues: undefined } }))
+  return nodes.map((n) => ({ ...n, selected: false, dragging: false, data: { ...n.data, status: undefined, issues: undefined } }))
 }
 
 function isTyping(e: KeyboardEvent): boolean {
@@ -393,7 +393,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
     const tgt = live.nodes[e.target]?.status
     return { ...e, className: d ? (tgt === 'running' || tgt === 'pending' ? 'edge-active' : 'edge-done') : tgt === 'skipped' ? 'edge-skipped' : '',
       label: d ? (d.count !== null && d.count !== undefined ? String(d.count) : '✓') : undefined }
-  }), [edges, live.edges, live.nodes, live.status, runMode])
+  }), [edges, live.edges, live.nodes, runMode])
 
   const selected = nodes.filter((n) => n.selected)
   const one = selected.length === 1 ? selected[0] : null
@@ -424,14 +424,14 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
           {(selected.length > 0 || !nodes.length) && <>
             <HeaderButton icon="layout" onClick={layout}>{t('canvas.layout')}</HeaderButton>
             <HeaderButton icon="plus" onClick={() => { setMobilePanel(false); setQuick((q) => (q ? null : {})) }} active={!!quick} title="Tab">{t('canvas.nodes')}</HeaderButton>
-            <HeaderButton icon="sparkles" onClick={() => {
-              if (inspectorCollapsed) {
-                if (compact) setMobilePanel(true)
-                else setInspectorCollapsed(false)
-                setAssistant(true)
-              } else setAssistant(!assistant)
-            }} active={assistant}>AI</HeaderButton>
           </>}
+          <HeaderButton icon="sparkles" onClick={() => {
+            if (inspectorCollapsed) {
+              if (compact) setMobilePanel(true)
+              else setInspectorCollapsed(false)
+              setAssistant(true)
+            } else setAssistant(!assistant)
+          }} active={assistant && !inspectorCollapsed}>AI</HeaderButton>
           <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           <OverflowMenu items={[
             { key: 'validate', icon: 'shield-check', label: t('editor.validate'), onClick: () => void validate() },

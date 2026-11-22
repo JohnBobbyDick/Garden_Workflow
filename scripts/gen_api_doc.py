@@ -20,7 +20,7 @@ TAG_TITLES = {
 }
 
 RU = {
-    "POST /api/credentials/{credential_id}/telegram-chat": "находит ID личного чата по имени в недавних сообщениях бота",
+    "POST /api/credentials/{credential_id}/telegram-chat": "находит ID публичного канала, супергруппы или недавнего личного чата по имени пользователя",
     "GET /api/healthz": "проверка живости (используется healthcheck Compose)",
     "POST /api/auth/registration-code": "отправляет на e-mail одноразовый код регистрации на 10 минут",
     "POST /api/auth/register": "проверяет одноразовый код и создаёт аккаунт с личным workspace, возвращает access/refresh",

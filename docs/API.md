@@ -64,7 +64,7 @@
 | `POST` | `/api/credentials` | сохранить секрет (AES-256-GCM) |
 | `DELETE` | `/api/credentials/{credential_id}` | удалить секрет |
 | `PUT` | `/api/credentials/{credential_id}` | заменить значение/имя |
-| `POST` | `/api/credentials/{credential_id}/telegram-chat` | находит ID личного чата по имени в недавних сообщениях бота |
+| `POST` | `/api/credentials/{credential_id}/telegram-chat` | находит ID публичного канала, супергруппы или недавнего личного чата по имени пользователя |
 
 ### Настройки (allowlist)
 

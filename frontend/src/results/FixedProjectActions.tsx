@@ -51,8 +51,12 @@ export function RunActions({ run, findings, full = false }: { run: Run; findings
           try {
             patch = await api<Autofix>(`${base}/findings/${finding.id}/autofix`, { method: 'POST', json: {} })
           } catch (e) {
-            if (!(e instanceof ApiError) || !['ai_not_configured', 'finding_not_reproduced', 'autofix_not_applicable'].includes(e.code)) throw e
-            if (e.code === 'ai_not_configured') missingProvider = true
+            if (!(e instanceof ApiError)) throw e
+            if (finding.autofix === 'llm' && ['ai_not_configured', 'provider_unavailable'].includes(e.code)) {
+              missingProvider = true
+            } else if (!['finding_not_reproduced', 'autofix_not_applicable'].includes(e.code)) {
+              throw e
+            }
             firstError ||= e.message
             continue
           }
