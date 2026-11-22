@@ -40,4 +40,21 @@ describe('useAutosave: debounced save, flushed before a run', () => {
     await act(async () => { expect(await result.current.flush()).toBe(true) })
     expect(save).not.toHaveBeenCalled()
   })
+
+  it('shares an in-flight save and flushes the latest edit before asking AI', async () => {
+    let complete!: (ok: boolean) => void
+    const save = vi.fn<() => Promise<boolean>>()
+      .mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+      .mockResolvedValue(true)
+    const { result, rerender } = renderHook(({ rev }) => useAutosave(save, true, 800, rev), { initialProps: { rev: 1 } })
+    await act(async () => { vi.advanceTimersByTime(800) })
+    rerender({ rev: 2 })
+    let flush!: Promise<boolean>
+    act(() => { flush = result.current.flush() })
+    expect(save).toHaveBeenCalledTimes(1)
+    await act(async () => { complete(true); expect(await flush).toBe(true) })
+    expect(save).toHaveBeenCalledTimes(2)
+    await act(async () => { vi.advanceTimersByTime(800) })
+    expect(save).toHaveBeenCalledTimes(2)
+  })
 })

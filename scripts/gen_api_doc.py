@@ -67,6 +67,7 @@ RU = {
     "POST /api/settings/ai/diagnose": "диагностика LLM: по запросу через каждый прокси (для auto — по каждому протоколу) и напрямую; OK/FAIL, время, причина без секретов",
     "POST /api/ai/workflows/generate": "сценарий из текста (LLM строит граф, граф валидируется)",
     "GET /api/ai/workflows/{workflow_id}/chat": "история чат-правок",
+    "GET /api/ai/workflows/{workflow_id}/chat/{msg_id}": "предпросмотр сохранённого предложения и проверка его актуальности",
     "POST /api/ai/workflows/{workflow_id}/chat": "предложить правку графа сообщением",
     "POST /api/ai/workflows/{workflow_id}/chat/{msg_id}/apply": "применить предложенную правку",
     "POST /api/ai/workflows/{workflow_id}/chat/{msg_id}/reject": "отклонить правку",

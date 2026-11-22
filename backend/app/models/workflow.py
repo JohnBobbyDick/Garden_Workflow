@@ -80,6 +80,9 @@ class WorkflowChatMessage(IdMixin, CreatedMixin, Base):
     status: Mapped[str] = mapped_column(String(16), default="proposed")  # proposed | applied | rejected | failed
     base_version: Mapped[int | None] = mapped_column(nullable=True)
     result_graph: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    user_message_id: Mapped[str | None] = mapped_column(
+        ForeignKey("workflow_chat_messages.id", ondelete="SET NULL", name="fk_chat_request"), nullable=True)
+    proposal_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class CustomNode(IdMixin, Base):

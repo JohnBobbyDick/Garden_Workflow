@@ -180,16 +180,35 @@ def blocking_issues(graph: dict, registry: NodeRegistry, credential_exists: Call
     return issues, blocking
 
 
-async def _ask(provider: LLMProvider, messages: list[dict], schema: dict, usage: dict, masker: Masker) -> tuple[dict, str]:
+def _register_model_credentials(data: dict, registry: NodeRegistry, credential_exists: Callable[[str], bool],
+                                masker: Masker) -> None:
+    fields = {name for cls in registry.all() for name, prop in cls.config_schema.get("properties", {}).items()
+              if prop.get("credential_ref")}
+    for collection in ("nodes", "operations"):
+        entries = data.get(collection)
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            config = entry.get("config") if isinstance(entry, dict) else None
+            if isinstance(config, dict):
+                for key in fields.intersection(config):
+                    value = config[key]
+                    if isinstance(value, str) and value and not credential_exists(value):
+                        masker.register(value)
+
+
+async def _ask(provider: LLMProvider, messages: list[dict], schema: dict, usage: dict, masker: Masker,
+               registry: NodeRegistry, credential_exists: Callable[[str], bool]) -> dict:
     res = await provider.chat([{"role": m["role"], "content": masker.mask(m["content"])} for m in messages],
                               response_schema=schema, temperature=0.1, max_tokens=4096)
     for k, v in res.usage.items():
         usage[k] = usage.get(k, 0) + v
     data = parse_json(res.content)
+    _register_model_credentials(data, registry, credential_exists, masker)
     errs = schema_errors(data, schema)
     if errs:
-        raise AIFormatError("; ".join(errs[:5]))
-    return data, res.content
+        raise AIFormatError(masker.mask("; ".join(errs[:5])))
+    return data
 
 
 async def generate_graph(provider: LLMProvider, prompt: str, registry: NodeRegistry,
@@ -203,7 +222,7 @@ async def generate_graph(provider: LLMProvider, prompt: str, registry: NodeRegis
     needs: list[dict] = []
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            raw, text = await _ask(provider, messages, GRAPH_SCHEMA, usage, masker)
+            raw = await _ask(provider, messages, GRAPH_SCHEMA, usage, masker, registry, credential_exists)
         except AIFormatError as exc:
             issues = [{"code": "invalid_json", "message": str(exc), "node_id": None, "field": None}]
             messages += [{"role": "user", "content": f"Ответ не прошёл проверку формата: {exc}. Верни JSON {{nodes, edges}}."}]
@@ -213,7 +232,7 @@ async def generate_graph(provider: LLMProvider, prompt: str, registry: NodeRegis
         issues, blocking = blocking_issues(graph, registry, credential_exists, needs)
         if not blocking:
             return GenResult(graph, issues, needs, attempt, True, usage)
-        messages += [{"role": "assistant", "content": text[:6000]},
+        messages += [{"role": "assistant", "content": json.dumps(masker.mask_obj(raw), ensure_ascii=False)[:6000]},
                      {"role": "user", "content": "Граф не прошёл проверку валидатора, исправь и верни весь граф целиком:\n"
                                                  + "\n".join(f"- [{i['code']}] node={i['node_id']}: {i['message']}"
                                                              for i in blocking)}]
@@ -264,7 +283,8 @@ def apply_operations(graph: dict, ops: list[dict], registry: NodeRegistry) -> di
             g["edges"].append(e)
         elif kind == "disconnect":
             g["edges"] = [e for e in g["edges"] if not (e["source"] == op.get("source") and e["target"] == op.get("target")
-                                                        and (not op.get("source_port") or e["source_port"] == op["source_port"]))]
+                                                        and (not op.get("source_port") or e["source_port"] == op["source_port"])
+                                                        and (not op.get("target_port") or e["target_port"] == op["target_port"]))]
         elif kind == "set_schedule":
             trig = next((n for n in g["nodes"] if n["type"] == "trigger.schedule"), None) or \
                 next((n for n in g["nodes"] if registry.get(n["type"]) and registry.get(n["type"]).category == "trigger"), None)
@@ -290,20 +310,30 @@ def graph_diff(old: dict, new: dict) -> dict:
 
 
 async def propose_operations(provider: LLMProvider, graph: dict, message: str, registry: NodeRegistry,
-                             credential_exists: Callable[[str], bool], masker: Masker) -> tuple[GenResult, list, str]:
+                             credential_exists: Callable[[str], bool], masker: Masker, *,
+                             selected_node_id: str | None = None, history: list[dict] | None = None
+                             ) -> tuple[GenResult, list, str]:
     usage: dict[str, int] = {}
+    context = {
+        "nodes": [{k: n[k] for k in ("id", "type", "config", "label", "disabled") if k in n}
+                  for n in graph.get("nodes", [])],
+        "edges": graph.get("edges", []),
+        "selected_node_id": selected_node_id,
+        "history": [{"role": m["role"], "status": m["status"], "content": masker.mask(m["content"])[:1200]}
+                    for m in (history or [])[-6:]],
+    }
     messages = [{"role": "system", "content": system_prompt(
                     registry, "Пользователь редактирует существующий сценарий. Верни JSON {explanation, operations}: "
-                              "список операций add_node, update_node, remove_node, connect, disconnect, set_schedule.")},
+                              "список операций add_node, update_node, remove_node, connect, disconnect, set_schedule. "
+                              "«Эта нода» означает selected_node_id. История помогает понять уточнения. "
+                              "Состояние графа определяют nodes и edges. Выполни только последний запрос.")},
                 {"role": "user", "content": "Текущий граф (JSON):\n"
-                                            + json.dumps({"nodes": [{k: n[k] for k in ("id", "type", "config")}
-                                                                    for n in graph.get("nodes", [])],
-                                                          "edges": graph.get("edges", [])}, ensure_ascii=False)
+                                            + json.dumps(context, ensure_ascii=False)
                                             + f"\n\nЗапрос: {message}"}]
     for attempt in range(1, MAX_ATTEMPTS + 1):
         data = None
         try:
-            data, _ = await _ask(provider, messages, OPS_SCHEMA, usage, masker)
+            data = await _ask(provider, messages, OPS_SCHEMA, usage, masker, registry, credential_exists)
             ops = data["operations"]
             candidate = apply_operations(graph, ops, registry)
             needs = strip_secrets(candidate, registry, credential_exists)
@@ -315,10 +345,10 @@ async def propose_operations(provider: LLMProvider, graph: dict, message: str, r
         except (AIFormatError, OpError) as exc:
             blocking = [{"code": "invalid_json" if isinstance(exc, AIFormatError) else "bad_operation",
                          "message": masker.mask(str(exc)), "node_id": None, "field": None}]
-        feedback = json.dumps(blocking, ensure_ascii=False)
+        feedback = json.dumps(masker.mask_obj(blocking), ensure_ascii=False)
         if attempt < MAX_ATTEMPTS:
             if data is not None:
-                messages.append({"role": "assistant", "content": json.dumps(data, ensure_ascii=False)[:6000]})
+                messages.append({"role": "assistant", "content": json.dumps(masker.mask_obj(data), ensure_ascii=False)[:6000]})
             messages.append({"role": "user", "content": "Исправь ошибки и верни весь список операций для исходного графа.\n"
                                                          + feedback[:3000]})
     return (GenResult(graph, blocking, [], MAX_ATTEMPTS, False, usage), [],

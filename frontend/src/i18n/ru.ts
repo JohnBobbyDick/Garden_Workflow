@@ -66,7 +66,12 @@ const ru = {
     project: 'Проект', import: 'Импорт JSON',
   },
   editor: {
-    findTelegramChat: 'Найти личный чат',
+    findTelegramChat: 'Найти Chat ID',
+    telegramLookup: {
+      telegram_chat_missing: 'Чат не найден. Для личного чата отправьте боту /start и сразу повторите поиск. Также можно ввести числовой ID.',
+      telegram_updates_busy: 'У бота активен webhook или другой получатель обновлений. Введите числовой ID личного чата.',
+      failed: 'Поиск не удался. Проверьте токен и доступ бота к чату или введите ID вручную.',
+    },
     palette: 'Блоки', searchNodes: 'Найти блок…', save: 'Сохранить', saved: 'Сохранено', unsaved: 'Есть несохранённые изменения',
     draftRestored: 'Восстановлен черновик', validate: 'Проверить граф', valid: 'Граф корректен', invalid: 'Найдено ошибок: {{n}}',
     run: 'Запустить', running: 'Выполняется…', undo: 'Отменить', redo: 'Повторить', layout: 'Авто-раскладка',
@@ -257,7 +262,11 @@ const ru = {
     cliHint: 'CLI: python aisw_ci.py --url $AISW_URL --workflow <id> (код возврата 1 при Critical)', revoked: 'отозван',
   },
   assistant: {
-    refreshProposal: 'Граф изменился. Готовим новое предложение.',
+    refreshProposal: 'Подготовить новый запрос', stale: 'Граф изменился. Для этого предложения нужна новая версия.',
+    nodeSettings: 'Параметры нод',
+    review: 'Посмотреть изменения', hideProposal: 'Свернуть изменения', refreshDraft: 'Запрос для текущей версии графа',
+    target: 'Выбранная нода · {{node}}', clearTarget: 'Убрать привязку',
+    status: { proposed: 'На рассмотрении', applied: 'Принято', rejected: 'Отклонено', failed: 'Ошибка проверки' },
     title: 'AI-ассистент', generate: 'Создать с AI', prompt: 'Опишите сценарий своими словами', examples: 'Примеры',
     generating: 'Генерирую…', needsInput: 'Требуют заполнения: {{n}}', failed: 'Не удалось построить корректный граф',
     chatPlaceholder: 'Например: «добавь отправку на email» или «запускай только по будням»', send: 'Отправить',

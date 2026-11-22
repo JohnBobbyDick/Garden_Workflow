@@ -114,20 +114,45 @@ async def telegram_chat(credential_id: str, body: TelegramChatLookup, user: m.Us
     token = get_box().decrypt(credential.ciphertext)
     global_masker.register(token)
     settings = get_settings()
-    try:
-        response = await safe_request("POST", f"{settings.telegram_api_base.rstrip('/')}/bot{token}/getUpdates",
-                                      allow_hosts=settings.ssrf_allowed(), json={"limit": 100, "timeout": 0},
-                                      timeout=10, max_redirects=0)
-        payload = response.json()
-    except (ValueError, httpx.HTTPError, SSRFError):
-        raise ApiError(502, "telegram_unavailable", "Не удалось получить сообщения Telegram.") from None
-    if response.status_code == 409:
-        raise ApiError(409, "telegram_updates_busy", "Другой обработчик получает сообщения бота. Введите ID чата.")
-    if not isinstance(payload, dict) or not payload.get("ok") or not isinstance(payload.get("result"), list):
-        raise ApiError(502, "telegram_lookup_failed", "Telegram отклонил запрос. Проверьте токен бота.")
-    username = body.username.lstrip("@").lower()
-    for event in reversed(payload["result"]):
-        chat = event.get("message", {}).get("chat", {})
-        if chat.get("type") == "private" and str(chat.get("username", "")).lower() == username and chat.get("id"):
+    base = f"{settings.telegram_api_base.rstrip('/')}/bot{token}"
+    failed = ApiError(502, "telegram_lookup_failed", "Не удалось получить данные чата. Проверьте токен и доступ бота.")
+
+    async def lookup(method: str, params: dict) -> dict | list | None:
+        try:
+            response = await safe_request("POST", f"{base}/{method}", allow_hosts=settings.ssrf_allowed(),
+                                          json=params, timeout=10, max_redirects=0)
+            if method == "getUpdates" and response.status_code == 409:
+                raise ApiError(409, "telegram_updates_busy",
+                               "Активен webhook или другой получатель обновлений. Введите числовой ID чата.")
+            payload = response.json()
+        except (ValueError, httpx.HTTPError, SSRFError):
+            raise ApiError(502, "telegram_unavailable", "Не удалось получить ответ Telegram.") from None
+        if not isinstance(payload, dict):
+            raise failed
+        if method == "getChat" and response.status_code == 400 and payload.get("ok") is False:
+            return None  # A personal username cannot be resolved by getChat.
+        if response.status_code != 200 or payload.get("ok") is not True or not isinstance(payload.get("result"), (dict, list)):
+            raise failed
+        return payload["result"]
+
+    username = body.username.lstrip("@")
+    public = await lookup("getChat", {"chat_id": f"@{username}"})
+    if public is not None:
+        if (isinstance(public, dict) and public.get("type") in ("channel", "supergroup")
+                and type(public.get("id")) is int and public["id"] < 0):
+            return {"chat_id": str(public["id"])}
+        raise failed
+    # Reading without an offset leaves the bot's updates unacknowledged.
+    updates = await lookup("getUpdates", {"limit": 100, "timeout": 0})
+    if not isinstance(updates, list):
+        raise failed
+    for event in reversed(updates):
+        if not isinstance(event, dict):
+            continue
+        message = event.get("message") or event.get("edited_message")
+        chat = message.get("chat") if isinstance(message, dict) else None
+        if (isinstance(chat, dict) and chat.get("type") == "private" and isinstance(chat.get("username"), str)
+                and chat["username"].lower() == username.lower() and type(chat.get("id")) is int and chat["id"] > 0):
             return {"chat_id": str(chat["id"])}
-    raise ApiError(404, "telegram_chat_missing", "Личный чат не найден. Отправьте боту /start и повторите поиск.")
+    raise ApiError(404, "telegram_chat_missing",
+                   "Чат не найден. Для личного чата отправьте боту /start и повторите поиск или введите числовой ID.")

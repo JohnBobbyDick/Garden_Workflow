@@ -70,7 +70,12 @@ const en: Shape<typeof ru> = {
     project: 'Project', import: 'Import JSON',
   },
   editor: {
-    findTelegramChat: 'Find private chat',
+    findTelegramChat: 'Find chat ID',
+    telegramLookup: {
+      telegram_chat_missing: 'Chat not found. For a private chat, send /start to the bot and try again immediately. You can also enter a numeric ID.',
+      telegram_updates_busy: 'The bot has an active webhook or another update consumer. Enter the numeric ID of the private chat.',
+      failed: 'Lookup failed. Check the bot token and its access to this chat, or enter the ID manually.',
+    },
     palette: 'Blocks', searchNodes: 'Find a block…', save: 'Save', saved: 'Saved', unsaved: 'Unsaved changes',
     draftRestored: 'Draft restored', validate: 'Validate graph', valid: 'Graph is valid', invalid: 'Errors found: {{n}}',
     run: 'Run', running: 'Running…', undo: 'Undo', redo: 'Redo', layout: 'Auto layout',
@@ -261,7 +266,11 @@ const en: Shape<typeof ru> = {
     cliHint: 'CLI: python aisw_ci.py --url $AISW_URL --workflow <id> (exit code 1 on Critical)', revoked: 'revoked',
   },
   assistant: {
-    refreshProposal: 'The graph changed. Preparing a new proposal.',
+    refreshProposal: 'Prepare a new request', stale: 'The graph changed. This proposal needs a new version.',
+    nodeSettings: 'Node settings',
+    review: 'Review changes', hideProposal: 'Hide changes', refreshDraft: 'Request for the current graph',
+    target: 'Selected node · {{node}}', clearTarget: 'Remove target',
+    status: { proposed: 'Awaiting review', applied: 'Applied', rejected: 'Rejected', failed: 'Validation failed' },
     title: 'AI assistant', generate: 'Create with AI', prompt: 'Describe the workflow in your own words', examples: 'Examples',
     generating: 'Generating…', needsInput: 'Need your input: {{n}}', failed: 'Could not build a valid graph',
     chatPlaceholder: 'E.g. "add an e-mail notification" or "run only on weekdays"', send: 'Send',

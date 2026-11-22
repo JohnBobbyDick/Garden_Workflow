@@ -54,7 +54,7 @@ export function ConfigPanel({ node, spec, issues, onChange, readOnly }: {
           onChange={(e) => onChange({ label: e.target.value })} />
       </div>
       <div className="mt-3">
-        {spec && <SchemaForm schema={spec.config_schema} value={node.data.config} lang={lang} serverErrors={serverErrors} readOnly={readOnly}
+        {spec && <SchemaForm key={node.id} schema={spec.config_schema} value={node.data.config} lang={lang} serverErrors={serverErrors} readOnly={readOnly}
           onChange={(config) => onChange({ config })} />}
       </div>
       {spec && <PortList spec={spec} />}

@@ -125,8 +125,9 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
 
   const save = useCallback(async () => {
     try {
-      await api(`/api/workflows/${workflow.id}`, { method: 'PUT', json: { graph: flowToGraph(state.current.nodes, state.current.edges) } })
-      setDirty(false)
+      const graph = flowToGraph(state.current.nodes, state.current.edges)
+      await api(`/api/workflows/${workflow.id}`, { method: 'PUT', json: { graph } })
+      if (JSON.stringify(graph) === JSON.stringify(flowToGraph(state.current.nodes, state.current.edges))) setDirty(false)
       void invalidate('workflow', 'workflows')
       return true
     } catch (e) {
@@ -516,7 +517,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
             <aside className="w-[380px] max-w-full shrink-0 max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-10 max-lg:shadow-pop border-l border-border bg-surface" aria-label={t('canvas.inspector')}>
               {assistant ? (
                 <div className="h-full overflow-y-auto">
-                  <AiAssistant key={workflow.id} workflowId={workflow.id} dirty={dirty} onSaveFirst={autosave.flush} onApplied={(g) => {
+                  <AiAssistant key={workflow.id} workflowId={workflow.id} selectedNodeId={one?.id} dirty={dirty} onSaveFirst={autosave.flush} onApplied={(g) => {
                     const flow = graphToCanvas(g)
                     record()
                     setNodes(flow.nodes)
