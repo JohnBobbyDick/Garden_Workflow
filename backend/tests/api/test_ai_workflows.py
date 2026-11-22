@@ -252,3 +252,175 @@ def test_chat_retries_bad_operations_then_guards_against_stale_apply(client, ali
     stale = client.post(f"{chat}/{proposal['id']}/apply", headers=alice.headers)
     assert stale.status_code == 409 and stale.json()["error"]["code"] == "proposal_stale"
     assert client.get(url, headers=alice.headers).json()["graph"]["nodes"][0]["label"] == "Ручное изменение"
+
+
+def test_restored_proposal_matches_preview_and_is_workspace_scoped(client, alice, bob, llm):
+    script, hp = llm
+    configure(client, alice, hp)
+    script.reply(PDF_GRAPH)
+    wid = gen(client, alice, PDF_PROMPT, create=True).json()["workflow_id"]
+    chat = f"/api/ai/workflows/{wid}/chat"
+    script.reply({"explanation": "Добавляю метку", "operations": [
+        {"op": "update_node", "node_id": "mail", "label": "Почта команды"}]})
+    proposal = client.post(chat, headers=alice.headers, json={"message": "Переименуй почту"}).json()
+    detail = f"{chat}/{proposal['id']}"
+    recovered = client.get(detail, headers=alice.headers)
+    assert recovered.status_code == 200
+    assert recovered.json() == proposal
+    assert proposal["original_message"] == "Переименуй почту" and not proposal["stale"]
+    assert client.get(detail, headers=bob.headers).status_code == 404
+    assert client.get(f"{chat}/{proposal['user_message_id']}", headers=alice.headers).status_code == 404
+    graph = client.get(f"/api/workflows/{wid}", headers=alice.headers).json()["graph"]
+    graph["nodes"][0]["label"] = "Ручное изменение"
+    client.put(f"/api/workflows/{wid}", headers=alice.headers, json={"graph": graph}).raise_for_status()
+    recovered = client.get(detail, headers=alice.headers).json()
+    assert recovered["stale"] and recovered["status"] == "proposed" and recovered["diff"] == proposal["diff"]
+    assert len(script.requests) == 2
+
+
+def test_apply_reject_have_one_winner_and_keep_exact_message_pair(client, db, alice, llm):
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import timedelta
+    from threading import Barrier
+
+    from app import models as m
+
+    script, hp = llm
+    configure(client, alice, hp)
+    script.reply(PDF_GRAPH)
+    wid = gen(client, alice, PDF_PROMPT, create=True).json()["workflow_id"]
+    chat = f"/api/ai/workflows/{wid}/chat"
+    proposals = []
+    for label in ("А", "Б"):
+        script.reply({"operations": [{"op": "update_node", "node_id": "mail", "label": label}]})
+        proposals.append(client.post(chat, headers=alice.headers, json={"message": label}).json())
+    a, b = proposals
+    with db.session() as s:
+        # Simulate interleaved timestamps. Identity must determine the authoring message.
+        bot = s.get(m.WorkflowChatMessage, a["id"])
+        s.get(m.WorkflowChatMessage, b["user_message_id"]).created_at = bot.created_at - timedelta(microseconds=1)
+        s.commit()
+    gate = Barrier(2)
+
+    def resolve(action):
+        gate.wait(timeout=5)
+        return client.post(f"{chat}/{a['id']}/{action}", headers=alice.headers).status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        applied, rejected = pool.map(resolve, ("apply", "reject"))
+    assert sorted((applied, rejected)) == [200, 409]
+    state = "applied" if applied == 200 else "rejected"
+    history = {msg["id"]: msg["status"] for msg in client.get(chat, headers=alice.headers).json()}
+    assert history[a["id"]] == history[a["user_message_id"]] == state
+    assert history[b["id"]] == history[b["user_message_id"]] == "proposed"
+    wf = client.get(f"/api/workflows/{wid}", headers=alice.headers).json()
+    assert wf["version"] == (2 if applied == 200 else 1)
+
+
+def test_generation_and_chat_mask_user_and_model_text_on_storage_and_retrieval(client, db, alice, llm):
+    from copy import deepcopy
+
+    from app import models as m
+
+    secret = "sk-" + "canary" * 6
+    prompt = f"Создай проверку {secret}"
+    script, hp = llm
+    configure(client, alice, hp)
+    graph = deepcopy(PDF_GRAPH)
+    graph["nodes"][0]["label"] = prompt
+    script.reply(graph)
+    wf = gen(client, alice, prompt, create=True, name=prompt).json()
+    wid = wf["workflow_id"]
+    assert secret not in json.dumps(wf)
+    chat = f"/api/ai/workflows/{wid}/chat"
+    script.reply({"explanation": prompt, "operations": [{"op": "update_node", "node_id": "mail", "label": prompt}]})
+    response = client.post(chat, headers=alice.headers, json={"message": prompt})
+    assert secret not in response.text
+    for path in (f"/api/workflows/{wid}", chat, f"{chat}/{response.json()['id']}"):
+        assert secret not in client.get(path, headers=alice.headers).text
+    with db.session() as s:
+        stored = s.get(m.Workflow, wid)
+        assert secret not in stored.name + stored.description + json.dumps(stored.graph)
+    assert secret not in json.dumps(script.requests)
+
+
+def test_legacy_proposal_recovery_links_only_an_unambiguous_request(client, db, alice, llm):
+    from app import models as m
+
+    script, hp = llm
+    configure(client, alice, hp)
+    script.reply(PDF_GRAPH)
+    wid = gen(client, alice, PDF_PROMPT, create=True).json()["workflow_id"]
+    chat = f"/api/ai/workflows/{wid}/chat"
+    message = "Переименуй почту"
+    script.reply({"operations": [{"op": "update_node", "node_id": "mail", "label": "Рассылка"}]})
+    prop = client.post(chat, headers=alice.headers, json={"message": message}).json()
+    with db.session() as s:
+        legacy = s.get(m.WorkflowChatMessage, prop["id"])
+        legacy.proposal_details = legacy.user_message_id = None
+        s.commit()
+    path = f"{chat}/{prop['id']}"
+    preview = client.get(path, headers=alice.headers).json()
+    assert preview["original_message"] == message and preview["diff"] == prop["diff"]
+    assert preview["needs_input"] == prop["needs_input"]
+    assert client.post(f"{path}/apply", headers=alice.headers).status_code == 200
+    assert client.post(f"{path}/reject", headers=alice.headers).status_code == 409
+    applied = client.get(path, headers=alice.headers).json()
+    assert applied["status"] == "applied" and applied["user_message_id"] == prop["user_message_id"]
+
+
+def test_selected_node_roundtrips_and_deleted_selection_never_calls_llm(client, alice, llm):
+    script, hp = llm
+    configure(client, alice, hp)
+    script.reply(PDF_GRAPH)
+    wid = gen(client, alice, PDF_PROMPT, create=True).json()["workflow_id"]
+    chat = f"/api/ai/workflows/{wid}/chat"
+    script.reply({"operations": [{"op": "update_node", "node_id": "mail", "label": "Письмо"}]})
+    prop = client.post(chat, headers=alice.headers, json={"message": "Переименуй", "selected_node_id": "mail"}).json()
+    assert client.get(f"{chat}/{prop['id']}", headers=alice.headers).json()["selected_node_id"] == "mail"
+    bad = client.post(chat, headers=alice.headers, json={"message": "Переименуй", "selected_node_id": "missing"})
+    assert bad.status_code == 422 and len(script.requests) == 2
+
+
+def test_credential_literal_in_model_operation_is_masked_in_entire_turn(client, db, alice, llm):
+    from app import models as m
+
+    secret = "opaque-unregistered-value-from-model"
+    script, hp = llm
+    configure(client, alice, hp)
+    script.reply(TZ_GRAPH)
+    wid = gen(client, alice, TZ_PROMPT, create=True).json()["workflow_id"]
+    chat = f"/api/ai/workflows/{wid}/chat"
+    script.reply({"explanation": f"Значение {secret}", "operations": [
+        {"op": "update_node", "node_id": "tg", "label": f"Телеграм {secret}", "config": {"bot_token": secret}}]})
+    result = client.post(chat, headers=alice.headers, json={"message": "Переименуй Telegram"})
+    assert result.json()["valid"] and secret not in result.text
+    with db.session() as s:
+        msg = s.get(m.WorkflowChatMessage, result.json()["id"])
+        assert secret not in msg.content + json.dumps([msg.operations, msg.result_graph, msg.proposal_details])
+
+
+def test_ambiguous_legacy_proposal_does_not_resolve_another_user_turn(client, db, alice, llm):
+    from app import models as m
+
+    script, hp = llm
+    configure(client, alice, hp)
+    script.reply(PDF_GRAPH)
+    wid = gen(client, alice, PDF_PROMPT, create=True).json()["workflow_id"]
+    chat = f"/api/ai/workflows/{wid}/chat"
+    script.reply({"operations": [{"op": "update_node", "node_id": "mail", "label": "Команда"}]})
+    proposal = client.post(chat, headers=alice.headers, json={"message": "Переименуй"}).json()
+    with db.session() as s:
+        bot = s.get(m.WorkflowChatMessage, proposal["id"])
+        user = s.get(m.WorkflowChatMessage, proposal["user_message_id"])
+        bot.user_message_id = bot.proposal_details = None
+        other = m.WorkflowChatMessage(workflow_id=wid, role="user", content="Другая правка",
+                                      status="proposed", created_at=user.created_at)
+        s.add(other)
+        s.commit()
+    path = f"{chat}/{proposal['id']}"
+    assert client.get(path, headers=alice.headers).json()["original_message"] is None
+    assert client.post(f"{path}/reject", headers=alice.headers).status_code == 200
+    history = {msg["id"]: msg["status"] for msg in client.get(chat, headers=alice.headers).json()}
+    assert history[proposal["id"]] == "rejected"
+    assert history[proposal["user_message_id"]] == history[other.id] == "proposed"

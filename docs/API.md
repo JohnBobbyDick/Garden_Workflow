@@ -64,7 +64,7 @@
 | `POST` | `/api/credentials` | сохранить секрет (AES-256-GCM) |
 | `DELETE` | `/api/credentials/{credential_id}` | удалить секрет |
 | `PUT` | `/api/credentials/{credential_id}` | заменить значение/имя |
-| `POST` | `/api/credentials/{credential_id}/telegram-chat` | находит ID личного чата по имени в недавних сообщениях бота |
+| `POST` | `/api/credentials/{credential_id}/telegram-chat` | находит ID публичного канала, супергруппы или недавнего личного чата по имени пользователя |
 
 ### Настройки (allowlist)
 
@@ -127,6 +127,7 @@
 | `POST` | `/api/ai/workflows/generate` | сценарий из текста (LLM строит граф, граф валидируется) |
 | `GET` | `/api/ai/workflows/{workflow_id}/chat` | история чат-правок |
 | `POST` | `/api/ai/workflows/{workflow_id}/chat` | предложить правку графа сообщением |
+| `GET` | `/api/ai/workflows/{workflow_id}/chat/{msg_id}` | предпросмотр сохранённого предложения и проверка его актуальности |
 | `POST` | `/api/ai/workflows/{workflow_id}/chat/{msg_id}/apply` | применить предложенную правку |
 | `POST` | `/api/ai/workflows/{workflow_id}/chat/{msg_id}/reject` | отклонить правку |
 | `GET` | `/api/runs/{run_id}/ai-report` | AI-отчёт с журналом валидатора |
@@ -197,7 +198,9 @@
 | `POST` | `/api/autofixes/{autofix_id}/pull-request` | создать/обновить PR/MR (только `allow_write`, иначе 403) |
 | `POST` | `/api/autofixes/{autofix_id}/recheck` | «Повторная проверка»: запуск сценария на копии проекта с применённым проверенным патчем (новый run, 202) |
 | `GET` | `/api/runs/{run_id}/autofixes` | исправления запуска |
+| `POST` | `/api/runs/{run_id}/autofixes/recheck` | Применить совместимые проверенные исправления и запустить проверку копии проекта |
 | `POST` | `/api/runs/{run_id}/findings/{finding_id}/autofix` | сгенерировать и проверить исправление (чеклист) |
+| `GET` | `/api/runs/{run_id}/fixed-project.zip` | Скачать копию проекта с применёнными исправлениями и маскировкой секретов |
 
 ### demo
 
@@ -219,4 +222,4 @@
 | `POST` | `/api/checks` | «Новая проверка» одним запросом: источник (ссылка / архив / учебный проект) + старт (готовый сценарий, шаблон, пустой граф или текст для AI); незаполненные параметры уведомлений возвращаются в needs_input |
 | `GET` | `/api/checks/starters` | готовые сценарии для «С чего начать?»: полная проверка, только секреты, проверка PR |
 
-Всего операций: 106.
+Всего операций: 109.

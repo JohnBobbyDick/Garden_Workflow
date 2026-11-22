@@ -161,6 +161,7 @@ export interface Run {
   verdict: Record<string, unknown> | null
   score: number | null
   score_delta: number | null
+  has_fixed_project?: boolean
   graph_snapshot?: Graph
   nodes?: NodeRunInfo[]
   artifacts?: { name: string; content_type: string; size: number; url: string; node_id: string | null }[]

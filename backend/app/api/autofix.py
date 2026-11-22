@@ -4,7 +4,7 @@ PR/MR (only for allowlisted repositories with allow_write; organizer repository 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -15,9 +15,10 @@ from app.ai.settings_service import provider_config_for
 from app.api.runs import _findings
 from app.autofix.coverage import coverage
 from app.autofix.pr.scm import PrError
+from app.autofix.project import download_zip, patched_archive
 from app.autofix.pull_request import PrForbidden, create_pr, resolve_target
 from app.autofix.service import AutofixError, generate
-from app.autofix.source import SourceUnavailable
+from app.autofix.source import SourceUnavailable, upload_expired
 from app.config import get_settings
 from app.core.audit import audit
 from app.core.errors import ApiError, not_found
@@ -150,33 +151,70 @@ async def pull_request(autofix_id: str, request: Request, body: PrIn | None = No
 @router.post("/autofixes/{autofix_id}/recheck", status_code=202)
 def recheck(autofix_id: str, request: Request, user: m.User = Depends(current_user),
             s: Session = Depends(get_session)) -> dict:
-    """Apply the validated fix to a copy of the run's sources and run the same workflow (graph snapshot) on it."""
+    a, run = _load(s, autofix_id, user, "developer")
+    return _recheck(s, run, [a], user, request)
+
+
+class BatchRecheckIn(BaseModel):
+    autofix_ids: list[str] = Field(min_length=1)
+
+
+@router.post("/runs/{run_id}/autofixes/recheck", status_code=202)
+def batch_recheck(run_id: str, body: BatchRecheckIn, request: Request, user: m.User = Depends(current_user),
+                  s: Session = Depends(get_session)) -> dict:
+    run = load_scoped(s, m.Run, run_id, user, "developer", "запуск")
+    ids = list(dict.fromkeys(body.autofix_ids))
+    rows = {a.id: a for a in s.scalars(select(m.Autofix).where(m.Autofix.run_id == run.id))}
+    if any(i not in rows for i in ids):
+        raise not_found("AutoFix")
+    return _recheck(s, run, [rows[i] for i in ids], user, request)
+
+
+def _recheck(s: Session, run: m.Run, fixes: list[m.Autofix], user: m.User, request: Request) -> dict:
     import copy
 
     from app.api.projects import store_upload
-    from app.autofix.pull_request import patched_archive
     from app.engine import runs as run_service
 
-    a, run = _load(s, autofix_id, user, "developer")
-    if a.status != "validated":
-        raise ApiError(409, "not_validated", "перепроверить можно только проверенное (validated) исправление")
-    f = _finding(s, run, a.finding_id)
+    if any(a.status != "validated" for a in fixes):
+        raise ApiError(409, "not_validated", "перепроверить можно только проверенные исправления")
+    wf = s.get(m.Workflow, run.workflow_id) if run.workflow_id else None
+    if wf is None:
+        raise ApiError(409, "workflow_missing", "сценарий исходного запуска удалён")
     try:
-        data = patched_archive(s, run, a, f)
+        data, applied, skipped = patched_archive(s, run, fixes)
     except (SourceUnavailable, RepoGuardError, ValueError) as exc:
         raise ApiError(409, "source_unavailable", Masker().mask(str(exc))) from exc
-    up = store_upload(s, run.workspace_id, user.id, f"autofix-{a.finding_id}.zip", data)
+    up = store_upload(s, run.workspace_id, user.id, f"fixed-{run.id}.zip", data)
     graph = copy.deepcopy(run.graph_snapshot)
     for node in graph.get("nodes", []):
         if node.get("type") == "source.repo":
             node["config"] = {"mode": "upload", "upload_id": up.id}
-    wf = s.get(m.Workflow, run.workflow_id) if run.workflow_id else None
-    if wf is None:
-        raise ApiError(409, "workflow_missing", "сценарий исходного запуска удалён")
+    payload = {"recheck_of": run.id, "autofix_ids": applied}
+    if len(fixes) == 1:
+        payload["autofix_id"] = fixes[0].id
     new = run_service.create_run(s, wf, trigger_type="manual", triggered_by=user.id, trigger_node_id=run.trigger_node_id,
-                                 payload={"recheck_of": run.id, "autofix_id": a.id}, project_id=run.project_id,
-                                 graph=graph)
-    audit(s, "autofix.recheck", user_id=user.id, workspace_id=run.workspace_id, target=a.id,
-          details={"run_id": new.id}, ip=client_ip(request))
+                                 payload=payload, project_id=run.project_id, graph=graph)
+    new.fixed_upload_id = up.id
+    audit(s, "autofix.recheck", user_id=user.id, workspace_id=run.workspace_id, target=run.id,
+          details={"run_id": new.id, "applied": applied, "skipped": skipped}, ip=client_ip(request))
     s.commit()
-    return {"run_id": new.id, "status": new.status}
+    return {"run_id": new.id, "status": new.status, "applied": applied, "skipped": skipped}
+
+
+@router.get("/runs/{run_id}/fixed-project.zip")
+def download_fixed_project(run_id: str, user: m.User = Depends(current_user),
+                           s: Session = Depends(get_session)) -> Response:
+    run = load_scoped(s, m.Run, run_id, user, "developer", "запуск")
+    up = s.get(m.Upload, run.fixed_upload_id) if run.fixed_upload_id else None
+    if up is None or up.workspace_id != run.workspace_id:
+        raise not_found("архив исправленного проекта")
+    if upload_expired(up):
+        raise ApiError(410, "archive_expired", "срок хранения архива истёк")
+    # Resolve only the server-created input of this recheck, even while its workflow is still queued.
+    try:
+        data = download_zip(up)
+    except (SourceUnavailable, RepoGuardError, ValueError, FileNotFoundError) as exc:
+        raise ApiError(409, "source_unavailable", "не удалось восстановить архив проекта") from exc
+    return Response(data, media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="fixed-{run.id}.zip"', "Cache-Control": "no-store"})

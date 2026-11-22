@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, downloadFile } from '../api/client'
 import type { Finding } from '../api/types'
+import { useOpenRecheck } from '../results/FixedProjectActions'
 import { toast } from '../store/toast'
 import { Badge, Button } from './ui'
 import { Icon } from './ui/Icon'
@@ -50,12 +51,13 @@ function Checklist({ steps }: { steps: AutofixStep[] }) {
 
 export function AutofixPanel({ runId, finding }: { runId: string; finding: Finding }) {
   const { t } = useTranslation()
+  const open = useOpenRecheck()
   const qc = useQueryClient()
   const coverage = useAutofixCoverage()
   const list = useQuery({ queryKey: ['autofixes', runId], queryFn: () => api<Autofix[]>(`/api/runs/${runId}/autofixes`) })
   const latestId = (list.data ?? []).find((a) => a.finding_id === finding.id)?.id
   const detail = useQuery({ queryKey: ['autofix', latestId], enabled: !!latestId, queryFn: () => api<Autofix>(`/api/autofixes/${latestId}`) })
-  const [busy, setBusy] = useState<'gen' | 'pr' | null>(null)
+  const [busy, setBusy] = useState<'gen' | 'pr' | 'recheck' | null>(null)
   const af = detail.data
   const kind = finding.autofix ?? 'none'
 
@@ -110,6 +112,13 @@ export function AutofixPanel({ runId, finding }: { runId: string; finding: Findi
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" icon="download" onClick={() => void downloadFile(`/api/autofixes/${af.id}/patch`, `autofix-${af.finding_id}.patch`)}>
                   {t('autofix.downloadPatch')}</Button>
+                <Button size="sm" icon="play" disabled={busy !== null} loading={busy === 'recheck'} onClick={async () => {
+                  setBusy('recheck')
+                  try {
+                    const r = await api<{ run_id: string }>(`/api/autofixes/${af.id}/recheck`, { method: 'POST' })
+                    open(r.run_id)
+                  } catch (e) { toast.error((e as Error).message) } finally { setBusy(null) }
+                }}>{t('pr.recheck')}</Button>
                 {af.can_create_pr && <Button size="sm" variant="primary" icon="merge" loading={busy === 'pr'} onClick={createPr}>
                   {af.pr_url ? t('autofix.updatePr') : t('autofix.createPr')}</Button>}
                 {af.pr_url && <a className="text-sm text-primary hover:underline" href={af.pr_url} target="_blank" rel="noreferrer noopener">{af.pr_url}</a>}

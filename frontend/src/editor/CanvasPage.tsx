@@ -42,7 +42,7 @@ type Snapshot = { nodes: FlowNode[]; edges: FlowEdge[] }
 const CLIP_KEY = 'aisw.clipboard'
 
 function clean(nodes: FlowNode[]): FlowNode[] {
-  return nodes.map(({ selected: _s, dragging: _d, ...n }) => ({ ...n, data: { ...n.data, status: undefined, issues: undefined } }))
+  return nodes.map((n) => ({ ...n, selected: false, dragging: false, data: { ...n.data, status: undefined, issues: undefined } }))
 }
 
 function isTyping(e: KeyboardEvent): boolean {
@@ -106,7 +106,6 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   useEffect(() => () => { if (finaleTimer.current) window.clearTimeout(finaleTimer.current) }, [])
   useEffect(() => {  // the SSE stream ended → the run row is final: refresh results and the checks list
     if (live.ended || (live.status && !['queued', 'running'].includes(live.status))) {
-      void shownRun.refetch()
       void invalidate('workflows', 'runs')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,8 +124,9 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
 
   const save = useCallback(async () => {
     try {
-      await api(`/api/workflows/${workflow.id}`, { method: 'PUT', json: { graph: flowToGraph(state.current.nodes, state.current.edges) } })
-      setDirty(false)
+      const graph = flowToGraph(state.current.nodes, state.current.edges)
+      await api(`/api/workflows/${workflow.id}`, { method: 'PUT', json: { graph } })
+      if (JSON.stringify(graph) === JSON.stringify(flowToGraph(state.current.nodes, state.current.edges))) setDirty(false)
       void invalidate('workflow', 'workflows')
       return true
     } catch (e) {
@@ -393,7 +393,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
     const tgt = live.nodes[e.target]?.status
     return { ...e, className: d ? (tgt === 'running' || tgt === 'pending' ? 'edge-active' : 'edge-done') : tgt === 'skipped' ? 'edge-skipped' : '',
       label: d ? (d.count !== null && d.count !== undefined ? String(d.count) : '✓') : undefined }
-  }), [edges, live.edges, live.nodes, live.status, runMode])
+  }), [edges, live.edges, live.nodes, runMode])
 
   const selected = nodes.filter((n) => n.selected)
   const one = selected.length === 1 ? selected[0] : null
@@ -424,14 +424,14 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
           {(selected.length > 0 || !nodes.length) && <>
             <HeaderButton icon="layout" onClick={layout}>{t('canvas.layout')}</HeaderButton>
             <HeaderButton icon="plus" onClick={() => { setMobilePanel(false); setQuick((q) => (q ? null : {})) }} active={!!quick} title="Tab">{t('canvas.nodes')}</HeaderButton>
-            <HeaderButton icon="sparkles" onClick={() => {
-              if (inspectorCollapsed) {
-                if (compact) setMobilePanel(true)
-                else setInspectorCollapsed(false)
-                setAssistant(true)
-              } else setAssistant(!assistant)
-            }} active={assistant}>AI</HeaderButton>
           </>}
+          <HeaderButton icon="sparkles" onClick={() => {
+            if (inspectorCollapsed) {
+              if (compact) setMobilePanel(true)
+              else setInspectorCollapsed(false)
+              setAssistant(true)
+            } else setAssistant(!assistant)
+          }} active={assistant && !inspectorCollapsed}>AI</HeaderButton>
           <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
           <OverflowMenu items={[
             { key: 'validate', icon: 'shield-check', label: t('editor.validate'), onClick: () => void validate() },
@@ -516,7 +516,7 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
             <aside className="w-[380px] max-w-full shrink-0 max-lg:absolute max-lg:inset-y-0 max-lg:right-0 max-lg:z-10 max-lg:shadow-pop border-l border-border bg-surface" aria-label={t('canvas.inspector')}>
               {assistant ? (
                 <div className="h-full overflow-y-auto">
-                  <AiAssistant key={workflow.id} workflowId={workflow.id} dirty={dirty} onSaveFirst={autosave.flush} onApplied={(g) => {
+                  <AiAssistant key={workflow.id} workflowId={workflow.id} selectedNodeId={one?.id} dirty={dirty} onSaveFirst={autosave.flush} onApplied={(g) => {
                     const flow = graphToCanvas(g)
                     record()
                     setNodes(flow.nodes)

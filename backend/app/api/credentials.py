@@ -11,12 +11,13 @@ from sqlalchemy.orm import Session
 
 from app import models as m
 from app.ai.pool import parse_proxy
+from app.config import get_settings
 from app.core.audit import audit
 from app.core.crypto import get_box
 from app.core.errors import ApiError, bad_request, conflict
 from app.core.masking import global_masker, mask_tail
+from app.core.ssrf import SSRFError, safe_request
 from app.deps import client_ip, current_user, get_session, load_scoped, resolve_workspace
-from app.telegram import telegram_request
 
 router = APIRouter(tags=["credentials"])
 
@@ -112,10 +113,13 @@ async def telegram_chat(credential_id: str, body: TelegramChatLookup, user: m.Us
         raise bad_request("Выберите токен Telegram-бота.")
     token = get_box().decrypt(credential.ciphertext)
     global_masker.register(token)
+    settings = get_settings()
     try:
-        response = await telegram_request(token, "getUpdates", json={"limit": 100, "timeout": 0}, timeout=10)
+        response = await safe_request("POST", f"{settings.telegram_api_base.rstrip('/')}/bot{token}/getUpdates",
+                                      allow_hosts=settings.ssrf_allowed(), json={"limit": 100, "timeout": 0},
+                                      timeout=10, max_redirects=0)
         payload = response.json()
-    except (ValueError, httpx.HTTPError):
+    except (ValueError, httpx.HTTPError, SSRFError):
         raise ApiError(502, "telegram_unavailable", "Не удалось получить сообщения Telegram.") from None
     if response.status_code == 409:
         raise ApiError(409, "telegram_updates_busy", "Другой обработчик получает сообщения бота. Введите ID чата.")

@@ -1,7 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
-import { api, apiFetch } from '../api/client'
+import { api, ApiError, apiFetch } from '../api/client'
 import { useCredentials, useWs } from '../api/hooks'
 import type { JsonSchema, Lang } from '../api/types'
 import { Badge, Button, Input, Select, Switch, Textarea } from '../components/ui'
@@ -215,29 +215,36 @@ function Widget({ f, value, set, lang, id, invalid, readOnly }: {
 function TelegramLookup({ token, username, onFound }: { token: string; username: string; onFound: (id: string) => void }) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const request = useRef<AbortController | null>(null)
   const apply = useRef(onFound)
-  apply.current = onFound
-  useEffect(() => () => request.current?.abort(), [])
+  useLayoutEffect(() => { apply.current = onFound }, [onFound])
+  useLayoutEffect(() => () => request.current?.abort(), [])
   const lookup = async () => {
     const controller = new AbortController()
     request.current = controller
     setBusy(true)
+    setError(null)
     try {
       const chat = await api<{ chat_id: string }>(`/api/credentials/${token}/telegram-chat`, {
         method: 'POST', json: { username }, signal: controller.signal,
       })
       if (!controller.signal.aborted) apply.current(chat.chat_id)
     } catch (e) {
-      if (!controller.signal.aborted) toast.error((e as Error).message)
+      if (!controller.signal.aborted) setError(e instanceof ApiError ? e.code : 'telegram_unavailable')
     } finally {
       if (!controller.signal.aborted) setBusy(false)
     }
   }
-  return <Button type="button" size="sm" className="mt-2" loading={busy}
-    disabled={!token || !/^@?[A-Za-z][A-Za-z0-9_]{0,31}$/.test(username)} onClick={lookup}>
-    {t('editor.findTelegramChat')}
-  </Button>
+  return <>
+    <Button type="button" size="sm" className="mt-2" loading={busy}
+      disabled={!token || !/^@?[A-Za-z][A-Za-z0-9_]{0,31}$/.test(username)} onClick={lookup}>
+      {t('editor.findTelegramChat')}
+    </Button>
+    {error && <p role="alert" className="mt-1 text-xs text-danger">
+      {t([`editor.telegramLookup.${error}`, 'editor.telegramLookup.failed'])}
+    </p>}
+  </>
 }
 
 export function SchemaForm({ schema, value, onChange, lang, serverErrors = {}, readOnly }: Props) {

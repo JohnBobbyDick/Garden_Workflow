@@ -31,10 +31,11 @@ class NotifyTelegram(BaseNode):
     config_schema = obj({
         "bot_token": credential("Токен бота", "Bot token", "telegram"),
         "chat_id": prop("string", "Получатель Telegram", "Telegram recipient",
-                        "Укажите @username канала или ID чата. Для личного чата отправьте боту /start, "
-                        "введите свой @username и нажмите «Найти личный чат».",
-                        "Enter a channel @username or a chat ID. For a private chat, send /start to the bot, "
-                        "enter your @username and select Find private chat.",
+                        "Введите числовой ID чата или @username публичного канала либо супергруппы. "
+                        "Для личного чата отправьте боту /start, выберите его токен, введите свой @username "
+                        "и нажмите «Найти Chat ID».",
+                        "Enter a numeric chat ID or the @username of a public channel or supergroup. For a private "
+                        "chat, send /start to the bot, select its token, enter your @username and click Find chat ID.",
                         minLength=1, **{"x-widget": "telegram-chat", "x-required-user-input": True}),
         "template": prop("string", "Шаблон сообщения", "Message template",
                          "Подстановки: {{findings.count}}, {{severity.critical}}, {{score.value}}, {{run.url}}…",

@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import '../i18n'
+import * as client from '../api/client'
 import { SchemaForm } from './SchemaForm'
 
 const schema = {
@@ -46,4 +48,39 @@ describe('SchemaForm', () => {
     wrap(<SchemaForm schema={schema} value={{}} onChange={() => {}} lang="en" />)
     expect(screen.getByLabelText(/Host/)).toBeInTheDocument()
   })
+})
+
+const telegramSchema = {
+  type: 'object',
+  properties: { chat_id: { type: 'string', title: 'Получатель', 'x-widget': 'telegram-chat' } },
+}
+
+function RecipientEditor() {
+  const [value, setValue] = useState<Record<string, unknown>>({ bot_token: 'credential-id', chat_id: '@oldname' })
+  return <SchemaForm schema={telegramSchema} value={value} onChange={setValue} lang="ru" />
+}
+
+it('preserves a manual numeric recipient when an earlier lookup completes', async () => {
+  let finish!: (value: unknown) => void
+  const api = vi.spyOn(client, 'api').mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  try {
+    wrap(<RecipientEditor />)
+    const field = screen.getByLabelText('Получатель')
+    fireEvent.click(screen.getByRole('button', { name: 'Найти Chat ID' }))
+    fireEvent.change(field, { target: { value: '-100777' } })
+    await act(async () => finish({ chat_id: '42' }))
+    expect(field).toHaveValue('-100777')
+    expect(screen.getByRole('button', { name: 'Найти Chat ID' })).toBeDisabled()
+    expect(api).toHaveBeenCalledTimes(1)
+  } finally { api.mockRestore() }
+})
+
+it('shows an actionable lookup error next to the unchanged recipient', async () => {
+  const api = vi.spyOn(client, 'api').mockRejectedValueOnce(new client.ApiError(409, 'telegram_updates_busy', 'upstream text'))
+  try {
+    wrap(<RecipientEditor />)
+    fireEvent.click(screen.getByRole('button', { name: 'Найти Chat ID' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/webhook.*ID/i)
+    expect(screen.getByLabelText('Получатель')).toHaveValue('@oldname')
+  } finally { api.mockRestore() }
 })

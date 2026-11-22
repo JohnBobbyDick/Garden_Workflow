@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import time
+from copy import deepcopy
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.orm import Session, load_only
 
 from app import models as m
 from app.ai.diagnose import diagnose, probe_chat
@@ -211,6 +212,7 @@ class GenerateIn(BaseModel):
 
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+    selected_node_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 def _provider_or_400(s: Session, ws: str, masker):  # noqa: ANN001, ANN202
@@ -238,18 +240,20 @@ async def ai_generate(body: GenerateIn, user: m.User = Depends(current_user), s:
         res = await generate_graph(provider, body.prompt, get_registry(), _cred_checker(s, ws), masker)
     except LLMError as exc:
         raise ApiError(502, "ai_error", masker.mask(str(exc))) from exc
-    out = {"graph": res.graph, "issues": res.issues, "needs_input": res.needs_input, "attempts": res.attempts,
-           "valid": res.valid, "usage": res.usage}
+    out = masker.mask_obj({"graph": res.graph, "issues": res.issues, "needs_input": res.needs_input,
+                           "attempts": res.attempts, "valid": res.valid, "usage": res.usage})
     if not res.valid:
         raise ApiError(422, "generation_failed", "не удалось получить корректный граф за 3 попытки — ничего не применено",
                        out)
     if body.create:
-        wf = m.Workflow(workspace_id=ws, name=body.name or body.prompt[:80], description=body.prompt, graph=res.graph,
+        prompt = masker.mask(body.prompt)
+        wf = m.Workflow(workspace_id=ws, name=masker.mask(body.name) if body.name else prompt[:80],
+                        description=prompt, graph=out["graph"],
                         created_by=user.id)
         s.add(wf)
         s.flush()
         sync_schedules(s, wf)
-        s.add(m.WorkflowChatMessage(workflow_id=wf.id, user_id=user.id, role="user", content=body.prompt,
+        s.add(m.WorkflowChatMessage(workflow_id=wf.id, user_id=user.id, role="user", content=prompt,
                                     status="applied"))
         s.commit()
         out["workflow_id"] = wf.id
@@ -261,12 +265,18 @@ def chat_out(msg: m.WorkflowChatMessage) -> dict:
             "created_at": msg.created_at}
 
 
+def _recent_messages(s: Session, workflow_id: str, limit: int) -> list[m.WorkflowChatMessage]:
+    msg = m.WorkflowChatMessage
+    query = (select(msg).options(load_only(msg.id, msg.role, msg.content, msg.status, msg.created_at, msg.operations))
+             .where(msg.workflow_id == workflow_id, or_(msg.content != "", msg.role == "assistant"))
+             .order_by(msg.created_at.desc(), msg.role.asc(), msg.id.desc()).limit(limit))
+    return list(reversed(s.scalars(query).all()))
+
+
 @router.get("/ai/workflows/{workflow_id}/chat")
 def ai_chat_history(workflow_id: str, user: m.User = Depends(current_user), s: Session = Depends(get_session)) -> list[dict]:
     wf = load_scoped(s, m.Workflow, workflow_id, user, what="сценарий")
-    rows = s.scalars(select(m.WorkflowChatMessage).where(m.WorkflowChatMessage.workflow_id == wf.id)
-                     .order_by(m.WorkflowChatMessage.created_at))
-    return [chat_out(r) for r in rows if r.content or r.role == "assistant"][-200:]
+    return [global_masker.mask_obj(chat_out(r)) for r in _recent_messages(s, wf.id, 200)]
 
 
 @router.post("/ai/workflows/{workflow_id}/chat")
@@ -277,36 +287,103 @@ async def ai_chat(workflow_id: str, body: ChatIn, user: m.User = Depends(current
 
     wf = load_scoped(s, m.Workflow, workflow_id, user, "developer", "сценарий")
     masker = global_masker.child()
+    if body.selected_node_id is not None and not any(n["id"] == body.selected_node_id for n in wf.graph.get("nodes", [])):
+        raise ApiError(422, "unknown_node", "Выбранный блок отсутствует в сценарии")
     provider = _provider_or_400(s, wf.workspace_id, masker)
+    history = [{"role": row.role, "content": masker.mask(row.content), "status": row.status}
+               for row in _recent_messages(s, wf.id, 6)]
     reg = get_registry()
     try:
         result, ops, explanation = await propose_operations(provider, wf.graph, body.message, reg,
-                                                           _cred_checker(s, wf.workspace_id), masker)
+                                                           _cred_checker(s, wf.workspace_id), masker,
+                                                           selected_node_id=body.selected_node_id, history=history)
     except LLMError as exc:
         raise ApiError(502, "ai_error", masker.mask(str(exc))) from exc
     status = "proposed" if result.valid else "failed"
     user_msg = m.WorkflowChatMessage(workflow_id=wf.id, user_id=user.id, role="user", content=masker.mask(body.message),
                                      status=status)
+    s.add(user_msg)
+    s.flush()
+    graph = masker.mask_obj(result.graph) if result.valid else None
     bot = m.WorkflowChatMessage(workflow_id=wf.id, role="assistant", content=masker.mask(explanation),
-                                operations=masker.mask_obj(ops), status=status, base_version=wf.version,
-                                result_graph=result.graph if result.valid else None)
-    diff = graph_diff(wf.graph, result.graph) if result.valid else {}
-    s.add_all([user_msg, bot])
+                                user_message_id=user_msg.id, operations=masker.mask_obj(ops), status=status,
+                                base_version=wf.version, result_graph=graph,
+                                proposal_details=masker.mask_obj({
+                                    "diff": graph_diff(wf.graph, graph) if graph else {},
+                                    "attempts": result.attempts, "issues": result.issues,
+                                    "needs_input": result.needs_input, "selected_node_id": body.selected_node_id}))
+    s.add(bot)
     s.commit()
-    return {**chat_out(bot), "diff": diff, "valid": result.valid, "attempts": result.attempts,
-            "issues": result.issues, "needs_input": result.needs_input, "graph": result.graph,
-            "user_message_id": user_msg.id}
+    s.refresh(wf)
+    return _proposal_out(s, wf, bot, user_msg)
 
 
 def _proposal(s: Session, wf: m.Workflow, msg_id: str) -> tuple[m.WorkflowChatMessage, m.WorkflowChatMessage | None]:
     msg = s.get(m.WorkflowChatMessage, msg_id)
     if msg is None or msg.workflow_id != wf.id or msg.role != "assistant":
         raise not_found("предложение")
-    prev = s.scalars(select(m.WorkflowChatMessage).where(m.WorkflowChatMessage.workflow_id == wf.id,
-                                                         m.WorkflowChatMessage.role == "user",
-                                                         m.WorkflowChatMessage.created_at <= msg.created_at)
-                     .order_by(m.WorkflowChatMessage.created_at.desc())).first()
-    return msg, prev
+    if msg.user_message_id or msg.proposal_details is not None:
+        request = s.get(m.WorkflowChatMessage, msg.user_message_id) if msg.user_message_id else None
+        return msg, request if request and request.workflow_id == wf.id and request.role == "user" else None
+
+    # Legacy rows have no request reference. Recover only an unambiguous turn, leaving overlapping turns unpaired.
+    row = m.WorkflowChatMessage
+    history = select(row).where(row.workflow_id == wf.id)
+    boundary = select(func.max(row.created_at)).where(row.workflow_id == wf.id, row.role == "assistant",
+                                                      row.created_at < msg.created_at).scalar_subquery()
+    candidates = s.scalars(history.where(row.role == "user", row.status == msg.status,
+                                         row.created_at < msg.created_at,
+                                         or_(boundary.is_(None), row.created_at > boundary)).limit(2)).all()
+    if len(candidates) == 1:
+        same_time = s.scalar(select(row.id).where(row.workflow_id == wf.id, row.created_at == msg.created_at,
+                                                  row.id != msg.id).limit(1))
+        next_role = s.scalar(select(row.role).where(row.workflow_id == wf.id, row.created_at > msg.created_at)
+                             .order_by(row.created_at, row.role).limit(1))
+        if same_time is None and next_role != "assistant":
+            return msg, candidates[0]
+    return msg, None
+
+
+def _proposal_out(s: Session, wf: m.Workflow, msg: m.WorkflowChatMessage, request: m.WorkflowChatMessage | None) -> dict:
+    stale = msg.status == "proposed" and msg.base_version != wf.version
+    graph = msg.result_graph or {}
+    details = msg.proposal_details
+    if details is None:
+        from app.ai.workflow_gen import blocking_issues, graph_diff, strip_secrets
+        from app.nodes.base import get_registry
+
+        graph = deepcopy(graph)
+        registry, checker = get_registry(), _cred_checker(s, wf.workspace_id)
+        needs = strip_secrets(graph, registry, checker) if graph else []
+        issues = blocking_issues(graph, registry, checker, needs)[0] if graph else []
+        details = {"diff": graph_diff(wf.graph, graph) if graph and msg.base_version == wf.version else {},
+                   "issues": issues, "needs_input": needs, "attempts": None, "selected_node_id": None}
+    return global_masker.mask_obj({**chat_out(msg), **details, "stale": stale, "graph": graph, "valid": bool(graph),
+                                   "original_message": request.content if request else None,
+                                   "user_message_id": request.id if request else None})
+
+
+@router.get("/ai/workflows/{workflow_id}/chat/{msg_id}")
+def ai_chat_detail(workflow_id: str, msg_id: str, user: m.User = Depends(current_user),
+                   s: Session = Depends(get_session)) -> dict:
+    wf = load_scoped(s, m.Workflow, workflow_id, user, what="сценарий")
+    return _proposal_out(s, wf, *_proposal(s, wf, msg_id))
+
+
+def _transition(s: Session, wf: m.Workflow, msg: m.WorkflowChatMessage,
+                request: m.WorkflowChatMessage | None, status: str) -> None:
+    row = m.WorkflowChatMessage
+    changes = {"status": status}
+    if msg.proposal_details is None:
+        # Freeze the recoverable preview and pairing before the base graph or request status changes.
+        preview = _proposal_out(s, wf, msg, request)
+        changes["proposal_details"] = {k: preview[k] for k in ("diff", "issues", "needs_input", "attempts", "selected_node_id")}
+        changes["user_message_id"] = preview["user_message_id"]
+    claimed = s.execute(update(row).where(row.id == msg.id, row.status == "proposed").values(**changes))
+    if claimed.rowcount != 1:
+        raise ApiError(409, "not_applicable", "Это предложение уже обработано или недоступно")
+    if request:
+        s.execute(update(row).where(row.id == request.id, row.status == "proposed").values(status=status))
 
 
 @router.post("/ai/workflows/{workflow_id}/chat/{msg_id}/apply")
@@ -318,8 +395,6 @@ def ai_chat_apply(workflow_id: str, msg_id: str, user: m.User = Depends(current_
     msg, prev = _proposal(s, wf, msg_id)
     if msg.status != "proposed" or not msg.result_graph:
         raise ApiError(409, "not_applicable", "это предложение нельзя применить")
-    from copy import deepcopy
-
     from app.ai.workflow_gen import blocking_issues, strip_secrets
     from app.nodes.base import get_registry
 
@@ -333,14 +408,12 @@ def ai_chat_apply(workflow_id: str, msg_id: str, user: m.User = Depends(current_
     _, blocking = blocking_issues(candidate, registry, checker, needs)
     if candidate != msg.result_graph or blocking:
         raise stale
+    _transition(s, wf, msg, prev, "applied")
     written = s.execute(update(m.Workflow).where(m.Workflow.id == wf.id, m.Workflow.version == msg.base_version)
                         .values(graph=candidate, version=m.Workflow.version + 1))
     if written.rowcount != 1:
         raise stale
     sync_schedules(s, wf)
-    msg.status = "applied"
-    if prev is not None:
-        prev.status = "applied"
     s.commit()
     return {"workflow_id": wf.id, "version": wf.version, "graph": wf.graph}
 
@@ -350,8 +423,6 @@ def ai_chat_reject(workflow_id: str, msg_id: str, user: m.User = Depends(current
                    s: Session = Depends(get_session)) -> dict:
     wf = load_scoped(s, m.Workflow, workflow_id, user, "developer", "сценарий")
     msg, prev = _proposal(s, wf, msg_id)
-    msg.status = "rejected"
-    if prev is not None:
-        prev.status = "rejected"
+    _transition(s, wf, msg, prev, "rejected")
     s.commit()
     return {"status": "rejected"}

@@ -1,6 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useReducer } from 'react'
 import { subscribeRunEvents } from '../api/sse'
-import type { NodeStatus, RunEvent, RunStatus } from '../api/types'
+import type { NodeStatus, Run, RunEvent, RunStatus } from '../api/types'
 
 export interface PortPreview {
   type: string
@@ -75,11 +76,24 @@ export function reduceRunEvent(s: LiveRun, e: RunEvent | { type: '__reset' } | {
 }
 
 export function useRunEvents(runId: string | null): LiveRun {
+  const qc = useQueryClient()
   const [state, dispatch] = useReducer(reduceRunEvent, initial)
   useEffect(() => {
     dispatch({ type: '__reset' })
     if (!runId) return
-    return subscribeRunEvents(runId, (e) => dispatch(e), () => dispatch({ type: '__end' }))
-  }, [runId])
+    const runKey = ['run', runId]
+    return subscribeRunEvents(runId, (e) => {
+      dispatch(e)
+      if (e.type !== 'node.status' || e.data.status !== 'success') return
+      const run = qc.getQueryData<Run>(runKey)
+      if (!run || !['running', 'queued'].includes(run.status)) return
+      const type = run.graph_snapshot?.nodes.find((n) => n.id === e.node_id)?.type
+      if (type?.startsWith('scanner.')) void qc.invalidateQueries({ queryKey: ['findings', runId, 'live'] })
+      if (type === 'ai.report') void qc.invalidateQueries({ queryKey: runKey })
+    }, () => {
+      dispatch({ type: '__end' })
+      void qc.invalidateQueries({ queryKey: runKey })
+    })
+  }, [runId, qc])
   return state
 }

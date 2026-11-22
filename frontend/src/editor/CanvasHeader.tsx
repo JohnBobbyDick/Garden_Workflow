@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '../api/types'
 import { Icon, type IconName } from '../components/ui/Icon'
@@ -69,24 +69,50 @@ export function TriggerSwitch({ node, readOnly, onChange }: {
   )
 }
 
-export function OverflowMenu({ items }: { items: { key: string; icon: IconName; label: string; onClick: () => void; danger?: boolean }[] }) {
+export interface MenuAction {
+  key: string; icon: IconName; label: string; onClick: () => void; danger?: boolean; disabled?: boolean; title?: string
+}
+
+export function OverflowMenu({ items, label, align = 'right' }: { items: MenuAction[]; label?: string; align?: 'left' | 'right' }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const toggle = useRef<HTMLButtonElement>(null)
+  const id = useId()
+  const name = label ?? t('canvas.more')
   useEffect(() => {
     if (!open) return
+    ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:enabled')?.focus()
     const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
     window.addEventListener('mousedown', close)
     return () => window.removeEventListener('mousedown', close)
   }, [open])
   return (
-    <div ref={ref} className="relative">
-      <HeaderButton icon="menu" onClick={() => setOpen((o) => !o)} active={open} ariaLabel={t('canvas.more')} title={t('canvas.more')} />
+    <div ref={ref} className="relative inline-block" onBlur={(e) => {
+      if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false)
+    }}>
+      <button ref={toggle} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
+        title={name} aria-label={name} onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true) } }}
+        className={clsx('inline-flex h-8 items-center gap-1.5 rounded-chip px-2 text-[13px] font-bold hover:bg-soft', label && 'border border-border', open && 'bg-soft text-primary')}>
+        <Icon name={label ? 'chevron-down' : 'menu'} size={15} />{label}
+      </button>
       {open && (
-        <div role="menu" className="card fixed right-2 z-30 w-60 sm:absolute sm:right-0 sm:top-10 py-1 text-sm shadow-pop">
+        <div id={id} role="menu" aria-label={name}
+          className={clsx('card absolute top-full z-50 mt-1 w-60 max-w-[85vw] py-1 text-sm shadow-pop', align === 'left' ? 'left-0' : 'right-0')}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { e.preventDefault(); setOpen(false); toggle.current?.focus(); return }
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+            e.preventDefault()
+            const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button:enabled'))
+            const i = buttons.indexOf(document.activeElement as HTMLButtonElement)
+            const next = e.key === 'Home' ? 0 : e.key === 'End' ? buttons.length - 1 : i + (e.key === 'ArrowDown' ? 1 : -1)
+            buttons[(next + buttons.length) % buttons.length]?.focus()
+          }}>
           {items.map((it) => (
-            <button key={it.key} role="menuitem" type="button" onClick={() => { setOpen(false); it.onClick() }}
-              className={clsx('flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-soft', it.danger && 'text-danger')}>
+            <button key={it.key} role="menuitem" type="button" disabled={it.disabled} title={it.title}
+              onClick={() => { setOpen(false); toggle.current?.focus(); it.onClick() }}
+              className={clsx('flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-soft disabled:opacity-40', it.danger && 'text-danger')}>
               <Icon name={it.icon} size={15} />{it.label}
             </button>
           ))}

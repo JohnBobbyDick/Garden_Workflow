@@ -39,6 +39,7 @@ def run_out(s: Session, r: m.Run, full: bool = False) -> dict:
          "error": r.error, "summary": r.summary or {}, "gate": r.gate, "verdict": r.verdict, "score": r.score,
          "score_delta": r.score_delta}
     if full:
+        d["has_fixed_project"] = r.fixed_upload_id is not None
         d["graph_snapshot"] = r.graph_snapshot
         d["source"] = {k: v for k, v in (r.source or {}).items() if k not in INTERNAL_SOURCE_KEYS}
         d["trigger_payload"] = {k: v for k, v in (r.trigger_payload or {}).items() if k != "diff_context"}

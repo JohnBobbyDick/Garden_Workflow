@@ -100,32 +100,3 @@ async def create_pr(s, run: m.Run, af: m.Autofix, finding: Finding, run_url: str
     title, body = pr_text(af, finding, run_url, masker, note)
     return await open_pull_request(target, base, f"autofix/{finding.id}", files, title, body,
                                    f"fix(security): {finding.cls} ({finding.id})")
-
-
-def patched_archive(s, run: m.Run, af: m.Autofix, finding: Finding) -> bytes:  # noqa: ANN001
-    """The run's sources with the validated fix applied, as a zip (used for a real re-check run)."""
-    import io
-    import zipfile
-
-    from app.autofix.validator import copy_project
-
-    with restored_source(s, run) as root:
-        secrets = SecretIndex.scan(root)
-        if af.kind == "deterministic":
-            _, edits, _ = plan_bump(root, finding)
-        else:
-            edits = reapply(root, af.proposal or {}, secrets)
-        copy = copy_project(root)
-    try:
-        for e in edits:
-            (copy / e.path).write_text(e.after, encoding="utf-8")
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-            for p in sorted(copy.rglob("*")):
-                if p.is_file() and not p.is_symlink():
-                    z.write(p, p.relative_to(copy).as_posix())
-        return buf.getvalue()
-    finally:
-        import shutil
-
-        shutil.rmtree(copy.parent, ignore_errors=True)

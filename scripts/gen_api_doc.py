@@ -20,7 +20,7 @@ TAG_TITLES = {
 }
 
 RU = {
-    "POST /api/credentials/{credential_id}/telegram-chat": "находит ID личного чата по имени в недавних сообщениях бота",
+    "POST /api/credentials/{credential_id}/telegram-chat": "находит ID публичного канала, супергруппы или недавнего личного чата по имени пользователя",
     "GET /api/healthz": "проверка живости (используется healthcheck Compose)",
     "POST /api/auth/registration-code": "отправляет на e-mail одноразовый код регистрации на 10 минут",
     "POST /api/auth/register": "проверяет одноразовый код и создаёт аккаунт с личным workspace, возвращает access/refresh",
@@ -67,6 +67,7 @@ RU = {
     "POST /api/settings/ai/diagnose": "диагностика LLM: по запросу через каждый прокси (для auto — по каждому протоколу) и напрямую; OK/FAIL, время, причина без секретов",
     "POST /api/ai/workflows/generate": "сценарий из текста (LLM строит граф, граф валидируется)",
     "GET /api/ai/workflows/{workflow_id}/chat": "история чат-правок",
+    "GET /api/ai/workflows/{workflow_id}/chat/{msg_id}": "предпросмотр сохранённого предложения и проверка его актуальности",
     "POST /api/ai/workflows/{workflow_id}/chat": "предложить правку графа сообщением",
     "POST /api/ai/workflows/{workflow_id}/chat/{msg_id}/apply": "применить предложенную правку",
     "POST /api/ai/workflows/{workflow_id}/chat/{msg_id}/reject": "отклонить правку",
@@ -95,6 +96,8 @@ RU = {
     "GET /api/runs/{run_id}/autofixes": "исправления запуска", "GET /api/autofixes/{autofix_id}": "исправление + доступность PR",
     "GET /api/autofixes/{autofix_id}/patch": "скачать маскированный `.patch`",
     "POST /api/autofixes/{autofix_id}/pull-request": "создать/обновить PR/MR (только `allow_write`, иначе 403)",
+    "POST /api/runs/{run_id}/autofixes/recheck": "Применить совместимые проверенные исправления и запустить проверку копии проекта",
+    "GET /api/runs/{run_id}/fixed-project.zip": "Скачать копию проекта с применёнными исправлениями и маскировкой секретов",
     "POST /api/autofixes/{autofix_id}/recheck": "«Повторная проверка»: запуск сценария на копии проекта с применённым "
                                                 "проверенным патчем (новый run, 202)",
     "POST /api/demo/setup": "«Демо-данные»: идемпотентно создать демо-проект на учебном наборе и сценарий "

@@ -1,18 +1,17 @@
 import clsx from 'clsx'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
-import { downloadFile } from '../api/client'
 import { useRunFindings } from '../api/hooks'
 import type { Run, Severity } from '../api/types'
 import { Chip } from '../components/chip'
 import { SeverityBadge, StatusBadge } from '../components/domain'
 import { RunScoreTab } from '../components/score'
-import { EmptyState, Select, Skeleton, Tabs } from '../components/ui'
+import { EmptyState, ErrorState, Select, Skeleton, Tabs } from '../components/ui'
 import { Icon } from '../components/ui/Icon'
 import { useLang } from '../i18n'
 import { fmtDuration } from '../lib/format'
 import { AiReport } from '../pages/RunDetailsPage'
+import { RunActions } from './FixedProjectActions'
 import { FindingDetail } from './FindingDetail'
 import { filterFindings, runVerdict, SEVERITY_ORDER, severityCounts, sortFindings, splitOfficial, type DiffFilter } from './findings'
 
@@ -40,7 +39,7 @@ function CountUp({ value }: { value: number }) {
 function FindingsTab({ run }: { run: Run }) {
   const { t } = useTranslation()
   const done = !['queued', 'running'].includes(run.status)
-  const q = useRunFindings(run.id, done)
+  const q = useRunFindings(run.id, true, !done)
   const sorted = useMemo(() => sortFindings(q.data?.findings ?? []), [q.data])
   // the list shows exactly what submission.json and the reports contain; the rest is a separate, folded block
   const { official: all, below } = useMemo(() => splitOfficial(sorted), [sorted])
@@ -51,7 +50,8 @@ function FindingsTab({ run }: { run: Run }) {
   const [cat, setCat] = useState('')
   const [open, setOpen] = useState<string | null>(null)
   useEffect(() => { setOpen(null); setDiff(hasDiff ? 'new' : 'all') }, [run.id, hasDiff])
-  if (!done) return <p className="text-sm text-muted">{t('results.waiting')}</p>
+  if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />
+  if (!done && !sorted.length) return <p role="status" className="text-sm text-muted">{t('results.waiting')}</p>
   if (q.isLoading) return <Skeleton className="h-40" />
   const selected = sorted.find((f) => f.id === open)
   if (selected) return <FindingDetail run={run} finding={selected} onBack={() => setOpen(null)} />
@@ -185,7 +185,7 @@ export function RunResults({ run, onClose }: { run: Run; onClose?: () => void })
   const [tab, setTab] = useState<Tab>('findings')
   const done = !['queued', 'running'].includes(run.status)
   const verdict = runVerdict(run)
-  const findings = useRunFindings(run.id, done)
+  const findings = useRunFindings(run.id, true, !done)
   const official = findings.data ? splitOfficial(findings.data.findings).official : null
   const total = official ? official.length : run.summary.total ?? 0
   const bySeverity = official ? severityCounts(official) : run.summary.by_severity ?? {}
@@ -224,22 +224,7 @@ export function RunResults({ run, onClose }: { run: Run; onClose?: () => void })
             </div>
           </div>
         )}
-        {done && (
-          <div className="mt-3 flex flex-wrap gap-1.5 text-[12px]">
-            {[['submission.json', 'json'], ['report.md', 'md'], ['report.html', 'html']].map(([name]) => (
-              <button key={name} type="button" onClick={() => void downloadFile(`/api/runs/${run.id}/export/${name}`, name)}
-                className="inline-flex h-7 items-center gap-1 rounded-chip border border-border bg-surface px-2 font-bold hover:bg-soft">
-                <Icon name="download" size={12} />{name}
-              </button>
-            ))}
-            <Link to={`?panel=compare&head=${run.id}`} className="inline-flex h-7 items-center gap-1 rounded-chip border border-border bg-surface px-2 font-bold hover:bg-soft">
-              <Icon name="split" size={12} />{t('results.compare')}
-            </Link>
-            <Link to={`/runs/${run.id}?full=1`} className="inline-flex h-7 items-center gap-1 rounded-chip border border-border bg-surface px-2 font-bold hover:bg-soft">
-              <Icon name="external" size={12} />{t('results.fullReport')}
-            </Link>
-          </div>
-        )}
+        <div className="mt-2"><RunActions key={run.id} run={run} findings={findings.data?.findings ?? []} /></div>
         {src.subdir && (
           <p className="mt-2 text-[12px] text-muted" title={t('results.projectRootHint')}>
             {t('results.projectRoot')}: <span className="font-mono text-fg">{src.subdir}/</span>
@@ -251,7 +236,7 @@ export function RunResults({ run, onClose }: { run: Run; onClose?: () => void })
       <div className="px-4 pt-2"><Tabs compact label={t('results.tabs')} value={tab} onChange={setTab} tabs={tabs} /></div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {tab === 'findings' && <FindingsTab run={run} />}
-        {tab === 'ai' && <AiReport runId={run.id} findings={findings.data?.findings ?? []} />}
+        {tab === 'ai' && <AiReport run={run} findings={findings.data?.findings ?? []} />}
         {tab === 'score' && <RunScoreTab runId={run.id} />}
         {tab === 'data' && <DataTab run={run} />}
         {tab === 'journal' && <JournalTab run={run} />}
