@@ -79,6 +79,9 @@ async def run(direct: bool) -> int:
     print(f"POST {NVIDIA_BASE_URL}/chat/completions")
     entries = [] if direct else env.proxy_entries
     if not entries:
+        if env.nvidia_telegram_proxy_only:
+            print("Включён режим подключения только через прокси. Укажите прокси и запустите без --direct.")
+            return 1
         print("Прямой HTTPS", flush=True)
         return 0 if await check(env.keys[0], None) else 1
     results = []

@@ -8,7 +8,7 @@ import time
 from dataclasses import replace
 from urllib.parse import urlsplit
 
-from app.ai.pool import mask_proxy
+from app.ai.pool import get_llm_env, mask_proxy
 from app.ai.providers.base import ChatResult, LLMError, LLMProvider, ProviderConfig, build_provider
 from app.core.masking import Masker
 
@@ -50,6 +50,9 @@ async def _probe(cfg: ProviderConfig, proxy: str | None, masker: Masker) -> dict
 
 
 async def diagnose(cfg: ProviderConfig, masker: Masker) -> list[dict]:
+    proxy_only = cfg.provider == "nvidia" and get_llm_env().nvidia_telegram_proxy_only
+    if proxy_only and not cfg.proxies:
+        raise LLMError("Для подключения к NVIDIA требуется прокси.")
     rows: list[dict] = []
     for raw in cfg.proxies:
         if raw.startswith("auto://"):
@@ -57,5 +60,6 @@ async def diagnose(cfg: ProviderConfig, masker: Masker) -> list[dict]:
                 rows.append(await _probe(cfg, scheme + raw[len("auto"):], masker))
         else:
             rows.append(await _probe(cfg, raw, masker))
-    rows.append(await _probe(cfg, None, masker))
+    if not proxy_only:
+        rows.append(await _probe(cfg, None, masker))
     return rows

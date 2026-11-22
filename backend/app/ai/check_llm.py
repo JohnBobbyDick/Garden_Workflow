@@ -10,6 +10,7 @@ import sys
 
 from app.ai.diagnose import diagnose
 from app.ai.pool import get_llm_env
+from app.ai.providers.base import LLMError
 from app.ai.settings_service import env_provider_config
 from app.core.masking import Masker
 
@@ -23,7 +24,11 @@ def main() -> int:
     if cfg is None:
         print("LLM отключён или не настроен. Проверьте LLM_ENABLED, провайдер, его модель и ключ.")
         return 1
-    rows = asyncio.run(diagnose(cfg, masker))
+    try:
+        rows = asyncio.run(diagnose(cfg, masker))
+    except LLMError as exc:
+        print(masker.mask(str(exc)))
+        return 1
     for r in rows:
         status = "OK  " if r["ok"] else "FAIL"
         print(f"{status} {r['proxy']:<40} {r['scheme'] or '-':<8} {r['ms']:>6} мс  {r['error'] or ''}")

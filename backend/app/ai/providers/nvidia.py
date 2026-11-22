@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL
+from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL, get_llm_env
 from app.ai.providers.base import JSON_INSTRUCTION, ChatResult, LLMError, LLMProvider, register_provider
 
 
@@ -25,6 +25,8 @@ class NvidiaProvider(LLMProvider):
 
     async def chat(self, messages, response_schema=None, temperature=0.2, max_tokens=2048, timeout=None,
                    validate=None):
+        if get_llm_env().nvidia_telegram_proxy_only and not self.cfg.proxies:
+            raise LLMError("Для подключения к NVIDIA требуется прокси.")
         if not self.cfg.pooled:
             keys = self.cfg.keys
             return await self._chat_once(self.cfg.model, keys[0] if keys else None, None, messages, response_schema,

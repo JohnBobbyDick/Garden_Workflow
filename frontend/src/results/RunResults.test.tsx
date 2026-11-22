@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { expect, it, vi } from 'vitest'
 import type { Run } from '../api/types'
@@ -67,3 +67,22 @@ it('rechecks usable fixes even if another finding fails during batch generation'
 function LocationSearch() {
   return <output>{useLocation().search}</output>
 }
+
+it('opens the full report when a Safari mouse press clears focus before the click', async () => {
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+    Response.json(String(input).endsWith('/auth/me') ? { workspaces: [] } : { findings: [] }))
+  try {
+    render(<MemoryRouter initialEntries={['/c/w?run=original']}><QueryClientProvider client={new QueryClient()}>
+      <RunResults run={{ id: 'original', workflow_id: 'w', status: 'success', summary: {}, score: null, created_at: '2026-01-01' } as Run} />
+      <LocationSearch />
+    </QueryClientProvider></MemoryRouter>)
+    fireEvent.click(screen.getByRole('button', { name: 'Действия с запуском' }))
+    const report = screen.getByRole('menuitem', { name: 'Полный отчёт' })
+    fireEvent.mouseDown(report)
+    // Safari clears the previous item's focus without focusing the button under the pointer.
+    act(() => (document.activeElement as HTMLElement).blur())
+    fireEvent.mouseUp(report)
+    fireEvent.click(report)
+    expect(await screen.findByText('?full=1')).toBeVisible()
+  } finally { fetcher.mockRestore() }
+})

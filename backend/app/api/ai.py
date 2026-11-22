@@ -168,7 +168,10 @@ async def diagnose_ai(body: WorkspaceRef, user: m.User = Depends(current_user),
         return {"results": [], "error": str(exc)}
     if cfg is None:
         return {"results": [], "error": "AI-провайдер не настроен. Проверьте ключ NVIDIA или настройки сервера Ollama."}
-    return {"results": await diagnose(cfg, masker), "error": None}
+    try:
+        return {"results": await diagnose(cfg, masker), "error": None}
+    except LLMError as exc:
+        return {"results": [], "error": masker.mask(str(exc))}
 
 
 @router.get("/settings/ai/models")

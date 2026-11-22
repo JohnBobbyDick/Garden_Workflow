@@ -69,6 +69,7 @@ class LLMEnv(BaseSettings):
     nvidia_api_key: str = ""
     nvidia_proxies: str = ""
     telegram_proxies: str = ""
+    nvidia_telegram_proxy_only: bool = False
     gemeni_proxies: str = ""
     gemini_proxies: str = ""
     ollama_url: str = "http://localhost:11434"

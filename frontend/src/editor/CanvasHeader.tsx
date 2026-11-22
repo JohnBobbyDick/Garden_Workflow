@@ -83,14 +83,19 @@ export function OverflowMenu({ items, label, align = 'right' }: { items: MenuAct
   useEffect(() => {
     if (!open) return
     ref.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:enabled')?.focus()
-    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
-    window.addEventListener('mousedown', close)
-    return () => window.removeEventListener('mousedown', close)
+    // Safari can blur the focused item before firing click on another menu button.
+    const closeIfOutside = (e: Event) => {
+      if (e.target instanceof Node && !ref.current?.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeIfOutside, true)
+    document.addEventListener('focusin', closeIfOutside, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeIfOutside, true)
+      document.removeEventListener('focusin', closeIfOutside, true)
+    }
   }, [open])
   return (
-    <div ref={ref} className="relative inline-block" onBlur={(e) => {
-      if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false)
-    }}>
+    <div ref={ref} className="relative inline-block">
       <button ref={toggle} type="button" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined}
         title={name} aria-label={name} onClick={() => setOpen((o) => !o)}
         onKeyDown={(e) => { if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true) } }}
