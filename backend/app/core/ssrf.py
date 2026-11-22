@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 import httpx
 
 Resolver = Callable[[str, int], list[str]]
+ProxyTrace = Callable[[str, dict], Awaitable[None]]
 MAX_REDIRECTS = 3
 DEFAULT_TIMEOUT = 15.0
 DEFAULT_MAX_BYTES = 5 * 1024 * 1024
@@ -106,12 +107,12 @@ async def safe_request(method: str, url: str, *, allow_hosts: set[str] | None = 
                        files: dict | None = None, timeout: float = DEFAULT_TIMEOUT,
                        max_bytes: int = DEFAULT_MAX_BYTES, max_redirects: int = MAX_REDIRECTS,
                        resolver: Resolver | None = None, verify: bool = True, proxy: str | None = None,
-                       connect_timeout: float | None = None) -> httpx.Response:
+                       connect_timeout: float | None = None, proxy_trace: ProxyTrace | None = None) -> httpx.Response:
     allow = allow_hosts or set()
     if proxy:
         return await _via_proxy(method, url, proxy, allow, headers=headers, content=content, json=json, data=data,
                                 files=files, timeout=timeout, connect_timeout=connect_timeout, max_bytes=max_bytes,
-                                resolver=resolver, verify=verify)
+                                resolver=resolver, verify=verify, trace=proxy_trace)
     current = url
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, verify=verify, trust_env=False) as client:
         for _hop in range(max_redirects + 1):
@@ -153,7 +154,7 @@ def check_proxy(proxy: str, allow_hosts: set[str], resolver: Resolver | None = N
 async def _via_proxy(method: str, url: str, proxy: str, allow: set[str], *, headers: dict | None, content: bytes | None,
                      json: object, data: dict | None, files: dict | None, timeout: float,
                      connect_timeout: float | None, max_bytes: int, resolver: Resolver | None,
-                     verify: bool) -> httpx.Response:
+                     verify: bool, trace: ProxyTrace | None = None) -> httpx.Response:
     """Through a proxy the name is resolved by the proxy, so the IP cannot be pinned: both the target and the proxy are
     checked by policy instead, and redirects are not followed."""
     check_url(url, allow, resolver)
@@ -164,7 +165,8 @@ async def _via_proxy(method: str, url: str, proxy: str, allow: set[str], *, head
     except (ValueError, ImportError) as exc:  # unknown proxy scheme / socks support missing
         raise SSRFError(f"прокси не поддерживается: {type(exc).__name__}") from exc
     async with client:
-        req = client.build_request(method, url, headers=headers, content=content, json=json, data=data, files=files)
+        req = client.build_request(method, url, headers=headers, content=content, json=json, data=data, files=files,
+                                   extensions={"trace": trace} if trace else None)
         resp = await client.send(req, stream=True)
         try:
             body = bytearray()

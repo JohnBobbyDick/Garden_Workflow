@@ -98,11 +98,12 @@ class LLMEnv(BaseSettings):
         return [self.ollama_model] if self.provider == "ollama" else []
 
     @property
+    def proxy_entries(self) -> list[str]:
+        return split_list(self.nvidia_proxies or self.gemeni_proxies or self.gemini_proxies)
+
+    @property
     def proxies(self) -> list[str]:
-        if self.provider != "nvidia":
-            return []
-        raw = self.nvidia_proxies or self.gemeni_proxies or self.gemini_proxies
-        return [p for entry in split_list(raw) if (p := parse_proxy(entry))]
+        return [p for entry in self.proxy_entries if (p := parse_proxy(entry))] if self.provider == "nvidia" else []
 
     @property
     def retries(self) -> int:

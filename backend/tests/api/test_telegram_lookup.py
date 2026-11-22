@@ -1,6 +1,7 @@
 import httpx
 
-from app.api import credentials
+from app import telegram
+from app.ai.pool import LLMEnv
 
 
 def test_lookup_only_returns_the_requested_private_chat(client, alice, bob, monkeypatch):
@@ -10,10 +11,13 @@ def test_lookup_only_returns_the_requested_private_chat(client, alice, bob, monk
     }).json()["id"]
     url = f"/api/credentials/{cred}/telegram-chat"
     calls = []
+    proxy = "http://proxy.test:8080"
+    monkeypatch.setattr(telegram, "get_llm_env", lambda: LLMEnv(_env_file=None, nvidia_proxies=proxy))
 
     async def updates(method, target, **kwargs):
         assert method == "POST" and target.endswith(f"/bot{token}/getUpdates")
         assert kwargs["json"] == {"limit": 100, "timeout": 0}
+        assert kwargs["proxy"] == proxy
         calls.append(method)
         return httpx.Response(200, json={"ok": True, "result": [
             {"message": {"chat": {"type": "private", "id": 31, "username": "AliceTest"}}},
@@ -21,7 +25,7 @@ def test_lookup_only_returns_the_requested_private_chat(client, alice, bob, monk
             {"message": {"chat": {"type": "private", "id": 91, "username": "OtherTest"}}},
         ]})
 
-    monkeypatch.setattr(credentials, "safe_request", updates)
+    monkeypatch.setattr(telegram, "safe_request", updates)
     assert client.post(url, headers=bob.headers, json={"username": "@alicetest"}).status_code == 404
     assert not calls
     got = client.post(url, headers=alice.headers, json={"username": "@alicetest"})

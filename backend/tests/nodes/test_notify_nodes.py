@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import json
@@ -10,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import httpx
 import pytest
 
+from app.ai.pool import LLMEnv
 from app.analyzers.runner import analyze_project
 from app.config import get_settings
 from app.core.masking import Masker
@@ -57,7 +59,9 @@ def findings():
 
 
 @pytest.mark.parametrize(("recipient", "expected"), [("-100123", "-100123"), ("team_channel", "@team_channel")])
-def test_telegram_sends_summary_with_report_and_document(http_server, services, findings, recipient, expected):
+def test_telegram_sends_summary_with_report_and_document(http_server, services, findings, recipient, expected,
+                                                         monkeypatch):
+    monkeypatch.setattr("app.telegram.get_llm_env", lambda: LLMEnv(_env_file=None, nvidia_proxies="http://127.0.0.1:1"))
     hostport, reqs = http_server
     services.credentials["tg"] = BOT_TOKEN
     masker = Masker()
@@ -79,6 +83,56 @@ def test_telegram_chat_not_found_explains_how_to_fix_destination():
     response = httpx.Response(400, json={"ok": False, "description": "Bad Request: chat not found"})
     with pytest.raises(notify_telegram.TelegramError, match=r"chat not found.*Chat ID.*/start"):
         notify_telegram.NotifyTelegram._check(response)
+
+
+def test_public_telegram_retries_connection_and_sends_document(monkeypatch, services):
+    from app import telegram
+
+    monkeypatch.setenv("NVIDIA_PROXIES", "http://u:p@proxy1.test:8080,http://u:p@proxy2.test:8080")
+    monkeypatch.setenv("APP_TELEGRAM_API_BASE", "https://api.telegram.org")
+    monkeypatch.setattr(telegram, "get_llm_env", lambda: LLMEnv(_env_file=None))
+    calls = []
+
+    async def send(method, url, *, proxy, **kwargs):
+        calls.append((url.rsplit("/", 1)[1], proxy))
+        if proxy.endswith("proxy1.test:8080"):
+            raise httpx.ConnectError("unreachable")
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr(telegram, "safe_request", send)
+    services.credentials["tg"] = BOT_TOKEN
+    run_node("notify.telegram", {}, {"bot_token": "tg", "chat_id": "1"}, services)
+    delivered = [method for method, proxy in calls if proxy.endswith("proxy2.test:8080")]
+    assert calls[0] == ("sendMessage", "http://u:p@proxy1.test:8080")
+    assert delivered == ["sendMessage", "sendDocument"]
+
+
+async def test_telegram_does_not_resend_after_ambiguous_delivery(monkeypatch):
+    from app import telegram
+    from app.core.ssrf import safe_request
+
+    calls = []
+
+    async def drop_after_post(reader, writer):
+        headers = await reader.readuntil(b"\r\n\r\n")
+        assert headers.startswith(b"POST ")
+        writer.close()
+        await writer.wait_closed()
+
+    async def local_request(method, url, **kwargs):
+        calls.append(kwargs["proxy"])
+        kwargs["allow_hosts"].add("127.0.0.1:1")
+        return await safe_request(method, "http://127.0.0.1:1/sendMessage", **kwargs)
+
+    server = await asyncio.start_server(drop_after_post, "127.0.0.1", 0)
+    async with server:
+        first = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}"
+        monkeypatch.setattr(telegram, "get_llm_env", lambda: LLMEnv(
+            _env_file=None, nvidia_proxies=f"{first},http://127.0.0.1:2"))
+        monkeypatch.setattr(telegram, "safe_request", local_request)
+        with pytest.raises(httpx.TransportError, match="Статус отправки неизвестен"):
+            await telegram.telegram_request(BOT_TOKEN, "sendMessage", json={"chat_id": "1", "text": "test"})
+    assert calls == [first]
 
 
 @pytest.mark.parametrize(("threshold", "confidence", "count"), [(0.8, 0.9, 1), (0.8, 0.5, 0), (0.4, 0.5, 1)])

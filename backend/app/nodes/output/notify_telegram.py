@@ -3,11 +3,10 @@ from __future__ import annotations
 import json
 import re
 
-from app.config import get_settings
-from app.core.ssrf import safe_request
 from app.nodes.base import BaseNode, Envelope, Port, register_node
 from app.nodes.schema import credential, obj, prop
 from app.notifications import build_content, split_message
+from app.telegram import telegram_request
 
 TELEGRAM_LIMIT = 4096
 
@@ -46,9 +45,6 @@ class NotifyTelegram(BaseNode):
 
     async def execute(self, ctx, inputs, config):
         token = ctx.secret(config["bot_token"])
-        settings = get_settings()
-        base = f"{settings.telegram_api_base.rstrip('/')}/bot{token}"
-        allow = settings.ssrf_allowed()
         content = build_content(ctx, inputs, config.get("template"))
         recipient = config["chat_id"].strip()
         if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,31}", recipient):
@@ -56,16 +52,14 @@ class NotifyTelegram(BaseNode):
         sent = 0
         try:
             for chunk in split_message(content.text, TELEGRAM_LIMIT):
-                resp = await safe_request("POST", f"{base}/sendMessage", allow_hosts=allow,
-                                          json={"chat_id": recipient, "text": chunk,
-                                                "disable_web_page_preview": True})
+                resp = await telegram_request(token, "sendMessage", json={"chat_id": recipient, "text": chunk,
+                                                                         "disable_web_page_preview": True})
                 self._check(resp)
                 sent += 1
             if config.get("send_document", True):
                 files = {"document": ("report.md", content.markdown.encode("utf-8"), "text/markdown")}
-                resp = await safe_request("POST", f"{base}/sendDocument", allow_hosts=allow,
-                                          data={"chat_id": recipient,
-                                                "caption": content.text.splitlines()[0][:1024]}, files=files)
+                resp = await telegram_request(token, "sendDocument", files=files,
+                                              data={"chat_id": recipient, "caption": content.text.splitlines()[0][:1024]})
                 self._check(resp)
         except Exception as exc:
             ctx.services.add_notification(ctx.node_id, "telegram", "failed", ctx.masker.mask(str(exc))[:500])
