@@ -5,6 +5,8 @@ import asyncio
 import pytest
 
 from app.ai import proxy_scheme as ps
+from app.ai.providers import nvidia
+from app.ai.providers.base import LLMError, ProviderConfig
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +47,42 @@ async def test_sniff_detects_http():
     srv, port = await _server(b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n", [])
     async with srv:
         assert await ps.sniff("127.0.0.1", port, timeout=1) == "http"
+
+
+async def test_retry_keeps_detected_http_protocol():
+    srv, port = await _server(b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n", [])
+    async with srv:
+        url = f"auto://127.0.0.1:{port}"
+        tried: set[str] = set()
+        assert await ps.resolve(url, tried) == f"http://127.0.0.1:{port}"
+        assert await ps.resolve(url, tried) == f"http://127.0.0.1:{port}"
+
+
+@pytest.mark.parametrize("second_works", [True, False])
+async def test_nvidia_retries_malformed_socks_reply(monkeypatch, second_works):
+    http_error = b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n"
+    body = b'{"choices":[{"message":{"content":"ok"}}]}'
+    http_ok = b"HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n" % len(body) + body
+    first_requests, second_requests = [], []
+    first, port1 = await _server(http_error, first_requests)
+    second, port2 = await _server(http_ok if second_works else http_error, second_requests)
+    async with first, second:
+        target = "http://127.0.0.1:1"
+        monkeypatch.setattr(nvidia, "NVIDIA_BASE_URL", target)
+        monkeypatch.setattr("app.ai.providers.base.random.shuffle", lambda order: None)
+        scheme = "http" if second_works else "socks5"
+        cfg = ProviderConfig(provider="nvidia", model="test", base_url=target, allow_hosts={"127.0.0.1"},
+                             proxies=[f"socks5://127.0.0.1:{port1}", f"{scheme}://127.0.0.1:{port2}"],
+                             rotation_retries=2, pause_first=0)
+        provider = nvidia.NvidiaProvider(cfg)
+        messages = [{"role": "user", "content": "ping"}]
+        if second_works:
+            assert (await provider.chat(messages)).content == "ok"
+        else:
+            with pytest.raises(LLMError, match="Все 2 попытки исчерпаны.*SOCKS5"):
+                await provider.chat(messages)
+    assert first_requests == [b"\x05\x01\x00"]
+    assert len(second_requests) == 1
 
 
 async def test_sniff_silent_returns_none():

@@ -17,6 +17,7 @@ from typing import Any, ClassVar
 from urllib.parse import unquote, urlsplit
 
 import httpx
+import socksio
 
 from app.ai.pool import NEMOTRON_LIGHTNING, NVIDIA_BASE_URL, auto_retries, mask_proxy
 from app.ai.proxy_scheme import forget, remember, resolve
@@ -119,6 +120,10 @@ class LLMProvider(ABC):
                                           connect_timeout=min(t, 10.0) if proxy else None)
             except SSRFError as exc:
                 raise LLMError(f"запрос к провайдеру заблокирован: {exc}") from exc
+            except socksio.ProtocolError as exc:
+                # httpcore can pass SOCKS handshake decoding errors through without wrapping them.
+                last = LLMError("Прокси вернул некорректный ответ при установке соединения SOCKS5.")
+                last.__cause__ = exc
             except httpx.TimeoutException as exc:
                 last = LLMTimeout(f"провайдер не ответил за {timeout or self.cfg.timeout:g} с")
                 last.__cause__ = exc

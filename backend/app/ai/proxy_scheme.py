@@ -84,7 +84,7 @@ async def resolve(url: str, tried: set[str], sniff_timeout: float = SNIFF_TIMEOU
         return _with_scheme(url, cached[0])
     p = urlsplit(url)
     detected = await sniff(p.hostname or "", p.port or 1080, sniff_timeout) if p.hostname else None
-    if detected and detected not in tried:
+    if detected:
         tried.add(detected)
         return _with_scheme(url, detected)
     scheme = next((s for s in ORDER if s not in tried), ORDER[0])
