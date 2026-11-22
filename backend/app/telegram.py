@@ -17,7 +17,7 @@ async def telegram_request(token: str, method: str, *, timeout: float = DEFAULT_
     base = settings.telegram_api_base.rstrip("/")
     url = f"{base}/bot{token}/{method}"
     allow = settings.ssrf_allowed()
-    entries = get_llm_env().proxy_entries if base == "https://api.telegram.org" else []
+    entries = get_llm_env().telegram_proxy_entries if base == "https://api.telegram.org" else []
     if not entries:
         return await safe_request("POST", url, allow_hosts=allow, max_redirects=0, timeout=timeout, **body)
 

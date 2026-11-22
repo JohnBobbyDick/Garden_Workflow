@@ -68,6 +68,7 @@ class LLMEnv(BaseSettings):
     llm_provider: str = "nvidia"
     nvidia_api_key: str = ""
     nvidia_proxies: str = ""
+    telegram_proxies: str = ""
     gemeni_proxies: str = ""
     gemini_proxies: str = ""
     ollama_url: str = "http://localhost:11434"
@@ -100,6 +101,10 @@ class LLMEnv(BaseSettings):
     @property
     def proxy_entries(self) -> list[str]:
         return split_list(self.nvidia_proxies or self.gemeni_proxies or self.gemini_proxies)
+
+    @property
+    def telegram_proxy_entries(self) -> list[str]:
+        return split_list(self.telegram_proxies) or self.proxy_entries
 
     @property
     def proxies(self) -> list[str]:

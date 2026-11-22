@@ -52,6 +52,15 @@ def test_mask_proxy_hides_credentials():
     assert mask_proxy("auto://u:secret@h") == "auto://h"
 
 
+def test_telegram_proxy_can_be_configured_with_direct_nvidia(monkeypatch):
+    for name in ("NVIDIA_PROXIES", "GEMENI_PROXIES", "GEMINI_PROXIES"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("TELEGRAM_PROXIES", "http://telegram.test:8080")
+    env = LLMEnv(_env_file=None)
+    assert env.telegram_proxy_entries == ["http://telegram.test:8080"]
+    assert env.proxies == []
+
+
 def test_legacy_proxy_names_feed_nvidia_rotation(monkeypatch):
     for name in ("GEMINI_PROXIES", "GEMENI_PROXIES"):
         with monkeypatch.context() as patch:
