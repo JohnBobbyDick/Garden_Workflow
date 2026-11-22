@@ -18,6 +18,7 @@ import { NodeCard } from '../editor/NodeCard'
 import { useRunEvents } from '../editor/useRunEvents'
 import { useLang } from '../i18n'
 import { fmtDate, fmtDuration, SEVERITIES } from '../lib/format'
+import { RunActions } from '../results/FixedProjectActions'
 import { toast } from '../store/toast'
 
 const nodeTypes = { aisw: NodeCard }
@@ -68,7 +69,7 @@ function VerdictBadge({ verdict }: { verdict: Record<string, unknown> | null }) 
     diff: {v}</Badge>
 }
 
-function FindingsTable({ findings, runId }: { findings: Finding[]; runId: string }) {
+function FindingsTable({ findings, runId, canFix }: { findings: Finding[]; runId: string; canFix: boolean }) {
   const { t } = useTranslation()
   const [cat, setCat] = useState('')
   const [sev, setSev] = useState('')
@@ -134,7 +135,7 @@ function FindingsTable({ findings, runId }: { findings: Finding[]; runId: string
                         </div>
                         {f.snippet && <div><div className="label">{t('run.snippet')}</div><pre className="overflow-x-auto rounded-field border border-border bg-surface p-2 font-mono text-xs">{f.snippet}</pre></div>}
                       </div>
-                      <AutofixPanel runId={runId} finding={f} />
+                      {canFix && <AutofixPanel runId={runId} finding={f} />}
                     </td></tr>
                   )}
                 </Fragment>
@@ -173,9 +174,12 @@ export function TrustIndicator({ ai }: { ai: AIReportResponse }) {
   )
 }
 
-export function AiReport({ runId, findings }: { runId: string; findings: Finding[] }) {
+export function AiReport({ run, findings }: { run: Run; findings: Finding[] }) {
   const { t } = useTranslation()
-  const ai = useAiReport(runId)
+  const live = ['running', 'queued'].includes(run.status)
+  const revision = live ? (run.nodes ?? []).filter((n) => n.node_type === 'ai.report' && n.status === 'success').length : 'final'
+  const ai = useAiReport(run.id, revision)
+  if (revision === 0) return <p role="status" className="text-sm text-muted">{t('results.reportPending')}</p>
   if (ai.isLoading) return <Skeleton className="h-40" />
   if (ai.error instanceof ApiError && ai.error.status === 404) return <EmptyState icon="sparkles" title={t('run.noAi')} />
   if (ai.error) return <ErrorState error={ai.error} onRetry={() => ai.refetch()} />
@@ -229,7 +233,7 @@ export default function RunDetailsPage() {
   const tab = (params.get('tab') as Tab) ?? 'findings'
   const run = useRun(id, true)
   const done = !!run.data && ['success', 'failed', 'cancelled'].includes(run.data.status)
-  const findings = useRunFindings(id, done)
+  const findings = useRunFindings(id, !!run.data, !done)
   const live = useRunEvents(id ?? null)
   const invalidate = useInvalidate()
   if (run.error) return <Page><ErrorState error={run.error} onRetry={() => run.refetch()} /></Page>
@@ -245,11 +249,9 @@ export default function RunDetailsPage() {
         title={<span className="flex flex-wrap items-center gap-x-3 gap-y-2">{t('run.title')}: {r.workflow_name ?? r.id.slice(0, 8)} <StatusBadge status={r.status} /> <GateBadge gate={r.gate} /><VerdictBadge verdict={r.verdict} /></span>}
         subtitle={`${t(`trigger.${r.trigger_type}`, r.trigger_type)} · ${fmtDate(r.created_at, lang)} · ${t('common.duration')}: ${fmtDuration(r.duration_ms, lang)}`}
         actions={<>
+          <RunActions full key={r.id} run={r} findings={findings.data?.findings ?? []} />
           {!done && <Button icon="stop" variant="danger" onClick={cancel}>{t('runs.cancel')}</Button>}
           {r.workflow_id && <Link to={`/workflows/${r.workflow_id}`} className="text-sm text-primary hover:underline">{t('runs.workflow')}</Link>}
-          <Button icon="download" disabled={!done} onClick={() => downloadFile(`/api/runs/${r.id}/export/submission.json`, 'submission.json')}>{t('run.exportJson')}</Button>
-          <Button icon="download" disabled={!done} onClick={() => downloadFile(`/api/runs/${r.id}/export/report.md`, 'report.md')}>{t('run.exportMd')}</Button>
-          <Button icon="download" disabled={!done} onClick={() => downloadFile(`/api/runs/${r.id}/export/report.html`, 'report.html')}>{t('run.exportHtml')}</Button>
         </>}
       />
       {r.error && <div className="mb-4"><ErrorState error={new Error(r.error)} /></div>}
@@ -269,9 +271,9 @@ export default function RunDetailsPage() {
       ]} />
       <div className="mt-4">
         {tab === 'graph' && r.graph_snapshot && <RunGraph key={r.id} run={r} live={live} />}
-        {tab === 'findings' && (findings.isLoading || !done ? <Skeleton className="h-48" /> : <FindingsTable runId={r.id} findings={findings.data?.findings ?? []} />)}
+        {tab === 'findings' && (findings.isLoading || (!done && !findings.data?.findings.length) ? <Skeleton className="h-48" /> : <FindingsTable canFix={r.status === 'success'} runId={r.id} findings={findings.data?.findings ?? []} />)}
         {tab === 'score' && (done ? <RunScoreTab runId={r.id} /> : <Skeleton className="h-48" />)}
-        {tab === 'ai' && (done ? <AiReport runId={r.id} findings={findings.data?.findings ?? []} /> : <Skeleton className="h-48" />)}
+        {tab === 'ai' && <AiReport run={r} findings={findings.data?.findings ?? []} />}
         {tab === 'logs' && (logs.length ? (
           <div className="card max-h-[560px] overflow-auto p-3 font-mono text-xs">
             {logs.map((l, i) => <div key={i} className={clsx(l.level === 'warning' && 'text-warning')}><span className="text-muted">{new Date(l.at).toLocaleTimeString()} [{l.node}]</span> {l.message}</div>)}

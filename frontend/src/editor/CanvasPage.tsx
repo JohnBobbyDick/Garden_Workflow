@@ -106,7 +106,6 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
   useEffect(() => () => { if (finaleTimer.current) window.clearTimeout(finaleTimer.current) }, [])
   useEffect(() => {  // the SSE stream ended → the run row is final: refresh results and the checks list
     if (live.ended || (live.status && !['queued', 'running'].includes(live.status))) {
-      void shownRun.refetch()
       void invalidate('workflows', 'runs')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

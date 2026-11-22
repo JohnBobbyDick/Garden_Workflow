@@ -78,10 +78,22 @@ test('jury path: first visit → «Новая проверка» → учебн�
   await expect(results.getByRole('tab', { name: /Находки/ })).toContainText('15')
   await results.getByRole('button', { name: /Уязвимая зависимость org\.apache\.commons:commons-text/ }).click()
   await results.getByRole('button', { name: 'Проверить патч' }).click()
-  await expect(results.getByText('Повторная проверка патча прошла успешно.')).toBeVisible({ timeout: 60_000 })
+  await expect(results.getByText('Патч проверен и готов к применению.')).toBeVisible({ timeout: 60_000 })
   await expect(results.getByRole('button', { name: 'Создать PR' })).toHaveCount(0)  // organizers' repo is read-only
   await results.getByRole('button', { name: 'Применить патч и перепроверить' }).click()
-  await expect(results.getByText(/Патч применён к копии проекта/)).toBeVisible({ timeout: 90_000 })
+  await expect(results.getByRole('tab', { name: /Находки/ })).toContainText('14', { timeout: 90_000 })
+  await expect(results.getByRole('button', { name: /Уязвимая зависимость org\.apache\.commons:commons-text/ })).toHaveCount(0)
+  await results.getByRole('button', { name: 'Действия с запуском' }).click()
+  const menu = results.getByRole('menu', { name: 'Действия с запуском' })
+  for (const name of ['report.md', 'submission.json', 'report.html', 'Сравнить', 'Полный отчёт']) {
+    await expect(menu.getByRole('menuitem', { name, exact: true })).toBeVisible()
+  }
+  await menu.getByRole('menuitem', { name: 'Исправить все' }).click()
+  await expect(results.getByRole('tab', { name: /Находки/ })).toContainText('10', { timeout: 90_000 })
+  const download = page.waitForEvent('download')
+  await results.getByRole('button', { name: 'Действия с запуском' }).click()
+  await menu.getByRole('menuitem', { name: /Скачать исправленный проект/ }).click()
+  expect((await download).suggestedFilename()).toMatch(/^fixed-.*\.zip$/)
 
   // links from notifications / CI / report.html and the old editor address keep working
   const [, wf, run] = page.url().match(/\/c\/([0-9a-f]{32})\?run=([0-9a-f]{32})/)!
@@ -302,7 +314,8 @@ test('review catalog: find review nodes and export a sampled scan to CSV', async
   await page.getByRole('button', { name: 'Запустить' }).click()
   await waitRunEnd(page)
   await expect(page.locator('.run-banner')).toContainText('Успешно')
-  await page.getByRole('link', { name: 'Полный отчёт' }).click()
+  await page.getByRole('button', { name: 'Действия с запуском' }).click()
+  await page.getByRole('menuitem', { name: 'Полный отчёт' }).click()
   await page.getByRole('tab', { name: 'Артефакты и экспорт' }).click()
   const row = page.getByRole('listitem').filter({ hasText: /findings-.*\.csv/ })
   await expect(row).toBeVisible()

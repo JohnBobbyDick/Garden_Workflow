@@ -96,6 +96,8 @@ RU = {
     "GET /api/runs/{run_id}/autofixes": "исправления запуска", "GET /api/autofixes/{autofix_id}": "исправление + доступность PR",
     "GET /api/autofixes/{autofix_id}/patch": "скачать маскированный `.patch`",
     "POST /api/autofixes/{autofix_id}/pull-request": "создать/обновить PR/MR (только `allow_write`, иначе 403)",
+    "POST /api/runs/{run_id}/autofixes/recheck": "Применить совместимые проверенные исправления и запустить проверку копии проекта",
+    "GET /api/runs/{run_id}/fixed-project.zip": "Скачать копию проекта с применёнными исправлениями и маскировкой секретов",
     "POST /api/autofixes/{autofix_id}/recheck": "«Повторная проверка»: запуск сценария на копии проекта с применённым "
                                                 "проверенным патчем (новый run, 202)",
     "POST /api/demo/setup": "«Демо-данные»: идемпотентно создать демо-проект на учебном наборе и сценарий "

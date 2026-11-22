@@ -3,16 +3,14 @@ import clsx from 'clsx'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, ApiError, downloadFile } from '../api/client'
-import { useRun } from '../api/hooks'
 import type { Finding, Run } from '../api/types'
 import type { Autofix } from '../components/autofix'
-import { Chip, runLabel } from '../components/chip'
+import { Chip } from '../components/chip'
 import { SeverityBadge } from '../components/domain'
-import { Button, Spinner } from '../components/ui'
+import { Button } from '../components/ui'
 import { Icon } from '../components/ui/Icon'
-import { useLang } from '../i18n'
 import { toast } from '../store/toast'
-import { runVerdict } from './findings'
+import { useOpenRecheck } from './FixedProjectActions'
 
 function PatchLines({ patch }: { patch: string }) {
   const lines = patch.split('\n').filter((l) => !l.startsWith('diff ') && !l.startsWith('index '))
@@ -29,16 +27,14 @@ function PatchLines({ patch }: { patch: string }) {
 /** One finding: where / why / what to do, then AI AutoFix → validation → PR or .patch → re-check with the patch. */
 export function FindingDetail({ run, finding, onBack }: { run: Run; finding: Finding; onBack: () => void }) {
   const { t } = useTranslation()
-  const lang = useLang()
+  const openRecheck = useOpenRecheck()
   const qc = useQueryClient()
   const list = useQuery({ queryKey: ['autofixes', run.id], queryFn: () => api<Autofix[]>(`/api/runs/${run.id}/autofixes`) })
   const latestId = (list.data ?? []).find((a) => a.finding_id === finding.id)?.id
   const detail = useQuery({ queryKey: ['autofix', latestId], enabled: !!latestId, queryFn: () => api<Autofix>(`/api/autofixes/${latestId}`) })
   const [busy, setBusy] = useState<'gen' | 'pr' | 'recheck' | null>(null)
-  const [recheckId, setRecheckId] = useState<string | null>(null)
   const [steps, setSteps] = useState(false)
-  const recheck = useRun(recheckId ?? undefined, true)
-  useEffect(() => { setRecheckId(null); setSteps(false) }, [finding.id])
+  useEffect(() => { setSteps(false) }, [finding.id])
   const af = latestId ? detail.data : undefined
   const kind = finding.autofix ?? 'none'
 
@@ -54,14 +50,11 @@ export function FindingDetail({ run, finding, onBack }: { run: Run; finding: Fin
         await qc.invalidateQueries({ queryKey: ['autofix', af.id] })
       } else if (what === 'recheck' && af) {
         const r = await api<{ run_id: string }>(`/api/autofixes/${af.id}/recheck`, { method: 'POST', json: {} })
-        setRecheckId(r.run_id)
+        openRecheck(r.run_id)
       }
     } catch (e) { toast.error(e instanceof ApiError ? e.message : String(e)) } finally { setBusy(null) }
   }
 
-  const rr = recheck.data
-  const rrDone = !!rr && !['queued', 'running'].includes(rr.status)
-  const rrVerdict = rr ? runVerdict(rr) : null
   return (
     <div className="space-y-4">
       <button type="button" onClick={onBack} className="flex items-center gap-1 text-[13px] font-bold text-primary hover:underline">
@@ -81,7 +74,7 @@ export function FindingDetail({ run, finding, onBack }: { run: Run; finding: Fin
       {finding.remediation && <p className="text-sm"><b>{t('run.recommendation')}:</b> {finding.remediation}</p>}
       {finding.snippet && <pre className="overflow-x-auto rounded-field border border-border bg-surface-2 p-2 font-mono text-[12px]" aria-label={t('run.snippet')}>{finding.snippet}</pre>}
 
-      <section className="rounded-card border border-border bg-surface p-4" aria-label="AI AutoFix">
+      {run.status === 'success' && <section className="rounded-card border border-border bg-surface p-4" aria-label="AI AutoFix">
         <div className="mb-2 flex items-center gap-2 font-bold"><Icon name="wrench" size={16} />AI AutoFix</div>
         {kind === 'none' ? <p className="text-sm text-muted">{t('autofix.none')}</p> : (
           <>
@@ -122,34 +115,17 @@ export function FindingDetail({ run, finding, onBack }: { run: Run; finding: Fin
                       {af.pr_url ? t('autofix.updatePr') : t('autofix.createPr')}</Button>}
                     <Button icon="download" onClick={() => void downloadFile(`/api/autofixes/${af.id}/patch`, `autofix-${af.finding_id}.patch`)}>{t('autofix.downloadPatch')}</Button>
                     <Button variant={af.can_create_pr && !af.pr_url ? 'secondary' : 'primary'} icon="play" loading={busy === 'recheck'}
-                      disabled={!!recheckId && !rrDone} onClick={() => act('recheck')}>{t('pr.recheck')}</Button>
+                      disabled={busy !== null} onClick={() => act('recheck')}>{t('pr.recheck')}</Button>
                   </div>
                 )}
                 {af.pr_url && <p className="text-sm">{t('pr.prCreated')} · <a className="font-bold text-primary hover:underline" href={af.pr_url} target="_blank" rel="noreferrer noopener">{af.pr_url}</a></p>}
                 {af.status === 'validated' && !af.can_create_pr && af.pr_unavailable_reason && <p className="text-[13px] text-muted">{af.pr_unavailable_reason}</p>}
-                {recheckId && (
-                  <div className="rounded-field bg-surface-2 p-3 text-sm" role="status" aria-live="polite">
-                    {!rrDone ? <span className="flex items-center gap-2"><Spinner size={14} />{t('pr.rechecking')}</span> : (
-                      <>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {rrVerdict ? <Chip tone={rrVerdict === 'fail' ? 'bad' : 'ok'}>{rrVerdict.toUpperCase()}</Chip> : <Chip tone="plain">{t(`status.${rr!.status}`)}</Chip>}
-                          {rr!.score !== null && <Chip>Security Score {rr!.score}{run.score !== null ? ` (${t('pr.was')} ${run.score})` : ''}</Chip>}
-                          <span>{t('pr.recheckTotal', { n: rr!.summary.total ?? 0, was: run.summary.total ?? 0 })}</span>
-                        </div>
-                        <p className="mt-2">{rrVerdict === 'fail' ? t('pr.recheckFail') : t('pr.recheckPass')}</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <Chip to={`/runs/${rr!.id}`}>{t('pr.openRecheck')} {runLabel(rr!, lang)}</Chip>
-                          <Chip tone="plain" to="?panel=overview">{t('pr.toDashboard')}</Chip>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+
               </div>
             )}
           </>
         )}
-      </section>
+      </section>}
     </div>
   )
 }

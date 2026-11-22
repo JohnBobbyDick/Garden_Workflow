@@ -97,3 +97,45 @@ def test_demo_training_source_is_a_scannable_path(client, db, alice):
     v = client.post("/api/workflows/validate", json={"workspace_id": alice.workspace_id, "graph": g}, headers=alice.headers)
     assert v.json()["valid"] is True, v.json()
     assert client.get("/api/demo/training").status_code == 401
+
+
+def test_combined_recheck_exports_the_scanned_project(client, db, alice, bob):
+    import io
+    import zipfile
+    from datetime import UTC, datetime, timedelta
+
+    from app import models as m
+    from tests.api.test_autofix_api import PWD_FILE, SECRET
+
+    _, rid = run_training(client, db, alice)
+    base = f"/api/runs/{rid}"
+    findings = client.get(base + "/findings", headers=alice.headers).json()["findings"]
+    targets = [f for f in findings if f["autofix"] == "deterministic"]
+    patches = [client.post(f"{base}/findings/{f['id']}/autofix", headers=alice.headers).json() for f in targets]
+    ids = [p["id"] for p in patches if p["status"] == "validated"]
+    assert len(ids) >= 2
+    assert client.post(base + "/autofixes/recheck", json={"autofix_ids": ids}, headers=bob.headers).status_code == 404
+    mixed = client.post(base + "/autofixes/recheck", json={"autofix_ids": [ids[0], "missing"]}, headers=alice.headers)
+    assert mixed.status_code == 404
+    res = client.post(base + "/autofixes/recheck", json={"autofix_ids": ids}, headers=alice.headers)
+    assert res.status_code == 202, res.text
+    new = "/api/runs/" + res.json()["run_id"]
+    archive = client.get(new + "/fixed-project.zip", headers=alice.headers)
+    assert archive.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as z:
+        assert "build.gradle.kts" in z.namelist()
+        assert any(p.endswith(".kt") for p in z.namelist())
+        assert b"commons-text:1.10.0" in z.read("build.gradle.kts")
+        assert SECRET.encode() not in z.read(PWD_FILE)
+    assert client.get(new + "/fixed-project.zip", headers=bob.headers).status_code == 404
+    assert client.get(base + "/fixed-project.zip", headers=alice.headers).status_code == 404
+    drain(db)
+    remaining = client.get(new + "/findings", headers=alice.headers).json()["findings"]
+    assert {p["finding_id"] for p in patches if p["status"] == "validated"}.isdisjoint(f["id"] for f in remaining)
+    assert client.get(new, headers=alice.headers).json()["has_fixed_project"]
+    assert len(client.get(base + "/findings", headers=alice.headers).json()["findings"]) == len(findings)
+    with db.session() as s:
+        upload_id = s.get(m.Run, res.json()["run_id"]).fixed_upload_id
+        s.get(m.Upload, upload_id).expires_at = datetime.now(UTC) - timedelta(hours=1)
+        s.commit()
+    assert client.get(new + "/fixed-project.zip", headers=alice.headers).status_code == 410

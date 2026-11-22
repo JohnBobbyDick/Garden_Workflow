@@ -34,6 +34,8 @@ class Run(IdMixin, CreatedMixin, Base):
     project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True,
                                                    index=True)
     status: Mapped[str] = mapped_column(String(16), default="queued")
+    fixed_upload_id: Mapped[str | None] = mapped_column(ForeignKey("uploads.id", name="fk_run_fixed_upload",
+                                                                   ondelete="SET NULL"), nullable=True)
     graph_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     trigger_type: Mapped[str] = mapped_column(String(16), default="manual")  # manual|schedule|ci|webhook
     trigger_node_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

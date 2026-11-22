@@ -81,16 +81,17 @@ export function useRun(id: string | undefined, live = false) {
   })
 }
 
-export function useRunFindings(id: string | undefined, enabled = true) {
+export function useRunFindings(id: string | undefined, enabled = true, live = false) {
   return useQuery({
-    queryKey: ['findings', id], enabled: !!id && enabled,
+    queryKey: ['findings', id, live ? 'live' : 'final'], enabled: !!id && enabled,
+    refetchInterval: live ? 2000 : false,
     queryFn: () => api<{ findings: Finding[]; official_min_confidence: number }>(`/api/runs/${id}/findings`),
   })
 }
 
-export function useAiReport(id: string | undefined, enabled = true) {
+export function useAiReport(id: string | undefined, revision: number | 'final') {
   return useQuery({
-    queryKey: ['ai-report', id], enabled: !!id && enabled, retry: false,
+    queryKey: ['ai-report', id, revision], enabled: !!id && revision !== 0, retry: false,
     queryFn: () => api<AIReportResponse>(`/api/runs/${id}/ai-report`),
   })
 }
