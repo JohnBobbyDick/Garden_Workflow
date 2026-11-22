@@ -1,4 +1,4 @@
-"""Telegram Bot API transport shared by notifications and private chat lookup."""
+"""Telegram Bot API transport shared by notifications and chat lookup."""
 
 import asyncio
 from urllib.parse import urlsplit

@@ -33,5 +33,6 @@ describe('panels in the query string', () => {
   it('opens and closes a panel keeping other params', () => {
     expect(withPanel('?run=1', 'templates')).toBe('?run=1&panel=templates')
     expect(withPanel('?run=1&panel=templates&tab=x', null)).toBe('?run=1')
+    expect(withPanel('?panel=compare&base=old&head=new&run=new', null)).toBe('?run=new')
   })
 })

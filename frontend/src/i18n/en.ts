@@ -29,8 +29,6 @@ const en: Shape<typeof ru> = {
   },
   auth: {
     login: 'Sign in', register: 'Sign up', email: 'E-mail', password: 'Password', displayName: 'Name',
-    code: 'Email code', codeSent: 'The code was sent to {{email}} and is valid for 10 minutes.',
-    sendCode: 'Send code', resendCode: 'Resend code', changeEmail: 'Change email',
     submitLogin: 'Sign in', submitRegister: 'Create account', noAccount: 'No account yet?', haveAccount: 'Already registered?',
     passwordHint: 'At least 10 characters', welcome: 'Code security without enterprise scanners',
     features: {

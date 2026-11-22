@@ -19,31 +19,17 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [sentTo, setSentTo] = useState('')
-  const [code, setCode] = useState('')
-  const verifying = mode === 'register' && !!sentTo
-
   if (accessToken) return <Navigate to="/" replace />
-
-  const requestCode = async () => {
-    await api('/api/auth/registration-code', { method: 'POST', json: { email, locale: lang } })
-    setSentTo(email)
-    setCode('')
-  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setBusy(true)
     setError(null)
     try {
-      if (mode === 'register' && !verifying) {
-        await requestCode()
-        return
-      }
       const body = mode === 'login'
         ? await api<{ access_token: string; refresh_token: string; user: User }>('/api/auth/login', { method: 'POST', json: { email, password } })
         : await api<{ access_token: string; refresh_token: string; user: User }>('/api/auth/register', {
-          method: 'POST', json: { email: sentTo, password, display_name: name, locale: lang, code } })
+          method: 'POST', json: { email, password, display_name: name, locale: lang } })
       setTokens(body.access_token, body.refresh_token, body.user)
       navigate('/')
     } catch (err) {
@@ -77,37 +63,22 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         </div>
         <form onSubmit={submit} className="card mx-auto w-full max-w-sm p-6" aria-labelledby="auth-title">
           <h1 id="auth-title" className="mb-5 text-xl font-semibold">{mode === 'login' ? t('auth.login') : t('auth.register')}</h1>
-          {mode === 'register' && !verifying && (
+          {mode === 'register' && (
             <Field label={t('auth.displayName')} htmlFor="name">
               <Input id="name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
             </Field>
           )}
-          {!verifying && <><Field label={t('auth.email')} htmlFor="email" required>
+          <Field label={t('auth.email')} htmlFor="email" required>
             <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
           </Field>
           <Field label={t('auth.password')} htmlFor="password" required hint={mode === 'register' ? t('auth.passwordHint') : undefined}>
             <Input id="password" type="password" required minLength={mode === 'register' ? 10 : undefined} value={password}
               onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
-          </Field></>}
-          {verifying && <Field label={t('auth.code')} htmlFor="registration-code" required
-            hint={t('auth.codeSent', { email: sentTo })}>
-            <Input id="registration-code" autoFocus inputMode="numeric" autoComplete="one-time-code"
-              required pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} />
-          </Field>}
+          </Field>
           {error && <p role="alert" className="mb-3 rounded-field bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p>}
           <Button type="submit" variant="primary" className="w-full" loading={busy}>
-            {mode === 'login' ? t('auth.submitLogin') : t(verifying ? 'auth.submitRegister' : 'auth.sendCode')}
+            {mode === 'login' ? t('auth.submitLogin') : t('auth.submitRegister')}
           </Button>
-          {verifying && <div className="mt-3 flex flex-wrap justify-between gap-2">
-            <Button type="button" size="sm" disabled={busy} onClick={async () => {
-              setBusy(true)
-              setError(null)
-              try { await requestCode() } catch (err) { setError((err as Error).message) } finally { setBusy(false) }
-            }}>{t('auth.resendCode')}</Button>
-            <Button type="button" size="sm" disabled={busy} onClick={() => {
-              setSentTo(''); setCode(''); setError(null)
-            }}>{t('auth.changeEmail')}</Button>
-          </div>}
           <p className="mt-4 text-center text-sm text-muted">
             {mode === 'login' ? t('auth.noAccount') : t('auth.haveAccount')}{' '}
             <Link className="font-medium text-primary hover:underline" to={mode === 'login' ? '/register' : '/login'}>

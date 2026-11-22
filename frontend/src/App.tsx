@@ -22,8 +22,8 @@ export default function App() {
     <>
       <Suspense fallback={fallback}>
         <Routes>
-          <Route path="/login" element={<AuthPage mode="login" />} />
-          <Route path="/register" element={<AuthPage mode="register" />} />
+          <Route path="/login" element={<AuthPage key="login" mode="login" />} />
+          <Route path="/register" element={<AuthPage key="register" mode="register" />} />
           <Route element={<WorkspaceLayout />}>
             <Route index element={<WorkspaceIndex />} />
             <Route path="c/:id" element={<Editor />} />

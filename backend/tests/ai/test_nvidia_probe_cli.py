@@ -1,9 +1,11 @@
 from app.config import REPO_ROOT
 
 
-async def test_shareable_output_and_exit_status(monkeypatch, capsys, nvidia_server):
+async def test_shareable_output_and_exit_status(monkeypatch, capsys, nvidia_server, tmp_path):
     monkeypatch.syspath_prepend(str(REPO_ROOT))
     import check_nvidia
+
+    monkeypatch.setattr(check_nvidia, "ROOT", tmp_path)
 
     key = "local-key-for-cli-probe"
     monkeypatch.setenv("NVIDIA_API_KEY", key)

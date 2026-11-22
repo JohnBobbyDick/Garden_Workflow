@@ -15,6 +15,24 @@ os.environ.setdefault("APP_JWT_SECRET", base64.b64encode(os.urandom(32)).decode(
 os.environ["LLM_ENABLED"] = "false"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def isolate_test_settings():
+    from app.ai.pool import LLMEnv, get_llm_env
+    from app.config import Settings, get_settings
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setitem(Settings.model_config, "env_file", None)
+        patch.setitem(LLMEnv.model_config, "env_file", None)
+        for field in LLMEnv.model_fields:
+            if field != "llm_enabled":
+                patch.delenv(field.upper(), raising=False)
+        get_llm_env.cache_clear()
+        get_settings.cache_clear()
+        yield
+        get_llm_env.cache_clear()
+        get_settings.cache_clear()
+
+
 def symlink_or_skip(target, link) -> None:
     """Create a symlink; skip the test where the OS forbids it (Windows without developer mode)."""
     try:

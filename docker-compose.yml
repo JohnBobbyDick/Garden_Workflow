@@ -49,12 +49,6 @@ services:
     command: ["api"]  # alembic upgrade head → uvicorn
     environment:
       <<: *backend-env
-      APP_SMTP_HOST: ${APP_SMTP_HOST:-}
-      APP_SMTP_PORT: ${APP_SMTP_PORT:-587}
-      APP_SMTP_SECURITY: ${APP_SMTP_SECURITY:-starttls}
-      APP_SMTP_FROM: ${APP_SMTP_FROM:-}
-      APP_SMTP_USERNAME: ${APP_SMTP_USERNAME:-}
-      APP_SMTP_PASSWORD: ${APP_SMTP_PASSWORD:-}
     volumes:
       - aisw-data:/data
     depends_on:

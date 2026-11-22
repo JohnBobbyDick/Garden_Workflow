@@ -6,8 +6,6 @@ import { join, resolve } from 'node:path'
 const backend = resolve(import.meta.dirname, '../backend')
 const py = existsSync(join(backend, '.venv/Scripts/python.exe')) ? join(backend, '.venv/Scripts/python.exe') : join(backend, '.venv/bin/python')
 const data = mkdtempSync(join(tmpdir(), 'aisw-e2e-'))
-const inbox = process.env.AISW_E2E_INBOX ??= data
-const smtpPort = 25251
 const dbUrl = `sqlite:///${data.replace(/\\/g, '/')}/e2e.db`
 const API_PORT = 8011
 const UI_PORT = 5181
@@ -28,20 +26,15 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `"${py}" e2e/mailbox.py "${inbox}" ${smtpPort}`,
-      port: smtpPort,
-      reuseExistingServer: false,
-    },
-    {
       command: `"${py}" -m alembic upgrade head && "${py}" -m uvicorn app.main:app --port ${API_PORT}`,
       cwd: backend,
       url: `${apiUrl}/api/healthz`,
       timeout: 120_000,
       reuseExistingServer: false,
       env: { APP_DATABASE_URL: dbUrl, APP_DATA_DIR: data, APP_INPROCESS_WORKER: 'true', APP_ENV: 'dev',
-        APP_SMTP_HOST: '127.0.0.1', APP_SMTP_PORT: String(smtpPort), APP_SMTP_FROM: 'e2e@example.org',
-        APP_SMTP_SECURITY: 'none', APP_SMTP_USERNAME: '', APP_SMTP_PASSWORD: '', APP_SSRF_ALLOW_HOSTS: `127.0.0.1:${smtpPort}`,
-        APP_PUBLIC_URL: uiUrl, APP_CORS_ORIGINS: uiUrl, APP_WORKER_POLL_SECONDS: '0.3', LLM_ENABLED: 'false' },
+        APP_SCAN_ROOTS: resolve(backend, '../fixtures'),
+        NVIDIA_API_KEY: '', NVIDIA_PROXIES: '', GEMENI_PROXIES: '', GEMINI_PROXIES: '', TELEGRAM_PROXIES: '',
+        APP_SSRF_ALLOW_HOSTS: '', APP_PUBLIC_URL: uiUrl, APP_CORS_ORIGINS: uiUrl, APP_WORKER_POLL_SECONDS: '0.3', LLM_ENABLED: 'false' },
     },
     {
       command: `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${UI_PORT} --strictPort`,

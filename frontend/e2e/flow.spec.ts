@@ -1,6 +1,7 @@
 import { register } from './register'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const SCREENS = process.env.AISW_SCREEN_DIR ?? resolve(import.meta.dirname, '../../docs/screens')
@@ -83,11 +84,42 @@ test('jury path: first visit → «Новая проверка» → учебн�
   await results.getByRole('button', { name: 'Применить патч и перепроверить' }).click()
   await expect(results.getByRole('tab', { name: /Находки/ })).toContainText('14', { timeout: 90_000 })
   await expect(results.getByRole('button', { name: /Уязвимая зависимость org\.apache\.commons:commons-text/ })).toHaveCount(0)
-  await results.getByRole('button', { name: 'Действия с запуском' }).click()
+  const correctedUrl = page.url()
+  const correctedId = new URL(correctedUrl).searchParams.get('run')!
+  await page.getByRole('button', { name: 'Ещё', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'CI/CD' }).click()
+  const ci = page.getByRole('dialog', { name: 'CI/CD' })
+  await expect(ci).toContainText(/runs-on|stages/)
+  await ci.getByRole('button', { name: 'Закрыть' }).click()
+  await expect(page).toHaveURL(correctedUrl, { timeout: 5000 })
+
+  const actions = results.getByRole('button', { name: 'Действия с запуском' })
   const menu = results.getByRole('menu', { name: 'Действия с запуском' })
-  for (const name of ['report.md', 'submission.json', 'report.html', 'Сравнить', 'Полный отчёт']) {
-    await expect(menu.getByRole('menuitem', { name, exact: true })).toBeVisible()
+  for (const name of ['report.md', 'submission.json', 'report.html']) {
+    await actions.click()
+    const pending = page.waitForEvent('download')
+    await menu.getByRole('menuitem', { name, exact: true }).click()
+    const file = await pending
+    expect(file.suggestedFilename()).toBe(name)
+    const contents = await readFile((await file.path())!, 'utf8')
+    if (name === 'submission.json') expect(JSON.parse(contents).findings).toHaveLength(14)
+    else {
+      expect(contents).toMatch(name === 'report.md' ? /^# Отчёт/ : /^<!DOCTYPE html>/)
+      expect(contents).toContain('build.gradle.kts')
+    }
   }
+  await actions.click()
+  await menu.getByRole('menuitem', { name: 'Сравнить' }).click()
+  const compare = page.getByRole('dialog', { name: 'Сравнение запусков' })
+  await expect(compare.getByText(/commons-text/).first()).toBeVisible()
+  await compare.getByRole('button', { name: 'Закрыть' }).click()
+  await expect(page).toHaveURL(correctedUrl)
+  await actions.click()
+  await menu.getByRole('menuitem', { name: 'Полный отчёт' }).click()
+  await expect(page).toHaveURL(new RegExp('/runs/' + correctedId + '\\?full=1'))
+  await expect(page.getByRole('tab', { name: /Находки/ })).toBeVisible()
+  await page.goBack()
+  await actions.click()
   await menu.getByRole('menuitem', { name: 'Исправить все' }).click()
   await expect(results.getByRole('tab', { name: /Находки/ })).toContainText('10', { timeout: 90_000 })
   const download = page.waitForEvent('download')
@@ -186,6 +218,49 @@ test('templates and CI/CD in panels: publish → find → rate → use for your 
 
   await page.getByRole('button', { name: 'CI/CD' }).click()
   await expect(page.getByRole('dialog', { name: 'CI/CD' })).toContainText(/runs-on|stages|aisw/)
+})
+
+test('editor menu validates, exports, reimports the same file and deletes a disposable workflow', async ({ page }, testInfo) => {
+  await register(page, 'menu')
+  const dlg = await newCheckDialog(page)
+  await dlg.getByRole('tab', { name: 'Учебный проект' }).click()
+  await dlg.getByRole('button', { name: 'Создать и открыть' }).click()
+  const node = page.locator('.react-flow__node[data-id="src"]')
+  await expect(node).toBeVisible()
+  const more = page.getByRole('button', { name: 'Ещё', exact: true })
+  async function choose(name: string) {
+    await more.click()
+    await page.getByRole('menuitem', { name, exact: true }).click()
+  }
+  await choose('Проверить граф')
+  await expect(page.getByText('Граф корректен', { exact: true })).toBeVisible()
+  const pending = page.waitForEvent('download')
+  await choose('Экспорт JSON')
+  const file = await pending
+  const contents = JSON.parse(await readFile((await file.path())!, 'utf8'))
+  const src = contents.graph.nodes.find((n: { id: string }) => n.id === 'src')
+  src.label = 'Источник из файла'
+  const filename = testInfo.outputPath('workflow.json')
+  await writeFile(filename, JSON.stringify(contents))
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const picker = page.waitForEvent('filechooser')
+    await choose('Импорт JSON')
+    await (await picker).setFiles(filename)
+    await expect(node).toContainText(src.label, { timeout: 5000 })
+    if (attempt === 0) {
+      await page.keyboard.press('Control+z')
+      await expect(node).not.toContainText(src.label)
+    }
+  }
+  const url = page.url()
+  page.once('dialog', dialog => dialog.dismiss())
+  await choose('Удалить проверку')
+  await expect(page).toHaveURL(url)
+  const deletion = page.waitForResponse(r => r.request().method() === 'DELETE' && r.url().endsWith(new URL(url).pathname.split('/').pop()!))
+  page.once('dialog', dialog => dialog.accept())
+  await choose('Удалить проверку')
+  expect((await deletion).ok()).toBe(true)
+  await expect(page).not.toHaveURL(url)
 })
 
 test('own repository link: https only, confirmation required, attested repo becomes the source', async ({ page }) => {

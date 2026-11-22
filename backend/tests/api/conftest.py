@@ -1,6 +1,4 @@
 import asyncio
-import re
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,17 +28,7 @@ def client(db):
 
 class User:
     def __init__(self, client, email, password="Str0ng-Passw0rd!"):
-        from app.config import get_settings
-
-        with (patch.object(get_settings(), "smtp_host", "test"),
-              patch.object(get_settings(), "smtp_from", "register@example.org"),
-              patch("app.core.registration.send_mail", new_callable=AsyncMock) as delivered):
-            request = client.post("/api/auth/registration-code", json={"email": email})
-            assert request.status_code == 204, request.text
-            message = delivered.await_args.args[0]
-            code = re.search(r"\b[0-9]{6}\b", message.get_content())[0]
-        r = client.post("/api/auth/register", json={"email": email, "password": password,
-                                                    "display_name": email, "code": code})
+        r = client.post("/api/auth/register", json={"email": email, "password": password, "display_name": email})
         assert r.status_code == 201, r.text
         body = r.json()
         self.email = email

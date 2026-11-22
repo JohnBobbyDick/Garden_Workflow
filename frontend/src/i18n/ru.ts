@@ -25,8 +25,6 @@ const ru = {
   },
   auth: {
     login: 'Вход', register: 'Регистрация', email: 'E-mail', password: 'Пароль', displayName: 'Имя',
-    code: 'Код из письма', codeSent: 'Код отправлен на {{email}} и действует 10 минут.',
-    sendCode: 'Получить код', resendCode: 'Отправить код повторно', changeEmail: 'Изменить адрес',
     submitLogin: 'Войти', submitRegister: 'Создать аккаунт', noAccount: 'Нет аккаунта?', haveAccount: 'Уже есть аккаунт?',
     passwordHint: 'Не короче 10 символов', welcome: 'Безопасность кода — без корпоративных сканеров',
     features: {

@@ -19,6 +19,7 @@ import { PublishDialog } from '../pages/TemplatesPage'
 import { toast } from '../store/toast'
 import { useWorkspaceUi } from '../store/workspace'
 import { SET_SOURCE_EVENT } from '../workspace/NewCheckDialog'
+import { withPanel } from '../workspace/routes'
 import { AiAssistant } from './AiAssistant'
 import { useCompactWorkspace } from '../workspace/useCompactWorkspace'
 import { HeaderButton, InlineName, OverflowMenu, sourceLabel, TriggerSwitch, type TriggerKind } from './CanvasHeader'
@@ -432,13 +433,17 @@ function Canvas({ workflow, catalog }: { workflow: Workflow; catalog: Catalog })
               setAssistant(true)
             } else setAssistant(!assistant)
           }} active={assistant && !inspectorCollapsed}>AI</HeaderButton>
-          <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
+          <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => {
+            const file = e.currentTarget.files?.[0]
+            e.currentTarget.value = ''
+            if (file) void importJson(file)
+          }} />
           <OverflowMenu items={[
             { key: 'validate', icon: 'shield-check', label: t('editor.validate'), onClick: () => void validate() },
             { key: 'import', icon: 'upload', label: t('editor.importJson'), onClick: () => fileRef.current?.click() },
             { key: 'export', icon: 'download', label: t('editor.export'), onClick: exportJson },
             { key: 'publish', icon: 'template', label: t('templates.publish'), onClick: () => void autosave.flush().then((ok) => ok && setPublishing(true)) },
-            { key: 'ci', icon: 'ci', label: t('ws.panel.ci'), onClick: () => nav({ search: '?panel=ci' }) },
+            { key: 'ci', icon: 'ci', label: t('ws.panel.ci'), onClick: () => nav({ search: withPanel(params.toString(), 'ci') }) },
             { key: 'delete', icon: 'trash', label: t('canvas.deleteCheck'), onClick: () => void deleteCheck(), danger: true },
           ]} />
           <Button variant="primary" icon="play" loading={busy === 'run'} disabled={running} onClick={run}>{t('editor.run')}</Button>

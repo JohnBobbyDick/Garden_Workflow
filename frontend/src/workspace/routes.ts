@@ -48,6 +48,10 @@ export function panelFromSearch(search: string): PanelId | null {
 /** Same query string with the panel opened (or closed with null, also dropping its sub-tab). */
 export function withPanel(search: string, panel: PanelId | null): string {
   const p = qs(search)
+  if (p.get('panel') === 'compare' && panel !== 'compare') {
+    p.delete('base')
+    p.delete('head')
+  }
   p.delete('panel')
   p.delete('tab')
   if (panel) p.set('panel', panel)

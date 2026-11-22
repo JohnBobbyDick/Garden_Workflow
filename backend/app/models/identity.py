@@ -23,6 +23,8 @@ class User(IdMixin, CreatedMixin, Base):
 
 
 class RegistrationCode(Base):
+    """Legacy table retained for compatibility with existing databases."""
+
     __tablename__ = "registration_codes"
     email: Mapped[str] = mapped_column(String(320), primary_key=True)
     digest: Mapped[str] = mapped_column(String(64))
