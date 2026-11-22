@@ -72,7 +72,7 @@ function Rail() {
     <aside className={clsx('relative z-20 flex h-full shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200',
       railCollapsed ? 'w-16' : 'w-[248px]')} aria-label={t('ws.navigation')}>
       <div className={clsx("flex h-14 shrink-0 items-center gap-2 px-3", railCollapsed && "justify-center")}>
-        {!railCollapsed && <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-chip bg-primary text-[13px] font-bold text-white" aria-hidden="true">✳</span>}
+        {!railCollapsed && <img src="/garden-security.png" alt="" width={32} height={32} className="shrink-0" />}
         {!railCollapsed && <span className="truncate text-[16px] font-bold">Garden Security</span>}
         <button type="button" onClick={toggleRail} className={clsx('rounded-chip p-1.5 text-muted hover:bg-soft hover:text-fg', !railCollapsed && 'ml-auto')}
           aria-label={railCollapsed ? t('ws.expandRail') : t('ws.collapseRail')} title={railCollapsed ? t('ws.expandRail') : t('ws.collapseRail')}>

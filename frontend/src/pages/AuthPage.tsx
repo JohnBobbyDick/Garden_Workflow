@@ -45,7 +45,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
       <div className="mx-auto grid w-full max-w-5xl flex-1 items-center gap-10 px-4 pb-12 md:grid-cols-2">
         <div className="hidden md:block">
           <div className="mb-6 flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-chip bg-primary text-lg font-bold text-white" aria-hidden="true">✳</span>
+            <img src="/garden-security.png" alt="" width={44} height={44} className="shrink-0" />
             <div>
               <div className="text-2xl font-bold">{t('app.name')}</div>
               <div className="text-muted">{t('app.tagline')}</div>
